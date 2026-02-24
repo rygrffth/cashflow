@@ -813,7 +813,7 @@ with tab_mandiri:
         m_email = st.text_input("Gmail", placeholder="kamu@gmail.com", key="m_email")
         m_pass  = st.text_input("App Password Gmail", type="password",
                      placeholder="xxxx xxxx xxxx xxxx", key="m_pass")
-        m_limit = st.slider("Ambil berapa email terakhir?", 5, 50, 10)
+        m_limit = st.slider("Ambil berapa email terakhir?", 1, 50, 10)
 
         if "debug_body" in st.session_state:
             with st.expander("🔍 Debug Body Email"):
