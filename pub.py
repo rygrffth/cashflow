@@ -97,25 +97,25 @@ conn = st.connection(
     url=s_url,
     key=s_key
 )
-
 def load_data_cloud():
-    """Fungsi baru khusus ambil data dari Supabase"""
     try:
-        res = conn.query("*", table="transaksi", ttl="0").execute()
+    
+        res = conn.query("*", table="transaksi", ttl=0).execute()
         if res.data:
             df = pd.DataFrame(res.data)
-            # Menyesuaikan nama kolom agar sinkron dengan kodinganmu
-            # Supabase biasanya lower_case, kodinganmu CamelCase
-            df.columns = [c.capitalize() for c in df.columns] 
+    
+            df.columns = [c.replace('_', ' ').title().replace(' ', '_') for c in df.columns] 
             df["Nominal"] = pd.to_numeric(df["Nominal"], errors="coerce").fillna(0)
             return df
-    except:
-        pass
+    except Exception as e:
+        
+        print(f"Error Cloud: {e}")
     return pd.DataFrame(columns=["Tanggal","Tipe","Kategori","Nominal","Catatan","Status","Tenggat_Waktu","Tanggal_Bayar"])
+   
 
 def save_to_cloud(row_dict):
     """Fungsi baru khusus tambah baris ke Supabase"""
-    # Pastikan key di dict adalah lower_case sesuai tabel Supabase
+ 
     clean_dict = {k.lower(): v for k, v in row_dict.items()}
     conn.table("transaksi").insert(clean_dict).execute()
     st.cache_data.clear()
@@ -338,7 +338,13 @@ def generate_recurring_transactions(df_recurring, df_main):
         })
     return new_rows
 
-df_asli      = load_data()
+
+df_cloud = load_data_cloud()
+
+if not df_cloud.empty:
+    df_asli = df_cloud
+else:
+    df_asli = load_data()
 df_piutang   = load_piutang()
 df_budget    = load_budget()
 df_recurring = load_recurring()
@@ -371,7 +377,7 @@ with st.sidebar:
     st.markdown("### 🗂️ Export")
     
     if not df_asli.empty:
-        # Menghapus kolom sementara sebelum download CSV
+      
         df_exp_final = df_asli.drop(columns=[c for c in ["Tanggal_dt", "Cashflow_Date"] if c in df_asli.columns], errors='ignore')
         csv_exp = df_exp_final.to_csv(index=False).encode("utf-8")
         st.download_button("📥 Download CSV", data=csv_exp, file_name="keuangan_export.csv", mime="text/csv", use_container_width=True)
@@ -886,7 +892,6 @@ with lc:
         nom_i = st.number_input("Nominal (Rp)", min_value=0, step=5000)
         cat_i = st.text_input("Catatan (opsional)")
 
-        # Perhatikan: Baris tombol ini harus sejajar dengan nom_i dan cat_i
         if st.form_submit_button("💾 Simpan Transaksi", use_container_width=True):
             if nom_i > 0:
                 nr = {
@@ -899,10 +904,9 @@ with lc:
                     "Tenggat_Waktu": tg_i,
                     "Tanggal_Bayar": tb_i
                 }
-                # 1. Simpan ke Cloud (Baru)
+              
                 save_to_cloud(nr)
-                
-                # 2. Tetap simpan ke CSV (Lama - sebagai backup)
+      
                 df_asli = pd.concat([df_asli, pd.DataFrame([nr])], ignore_index=True)
                 save_data(df_asli)
                 
