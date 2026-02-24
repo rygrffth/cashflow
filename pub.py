@@ -983,14 +983,32 @@ if not df_asli.empty:
             "Nominal":st.column_config.NumberColumn("Nominal (Rp)",format="Rp %d"),
             "Tipe":   st.column_config.SelectboxColumn("Tipe",options=["Pengeluaran","Pemasukan"],required=True),
         })
+    
     if st.button("💾 Update Database"):
-        fn=rd.iloc[::-1].reset_index(drop=True)
-        for c in ["Tanggal","Tenggat_Waktu","Tanggal_Bayar"]:
-            fn[c]=fn[c].apply(lambda x:x.strftime("%Y-%m-%d") if pd.notnull(x) else "")
-        for i,r in fn.iterrows():
-            if r["Status"]=="Cleared" and str(r["Tanggal_Bayar"]).strip()=="":
-                fn.at[i,"Tanggal_Bayar"]=datetime.date.today().strftime("%Y-%m-%d")
-        save_data(fn); st.success("✅ Database diupdate!"); st.rerun()
+        fn = rd.iloc[::-1].reset_index(drop=True)
+        
+        for c in ["Tanggal", "Tenggat_Waktu", "Tanggal_Bayar"]:
+            fn[c] = fn[c].apply(lambda x: x.strftime("%Y-%m-%d") if pd.notnull(x) and hasattr(x, 'strftime') else (str(x) if pd.notnull(x) else ""))
+        
+        for i, r in fn.iterrows():
+            if r["Status"] == "Cleared" and str(r["Tanggal_Bayar"]).strip() == "":
+                fn.at[i, "Tanggal_Bayar"] = datetime.date.today().strftime("%Y-%m-%d")
+        
+        save_data(fn)
+        
+        try:
+            
+            data_update = fn.to_dict(orient="records")
+            data_update = [{k.lower(): v for k, v in r.items()} for r in data_update]
+            conn.table("transaksi").delete().neq("id", -1).execute() 
+            conn.table("transaksi").insert(data_update).execute()    
+            
+            st.cache_data.clear()
+            st.success("✅ Database Cloud & Lokal berhasil diupdate!")
+            st.rerun()
+        except Exception as e:
+            st.error(f"Gagal update cloud: {e}")
+
 
 st.markdown("---")
 st.markdown("""<div style="text-align:center;color:#334155;font-size:.75rem;padding:10px 0;">
