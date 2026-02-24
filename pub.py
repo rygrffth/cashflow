@@ -81,14 +81,21 @@ h1 { font-size:1.8rem!important; }
 
 from st_supabase_connection import SupabaseConnection
 
-with open("secrets.toml", "rb") as f:
-    secrets = tomllib.load(f)
+try:
+    with open("secrets.toml", "rb") as f:
+        secrets_data = tomllib.load(f)
+    s_url = secrets_data["connections"]["supabase"]["SUPABASE_URL"]
+    s_key = secrets_data["connections"]["supabase"]["SUPABASE_KEY"]
+except FileNotFoundError:
+   
+    s_url = st.secrets["connections"]["supabase"]["SUPABASE_URL"]
+    s_key = st.secrets["connections"]["supabase"]["SUPABASE_KEY"]
 
 conn = st.connection(
     "supabase",
     type=SupabaseConnection,
-    url=secrets["connections"]["supabase"]["SUPABASE_URL"],
-    key=secrets["connections"]["supabase"]["SUPABASE_KEY"]
+    url=s_url,
+    key=s_key
 )
 
 def load_data_cloud():
