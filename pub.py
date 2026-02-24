@@ -861,29 +861,53 @@ with tab_mandiri:
 
         col_imp1, col_imp2 = st.columns(2)
         with col_imp1:
-            if st.button("💾 Import Semua ke Database", use_container_width=True):
 
-                imported = 0
-                for _, row in edited.iterrows():
-                    dup = df_asli[
-                        (df_asli["Nominal"] == row["Nominal"]) &
-                        (df_asli["Tanggal"].astype(str) == str(row["Tanggal"])) &
-                        (df_asli["Catatan"].astype(str).str.contains(str(row["Catatan"])[:20], na=False))
-                    ]
-                    if dup.empty:
-                        new_row = pd.DataFrame([{
-                            "Tanggal": str(row["Tanggal"]),
-                            "Tipe": row["Tipe"], "Kategori": row["Kategori"],
-                            "Nominal": row["Nominal"], "Catatan": row["Catatan"],
-                            "Status": "Cleared", "Tenggat_Waktu": "",
-                            "Tanggal_Bayar": str(row["Tanggal"])
-                        }])
-                        df_asli = pd.concat([df_asli, new_row], ignore_index=True)
-                        imported += 1
-                save_data(df_asli)
-                del st.session_state["mandiri_rows"]
-                st.success(f"✅ {imported} transaksi berhasil diimport! ({len(edited)-imported} duplikat dilewati)")
-                st.rerun()
+            if st.button("💾 Import Semua ke Database", use_container_width=True):
+            imported = 0
+            new_rows_for_cloud = []
+            
+            for _, row in edited.iterrows():
+                dup = df_asli[
+                    (df_asli["Nominal"] == row["Nominal"]) &
+                    (df_asli["Tanggal"].astype(str) == str(row["Tanggal"])) &
+                    (df_asli["Catatan"].astype(str).str.contains(str(row["Catatan"])[:20], na=False))
+                ]
+                
+                if dup.empty:
+                    new_entry = {
+                        "Tanggal": str(row["Tanggal"]),
+                        "Tipe": row["Tipe"], 
+                        "Kategori": row["Kategori"],
+                        "Nominal": row["Nominal"], 
+                        "Catatan": row["Catatan"],
+                        "Status": "Cleared", 
+                        "Tenggat_Waktu": "",
+                        "Tanggal_Bayar": str(row["Tanggal"])
+                    }
+                    
+                    new_row_df = pd.DataFrame([new_entry])
+                    df_asli = pd.concat([df_asli, new_row_df], ignore_index=True)
+                
+                    cloud_entry = {k.lower(): v for k, v in new_entry.items()}
+                    new_rows_for_cloud.append(cloud_entry)
+                    
+                    imported += 1
+            
+          
+            save_data(df_asli)
+            
+       
+            if new_rows_for_cloud:
+                try:
+                    conn.table("transaksi").insert(new_rows_for_cloud).execute()
+                    st.cache_data.clear() 
+                except Exception as e:
+                    st.sidebar.error(f"Gagal kirim ke Cloud: {e}")
+
+            del st.session_state["mandiri_rows"]
+            st.success(f"✅ {imported} transaksi berhasil diimport ke Cloud & Lokal! ({len(edited)-imported} duplikat dilewati)")
+            st.rerun()
+
         with col_imp2:
             if st.button("🗑️ Batal", use_container_width=True):
                 del st.session_state["mandiri_rows"]
