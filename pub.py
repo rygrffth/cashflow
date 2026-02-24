@@ -364,32 +364,6 @@ with st.sidebar:
     st.markdown("---")
     secret_code = st.text_input(" ", type="password", label_visibility="hidden", placeholder="Secret code...")
     st.markdown("---")
-
-    # Tombol migrasi harus sejajar dengan st.markdown di atasnya
-    if st.button("🚀 Migrasi CSV ke Cloud"):
-        df_lokal = load_data()
-        if not df_lokal.empty:
-            # Membersihkan data NaN agar JSON compliant
-            df_bersih = df_lokal.fillna({
-                "Nominal": 0,
-                "Catatan": "",
-                "Status": "Cleared",
-                "Tenggat_Waktu": "",
-                "Tanggal_Bayar": ""
-               }).replace([float('inf'), float('-inf')], 0)
-
-            data_migrasi = df_bersih.to_dict(orient="records")
-            data_migrasi = [{k.lower(): v for k, v in r.items()} for r in data_migrasi]
-
-            try:
-                # Kirim data ke tabel transaksi di Supabase
-                conn.table("transaksi").insert(data_migrasi).execute()
-                st.cache_data.clear()
-                st.success("✅ Migrasi Berhasil!")
-                st.rerun()
-            except Exception as e:
-                st.error(f"Gagal migrasi: {e}")
-
     st.markdown("### 📅 Info")
     st.metric("Sisa Hari ke Gajian", f"{SISA_HARI} hari")
     st.caption("Target: 17 Mar 2026")
