@@ -1,0 +1,15 @@
+# Folder library (berat banget kalau diupload)
+.venv/
+__pycache__/
+
+# File rahasia (biar Supabase kamu ga di-hack orang)
+secrets.toml
+.streamlit/secrets.toml
+
+app.py
+
+# File data lokal (kalau mau privat)
+keuangan_ramadan.csv
+piutang.csv
+budget_target.csv
+recurring.csv

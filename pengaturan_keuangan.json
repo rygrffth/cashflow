@@ -1,0 +1,12 @@
+{
+    "gaji_bulanan": 3972000,
+    "target_tabungan": 1000000,
+    "dana_operasional": 1580000,
+    "batas_minimal_limit": 50000,
+    "persen_darurat_target": 3,
+    "tanggal_gajian": 16,
+    "saldo_awal_periode": 2580000,
+    "tanggal_gajian_terakhir": "2026-02-16",
+    "tanggal_terakhir_update": "2026-02-23",
+    "sisa_limit_kemarin": 210809.52380952382
+}
