@@ -97,19 +97,43 @@ conn = st.connection(
     url=s_url,
     key=s_key
 )
+
+
 def load_data_cloud():
+def load_data_cloud():
+    """Fungsi ambil data dari Supabase dan konversi header ke CamelCase"""
     try:
-    
+        # Gunakan ttl=0 agar data selalu paling baru
         res = conn.query("*", table="transaksi", ttl=0).execute()
+        
         if res.data:
             df = pd.DataFrame(res.data)
-    
-            df.columns = [c.replace('_', ' ').title().replace(' ', '_') for c in df.columns] 
+            
+            # MAPPER: Kita paksa ganti nama kolom dari kecil ke format kodinganmu
+            # Pastikan daftar di bawah ini persis sama dengan nama kolom di web kamu
+            nama_kolom_baru = {
+                "tanggal": "Tanggal",
+                "tipe": "Tipe",
+                "kategori": "Kategori",
+                "nominal": "Nominal",
+                "catatan": "Catatan",
+                "status": "Status",
+                "tenggat_waktu": "Tenggat_Waktu",
+                "tanggal_bayar": "Tanggal_Bayar"
+            }
+            
+            # Eksekusi penggantian nama
+            df = df.rename(columns=nama_kolom_baru)
+            
+            # Pastikan nominal adalah angka
             df["Nominal"] = pd.to_numeric(df["Nominal"], errors="coerce").fillna(0)
+            
             return df
+            
     except Exception as e:
+        # Menampilkan error di sidebar untuk memudahkan debugging
+        st.sidebar.error(f"Koneksi Cloud Bermasalah: {e}")
         
-        print(f"Error Cloud: {e}")
     return pd.DataFrame(columns=["Tanggal","Tipe","Kategori","Nominal","Catatan","Status","Tenggat_Waktu","Tanggal_Bayar"])
    
 
