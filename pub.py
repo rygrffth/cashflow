@@ -99,12 +99,14 @@ conn = st.connection(
 )
 
 def load_data_cloud():
-    """Fungsi ambil data dari Supabase dan konversi header ke CamelCase"""
+    """Fungsi ambil data dari Supabase menggunakan .table().select()"""
     try:
-        res = conn.query("*", table="transaksi", ttl=0).execute()
+
+        res = conn.table("transaksi").select("*").execute()
         
         if res.data:
             df = pd.DataFrame(res.data)
+        
             nama_kolom_baru = {
                 "tanggal": "Tanggal",
                 "tipe": "Tipe",
@@ -117,7 +119,9 @@ def load_data_cloud():
             }
             
             df = df.rename(columns=nama_kolom_baru)
+            
             df["Nominal"] = pd.to_numeric(df["Nominal"], errors="coerce").fillna(0)
+            
             return df
             
     except Exception as e:
