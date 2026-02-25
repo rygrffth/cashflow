@@ -129,13 +129,93 @@ def load_data_cloud():
         
     return pd.DataFrame(columns=["Tanggal","Tipe","Kategori","Nominal","Catatan","Status","Tenggat_Waktu","Tanggal_Bayar"])
    
+def load_tabungan_cloud():
+    """Load data tabungan dari Supabase"""
+    try:
+        res = conn.table("tabungan").select("*").execute()
+        if res.data:
+            df = pd.DataFrame(res.data)
+            # Rename kolom ke format Indonesia
+            df = df.rename(columns={
+                "nama": "Nama",
+                "target_nominal": "Target",
+                "nominal_terkumpul": "Terkumpul",
+                "tanggal_mulai": "Tanggal_Mulai",
+                "tanggal_target": "Tanggal_Target",
+                "kategori": "Kategori",
+                "prioritas": "Prioritas",
+                "catatan": "Catatan",
+                "status": "Status"
+            })
+            return df
+    except Exception as e:
+        st.sidebar.error(f"Gagal load tabungan: {e}")
+    return pd.DataFrame(columns=["Nama", "Target", "Terkumpul", "Tanggal_Mulai", 
+                                 "Tanggal_Target", "Kategori", "Prioritas", "Catatan", "Status"])
 
-def save_to_cloud(row_dict):
-    """Fungsi baru khusus tambah baris ke Supabase"""
- 
-    clean_dict = {k.lower(): v for k, v in row_dict.items()}
-    conn.table("transaksi").insert(clean_dict).execute()
-    st.cache_data.clear()
+def save_tabungan_to_cloud(data):
+    """Simpan data tabungan ke Supabase"""
+    try:
+        clean_data = {k.lower(): v for k, v in data.items()}
+        conn.table("tabungan").insert(clean_data).execute()
+        st.cache_data.clear()
+        return True
+    except Exception as e:
+        st.error(f"Gagal simpan tabungan: {e}")
+        return False
+
+def update_tabungan_cloud(tabungan_id, data):
+    """Update data tabungan di Supabase"""
+    try:
+        clean_data = {k.lower(): v for k, v in data.items()}
+        conn.table("tabungan").update(clean_data).eq("id", tabungan_id).execute()
+        st.cache_data.clear()
+        return True
+    except Exception as e:
+        st.error(f"Gagal update tabungan: {e}")
+        return False
+
+def delete_tabungan_cloud(tabungan_id):
+    """Hapus tabungan dari Supabase"""
+    try:
+        conn.table("tabungan").delete().eq("id", tabungan_id).execute()
+        st.cache_data.clear()
+        return True
+    except Exception as e:
+        st.error(f"Gagal hapus tabungan: {e}")
+        return False
+
+def load_transaksi_tabungan_cloud(tabungan_id=None):
+    """Load histori transaksi tabungan"""
+    try:
+        query = conn.table("transaksi_tabungan").select("*")
+        if tabungan_id:
+            query = query.eq("tabungan_id", tabungan_id)
+        res = query.execute()
+        if res.data:
+            df = pd.DataFrame(res.data)
+            df = df.rename(columns={
+                "tabungan_id": "Tabungan_ID",
+                "tanggal": "Tanggal",
+                "nominal": "Nominal",
+                "tipe": "Tipe",
+                "catatan": "Catatan"
+            })
+            return df
+    except Exception as e:
+        st.sidebar.error(f"Gagal load transaksi tabungan: {e}")
+    return pd.DataFrame(columns=["Tabungan_ID", "Tanggal", "Nominal", "Tipe", "Catatan"])
+
+def save_to_cloud(table_name, row_dict):
+    """Fungsi umum untuk insert ke tabel Supabase"""
+    try:
+        clean_dict = {k.lower(): v for k, v in row_dict.items()}
+        conn.table(table_name).insert(clean_dict).execute()
+        st.cache_data.clear()
+        return True
+    except Exception as e:
+        st.error(f"Gagal simpan ke {table_name}: {e}")
+        return False
 
 
 def load_data():
@@ -321,7 +401,7 @@ def fetch_mandiri_emails(gmail_user, gmail_pass, limit=10):
 
     return results, None
 
-    return results, None
+   
 
 def generate_recurring_transactions(df_recurring, df_main):
     today = datetime.date.today()
@@ -520,8 +600,8 @@ PLOT = dict(
     legend=dict(bgcolor="#1E293B",bordercolor="#334155",borderwidth=1)
 )
 
-tab_grafik, tab_budget_t, tab_piutang_t, tab_recurring_t, tab_laporan_t, tab_mandiri = st.tabs([
-    "📊 Grafik", "🎯 Budget Target", "💸 Piutang", "🔄 Recurring", "📋 Laporan", "📧 Mandiri"
+tab_grafik, tab_budget_t, tab_piutang_t, tab_recurring_t, tab_laporan_t, tab_mandiri, tab_tabungan = st.tabs([
+    "📊 Grafik", "🎯 Budget Target", "💸 Piutang", "🔄 Recurring", "📋 Laporan", "📧 Mandiri", "🏦 Tabungan"
 ])
 
 with tab_grafik:
@@ -910,6 +990,224 @@ with tab_mandiri:
             if st.button("🗑️ Batal", use_container_width=True):
                 del st.session_state["mandiri_rows"]
                 st.rerun()
+
+
+with tab_tabungan:
+    st.subheader("🏦 Tabungan & Goals")
+    st.caption("Kelola target tabungan kamu dan lacak progresnya")
+    
+    # Load data tabungan
+    df_tabungan = load_tabungan_cloud()
+    
+    col1, col2 = st.columns([1, 1])
+    
+    with col1:
+        with st.form("form_tabungan", clear_on_submit=True):
+            st.markdown("**➕ Buat Target Tabungan Baru**")
+            
+            nama_t = st.text_input("Nama Target (misal: Beli Laptop, Umroh, etc)")
+            target_t = st.number_input("Target Nominal (Rp)", min_value=0, step=100000)
+            
+            col_date1, col_date2 = st.columns(2)
+            with col_date1:
+                tgl_mulai = st.date_input("Tanggal Mulai", datetime.date.today())
+            with col_date2:
+                tgl_target = st.date_input("Target Tercapai", 
+                                          datetime.date.today() + datetime.timedelta(days=365))
+            
+            kategori_t = st.selectbox("Kategori", ["Umum", "Kendaraan", "Pendidikan", 
+                                                   "Properti", "Investasi", "Liburan", "Darurat"])
+            prioritas_t = st.slider("Prioritas (1=Paling Penting)", 1, 5, 3)
+            catatan_t = st.text_area("Catatan (opsional)")
+            
+            if st.form_submit_button("💾 Simpan Target", use_container_width=True):
+                if nama_t and target_t > 0:
+                    new_data = {
+                        "nama": nama_t,
+                        "target_nominal": target_t,
+                        "nominal_terkumpul": 0,
+                        "tanggal_mulai": tgl_mulai.strftime("%Y-%m-%d"),
+                        "tanggal_target": tgl_target.strftime("%Y-%m-%d"),
+                        "kategori": kategori_t,
+                        "prioritas": prioritas_t,
+                        "catatan": catatan_t,
+                        "status": "Aktif"
+                    }
+                    
+                    if save_tabungan_to_cloud(new_data):
+                        st.success(f"✅ Target '{nama_t}' berhasil dibuat!")
+                        st.rerun()
+                else:
+                    st.warning("Isi nama target dan nominal minimal > 0")
+    
+    with col2:
+        if not df_tabungan.empty:
+            total_target = df_tabungan[df_tabungan["Status"] == "Aktif"]["Target"].sum()
+            total_terkumpul = df_tabungan[df_tabungan["Status"] == "Aktif"]["Terkumpul"].sum()
+            progress_total = (total_terkumpul / total_target * 100) if total_target > 0 else 0
+            
+            st.markdown(f"""
+            <div class="card card-green">
+                <p class="card-label">💰 TOTAL TABUNGAN AKTIF</p>
+                <p class="card-value" style="color:#10B981;">Rp {total_terkumpul:,.0f}</p>
+                <p class="card-sub">dari target Rp {total_target:,.0f}</p>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            st.progress(progress_total / 100)
+            st.caption(f"Progress keseluruhan: {progress_total:.1f}%")
+            
+            # Statistik cepat
+            aktif_count = len(df_tabungan[df_tabungan["Status"] == "Aktif"])
+            selesai_count = len(df_tabungan[df_tabungan["Status"] == "Selesai"])
+            
+            st.markdown(f"""
+            <div style="display:flex; gap:10px; margin-top:10px;">
+                <div style="flex:1; text-align:center; background:#1E293B; padding:10px; border-radius:8px;">
+                    <span style="color:#10B981; font-size:1.2rem;">{aktif_count}</span><br>
+                    <span style="color:#94A3B8;">Aktif</span>
+                </div>
+                <div style="flex:1; text-align:center; background:#1E293B; padding:10px; border-radius:8px;">
+                    <span style="color:#F59E0B; font-size:1.2rem;">{selesai_count}</span><br>
+                    <span style="color:#94A3B8;">Selesai</span>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+    
+    # Daftar Tabungan
+    if not df_tabungan.empty:
+        st.markdown("---")
+        st.markdown("**📋 Daftar Target Tabungan**")
+        
+        for idx, row in df_tabungan.iterrows():
+            if row["Status"] == "Aktif":
+                with st.expander(f"🎯 {row['Nama']} - Rp {row['Target']:,.0f}"):
+                    col_a, col_b, col_c = st.columns([2, 1, 1])
+                    
+                    with col_a:
+                        progress = (row["Terkumpul"] / row["Target"] * 100) if row["Target"] > 0 else 0
+                        st.progress(progress / 100)
+                        st.caption(f"Progress: {progress:.1f}%")
+                        
+                        # Hitung sisa hari
+                        if pd.notna(row["Tanggal_Target"]):
+                            tgl_target = pd.to_datetime(row["Tanggal_Target"]).date()
+                            sisa_hari = (tgl_target - datetime.date.today()).days
+                            if sisa_hari > 0:
+                                st.caption(f"⏳ Sisa {sisa_hari} hari")
+                            elif sisa_hari == 0:
+                                st.caption("📅 Hari ini target!")
+                            else:
+                                st.caption("⚠️ Melewati target")
+                    
+                    with col_b:
+                        st.markdown(f"**Terkumpul:** Rp {row['Terkumpul']:,.0f}")
+                        st.markdown(f"**Sisa:** Rp {row['Target'] - row['Terkumpul']:,.0f}")
+                        st.markdown(f"**Kategori:** {row['Kategori']}")
+                        if pd.notna(row["Tanggal_Mulai"]):
+                            st.markdown(f"**Mulai:** {row['Tanggal_Mulai']}")
+                    
+                    with col_c:
+                        # Tombol aksi
+                        if st.button("💰 Setor", key=f"setor_{idx}"):
+                            st.session_state[f"setor_tabungan_{idx}"] = True
+                        
+                        if st.button("💸 Tarik", key=f"tarik_{idx}"):
+                            st.session_state[f"tarik_tabungan_{idx}"] = True
+                        
+                        if st.button("🗑️ Hapus", key=f"hapus_{idx}"):
+                            if delete_tabungan_cloud(row.get("id")):
+                                st.success(f"✅ Tabungan '{row['Nama']}' dihapus!")
+                                st.rerun()
+                    
+                    # Form setor/tarik
+                    if st.session_state.get(f"setor_tabungan_{idx}", False):
+                        with st.form(key=f"form_setor_{idx}"):
+                            nominal_setor = st.number_input("Nominal Setor (Rp)", min_value=0, step=10000)
+                            catatan_setor = st.text_input("Catatan")
+                            
+                            col_btn1, col_btn2 = st.columns(2)
+                            with col_btn1:
+                                if st.form_submit_button("✅ Setor"):
+                                    if nominal_setor > 0:
+                                        # Update nominal terkumpul
+                                        new_terkumpul = row["Terkumpul"] + nominal_setor
+                                        update_data = {
+                                            "nominal_terkumpul": new_terkumpul,
+                                            "status": "Selesai" if new_terkumpul >= row["Target"] else "Aktif"
+                                        }
+                                        if update_tabungan_cloud(row.get("id"), update_data):
+                                            # Catat transaksi
+                                            transaksi_data = {
+                                                "tabungan_id": row.get("id"),
+                                                "tanggal": datetime.date.today().strftime("%Y-%m-%d"),
+                                                "nominal": nominal_setor,
+                                                "tipe": "Setor",
+                                                "catatan": catatan_setor
+                                            }
+                                            conn.table("transaksi_tabungan").insert(transaksi_data).execute()
+                                            
+                                            st.success(f"✅ Berhasil setor Rp {nominal_setor:,.0f}!")
+                                            st.session_state[f"setor_tabungan_{idx}"] = False
+                                            st.rerun()
+                            
+                            with col_btn2:
+                                if st.form_submit_button("❌ Batal"):
+                                    st.session_state[f"setor_tabungan_{idx}"] = False
+                                    st.rerun()
+                    
+                    if st.session_state.get(f"tarik_tabungan_{idx}", False):
+                        with st.form(key=f"form_tarik_{idx}"):
+                            nominal_tarik = st.number_input("Nominal Tarik (Rp)", 
+                                                           min_value=0, 
+                                                           max_value=int(row["Terkumpul"]),
+                                                           step=10000)
+                            catatan_tarik = st.text_input("Catatan")
+                            
+                            col_btn1, col_btn2 = st.columns(2)
+                            with col_btn1:
+                                if st.form_submit_button("✅ Tarik"):
+                                    if nominal_tarik > 0:
+                                        new_terkumpul = row["Terkumpul"] - nominal_tarik
+                                        update_data = {
+                                            "nominal_terkumpul": new_terkumpul
+                                        }
+                                        if update_tabungan_cloud(row.get("id"), update_data):
+                                            # Catat transaksi
+                                            transaksi_data = {
+                                                "tabungan_id": row.get("id"),
+                                                "tanggal": datetime.date.today().strftime("%Y-%m-%d"),
+                                                "nominal": nominal_tarik,
+                                                "tipe": "Tarik",
+                                                "catatan": catatan_tarik
+                                            }
+                                            conn.table("transaksi_tabungan").insert(transaksi_data).execute()
+                                            
+                                            st.success(f"✅ Berhasil tarik Rp {nominal_tarik:,.0f}!")
+                                            st.session_state[f"tarik_tabungan_{idx}"] = False
+                                            st.rerun()
+                            
+                            with col_btn2:
+                                if st.form_submit_button("❌ Batal"):
+                                    st.session_state[f"tarik_tabungan_{idx}"] = False
+                                    st.rerun()
+            
+            elif row["Status"] == "Selesai":
+                # Tampilkan tabungan yang sudah selesai dengan style berbeda
+                with st.expander(f"✅ {row['Nama']} - SELESAI"):
+                    st.markdown(f"""
+                    **Target:** Rp {row['Target']:,.0f}  
+                    **Terkumpul:** Rp {row['Terkumpul']:,.0f}  
+                    **Selesai pada:** {row.get('Tanggal_Target', '-')}
+                    """)
+                    
+                    if st.button("🗑️ Hapus dari History", key=f"hapus_selesai_{idx}"):
+                        if delete_tabungan_cloud(row.get("id")):
+                            st.success("✅ Dihapus!")
+                            st.rerun()
+    else:
+        st.info("Belum ada target tabungan. Buat yang baru di form sebelah kiri!")
+
 
 lc,rc=st.columns([1.2,1])
 with lc:
