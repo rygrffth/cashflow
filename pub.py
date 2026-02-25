@@ -153,6 +153,8 @@ def load_tabungan_cloud():
     return pd.DataFrame(columns=["Nama", "Target", "Terkumpul", "Tanggal_Mulai", 
                                  "Tanggal_Target", "Kategori", "Prioritas", "Catatan", "Status"])
 
+
+
 def save_tabungan_to_cloud(data):
     """Simpan data tabungan ke Supabase"""
     try:
@@ -206,15 +208,15 @@ def load_transaksi_tabungan_cloud(tabungan_id=None):
         st.sidebar.error(f"Gagal load transaksi tabungan: {e}")
     return pd.DataFrame(columns=["Tabungan_ID", "Tanggal", "Nominal", "Tipe", "Catatan"])
 
-def save_to_cloud(table_name, row_dict):
-    """Fungsi umum untuk insert ke tabel Supabase"""
+def save_to_cloud(row_dict): 
+    """Fungsi khusus untuk insert ke tabel transaksi"""
     try:
         clean_dict = {k.lower(): v for k, v in row_dict.items()}
-        conn.table(table_name).insert(clean_dict).execute()
+        conn.table("transaksi").insert(clean_dict).execute()
         st.cache_data.clear()
         return True
     except Exception as e:
-        st.error(f"Gagal simpan ke {table_name}: {e}")
+        st.error(f"Gagal simpan ke Cloud: {e}")
         return False
 
 
@@ -454,7 +456,7 @@ if not df_recurring.empty:
         st.toast(f"🔄 {len(new_txn)} recurring expense otomatis ditambahkan!")
 
 REAL_OPERASIONAL = 1860000
-REAL_DARURAT     = 720000
+REAL_DARURAT     = 0
 FIKTIF_BASE      = 140000000
 MULTIPLIER       = 100
 
@@ -997,7 +999,9 @@ with tab_tabungan:
     st.caption("Kelola target tabungan kamu dan lacak progresnya")
     
     # Load data tabungan
+
     df_tabungan = load_tabungan_cloud()
+    REAL_DARURAT = df_tabungan[df_tabungan["Status"] == "Aktif"]["Terkumpul"].sum() if not df_tabungan.empty else 0
     
     col1, col2 = st.columns([1, 1])
     
