@@ -456,8 +456,8 @@ if not df_recurring.empty:
         st.toast(f"🔄 {len(new_txn)} recurring expense otomatis ditambahkan!")
 
 df_tabungan = load_tabungan_cloud()
-if not df_tabungan.empty and "Terkumpul" in df_tabungan.columns:
-    REAL_DARURAT = df_tabungan[df_tabungan["Status"] == "Aktif"]["Terkumpul"].sum()
+if not df_tabungan.empty:
+    REAL_DARURAT = df_tabungan["Terkumpul"].sum()  # Ambil semua, tanpa filter status
 else:
     REAL_DARURAT = 0
 
@@ -1055,16 +1055,20 @@ with tab_tabungan:
             total_terkumpul = df_tabungan[df_tabungan["Status"] == "Aktif"]["Terkumpul"].sum()
             progress_total = (total_terkumpul / total_target * 100) if total_target > 0 else 0
             
+
+
+            total_semua_tabungan = df_tabungan["Terkumpul"].sum()
+        
             st.markdown(f"""
             <div class="card card-green">
-                <p class="card-label">💰 TOTAL TABUNGAN AKTIF</p>
-                <p class="card-value" style="color:#10B981;">Rp {total_terkumpul:,.0f}</p>
-                <p class="card-sub">dari target Rp {total_target:,.0f}</p>
+                <p class="card-label">💰 TOTAL TABUNGAN (AKTIF + SELESAI)</p>
+                <p class="card-value" style="color:#10B981;">Rp {total_semua_tabungan:,.0f}</p>
+                <p class="card-sub">dari target aktif Rp {total_target_aktif:,.0f}</p>
             </div>
             """, unsafe_allow_html=True)
             
             st.progress(progress_total / 100)
-            st.caption(f"Progress keseluruhan: {progress_total:.1f}%")
+            st.caption(f"Progress target aktif: {progress_total:.1f}%")
             
             # Statistik cepat
             aktif_count = len(df_tabungan[df_tabungan["Status"] == "Aktif"])
