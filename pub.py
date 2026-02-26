@@ -456,11 +456,14 @@ if not df_recurring.empty:
         st.toast(f"🔄 {len(new_txn)} recurring expense otomatis ditambahkan!")
 
 df_tabungan = load_tabungan_cloud()
-REAL_DARURAT = df_tabungan[df_tabungan["Status"] == "Aktif"]["Terkumpul"].sum() if not df_tabungan.empty else 0
+if not df_tabungan.empty and "Terkumpul" in df_tabungan.columns:
+    REAL_DARURAT = df_tabungan[df_tabungan["Status"] == "Aktif"]["Terkumpul"].sum()
+else:
+    REAL_DARURAT = 0
 
-REAL_OPERASIONAL = 1860000  
-FIKTIF_BASE      = 140000000
-MULTIPLIER       = 100
+REAL_OPERASIONAL = 1860000
+FIKTIF_BASE = 140000000
+MULTIPLIER = 100
 
 hari_ini_tgl   = datetime.date.today()
 tanggal_gajian = datetime.date(2026, 3, 17)
@@ -538,7 +541,7 @@ if not df_asli[mask_pend].empty:
     vd = pd.to_datetime(df_asli[mask_pend]["Tenggat_Waktu"], errors='coerce').dropna()
     if not vd.empty: due_text = f"Due: {vd.min().strftime('%d %b %y')}"
 
-saldo_op   = REAL_OPERASIONAL - total_out + total_in - REAL_DARURAT
+saldo_op = REAL_OPERASIONAL - total_out + total_in - REAL_DARURAT
 total_real = saldo_op + REAL_DARURAT
 batas_hr   = saldo_op / SISA_HARI
 mult       = 1 if is_real_mode else MULTIPLIER
@@ -1002,8 +1005,8 @@ with tab_tabungan:
     
     # Load data tabungan
 
-    df_tabungan = load_tabungan_cloud()
-    REAL_DARURAT = df_tabungan[df_tabungan["Status"] == "Aktif"]["Terkumpul"].sum() if not df_tabungan.empty else 0
+    total_tabungan = df_tabungan[df_tabungan["Status"] == "Aktif"]["Terkumpul"].sum() if not df_tabungan.empty else 0
+    
     
     col1, col2 = st.columns([1, 1])
     
