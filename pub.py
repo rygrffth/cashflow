@@ -1049,24 +1049,23 @@ with tab_tabungan:
                 else:
                     st.warning("Isi nama target dan nominal minimal > 0")
     
+
     with col2:
         if not df_tabungan.empty:
             total_target = df_tabungan[df_tabungan["Status"] == "Aktif"]["Target"].sum()
             total_terkumpul = df_tabungan[df_tabungan["Status"] == "Aktif"]["Terkumpul"].sum()
             progress_total = (total_terkumpul / total_target * 100) if total_target > 0 else 0
             
-
-
             total_semua_tabungan = df_tabungan["Terkumpul"].sum()
-        
+            
             st.markdown(f"""
             <div class="card card-green">
                 <p class="card-label">💰 TOTAL TABUNGAN (AKTIF + SELESAI)</p>
                 <p class="card-value" style="color:#10B981;">Rp {total_semua_tabungan:,.0f}</p>
-                <p class="card-sub">dari target aktif Rp {total_target_aktif:,.0f}</p>
+                <p class="card-sub">dari target aktif Rp {total_target:,.0f}</p>
             </div>
             """, unsafe_allow_html=True)
-            
+
             st.progress(progress_total / 100)
             st.caption(f"Progress target aktif: {progress_total:.1f}%")
             
