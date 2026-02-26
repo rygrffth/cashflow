@@ -128,7 +128,74 @@ def load_data_cloud():
         st.sidebar.error(f"Koneksi Cloud Bermasalah: {e}")
         
     return pd.DataFrame(columns=["Tanggal","Tipe","Kategori","Nominal","Catatan","Status","Tenggat_Waktu","Tanggal_Bayar"])
-   
+
+def load_settings_cloud():
+    """Load settings dari Supabase"""
+    try:
+        res = conn.table("settings").select("*").execute()
+        if res.data:
+            df = pd.DataFrame(res.data)
+            settings_dict = {}
+            for _, row in df.iterrows():
+                key = row["key"]
+                value = row["value"]
+                tipe = row.get("tipe_data", "string")
+                
+                # Konversi tipe data
+                if tipe == "date" and value:
+                    try:
+                        value = datetime.datetime.strptime(value, "%Y-%m-%d").date()
+                    except:
+                        pass
+                elif tipe == "integer" and value:
+                    try:
+                        value = int(value)
+                    except:
+                        pass
+                    
+                settings_dict[key] = value
+            return settings_dict
+    except Exception as e:
+        st.sidebar.error(f"Gagal load settings: {e}")
+    
+    # Default value
+    return {
+        "tanggal_gajian": datetime.date(2026, 3, 17)
+    }
+
+def save_setting_cloud(key, value, tipe_data="string"):
+    """Simpan setting ke Supabase"""
+    try:
+        # Konversi value ke string untuk disimpan
+        if isinstance(value, (datetime.date, datetime.datetime)):
+            str_value = value.strftime("%Y-%m-%d")
+        else:
+            str_value = str(value)
+        
+        # Cek apakah sudah ada
+        existing = conn.table("settings").select("*").eq("key", key).execute()
+        
+        if existing.data:
+            # Update
+            conn.table("settings").update({
+                "value": str_value,
+                "tipe_data": tipe_data
+            }).eq("key", key).execute()
+        else:
+            # Insert
+            conn.table("settings").insert({
+                "key": key,
+                "value": str_value,
+                "tipe_data": tipe_data
+            }).execute()
+        
+        st.cache_data.clear()
+        return True
+    except Exception as e:
+        st.error(f"Gagal simpan setting: {e}")
+        return False
+
+
 def load_tabungan_cloud():
     """Load data tabungan dari Supabase"""
     try:
@@ -465,23 +532,55 @@ REAL_OPERASIONAL = 1860000
 FIKTIF_BASE = 140000000
 MULTIPLIER = 100
 
-hari_ini_tgl   = datetime.date.today()
-tanggal_gajian = datetime.date(2026, 3, 17)
-SISA_HARI      = max((tanggal_gajian - hari_ini_tgl).days, 1)
+hari_ini_tgl = datetime.date.today()
+settings = load_settings_cloud()
+tanggal_gajian = settings.get("tanggal_gajian", datetime.date(2026, 3, 17))
+
+if isinstance(tanggal_gajian, str):
+    try:
+        tanggal_gajian = datetime.datetime.strptime(tanggal_gajian, "%Y-%m-%d").date()
+    except:
+        tanggal_gajian = datetime.date(2026, 3, 17)
+
+SISA_HARI = max((tanggal_gajian - hari_ini_tgl).days, 1)
 
 with st.sidebar:
     st.markdown("### ⚙️ Settings")
     st.markdown("---")
+    
+    # ===== TAMBAHKAN INI =====
+    # Setting tanggal gajian
+    with st.expander("📅 Atur Tanggal Gajian", expanded=False):
+        st.caption("Ubah tanggal gajian berikutnya")
+        
+        new_tanggal = st.date_input(
+            "Tanggal Gajian", 
+            value=tanggal_gajian,
+            key="setting_tanggal_gajian",
+            min_value=datetime.date.today()
+        )
+        
+        if st.button("💾 Simpan Tanggal Gajian", use_container_width=True):
+            if save_setting_cloud("tanggal_gajian", new_tanggal, "date"):
+                st.success(f"✅ Tanggal gajian diubah ke {new_tanggal.strftime('%d %b %Y')}")
+                st.rerun()
+    
+    st.markdown("---")
+    # ===== SAMPAI SINI =====
+    
     secret_code = st.text_input(" ", type="password", label_visibility="hidden", placeholder="Secret code...")
+    
     st.markdown("---")
     st.markdown("### 📅 Info")
     st.metric("Sisa Hari ke Gajian", f"{SISA_HARI} hari")
-    st.caption("Target: 17 Mar 2026")
+    # ===== UBAH INI =====
+    st.caption(f"Target: {tanggal_gajian.strftime('%d %b %Y')}")
+    # ===== SAMPAI SINI =====
+    
     st.markdown("---")
     st.markdown("### 🗂️ Export")
     
-    if not df_asli.empty:
-      
+    if not df_asli.empty:      
         df_exp_final = df_asli.drop(columns=[c for c in ["Tanggal_dt", "Cashflow_Date"] if c in df_asli.columns], errors='ignore')
         csv_exp = df_exp_final.to_csv(index=False).encode("utf-8")
         st.download_button("📥 Download CSV", data=csv_exp, file_name="keuangan_export.csv", mime="text/csv", use_container_width=True)
