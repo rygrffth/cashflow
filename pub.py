@@ -455,8 +455,10 @@ if not df_recurring.empty:
         save_data(df_asli)
         st.toast(f"🔄 {len(new_txn)} recurring expense otomatis ditambahkan!")
 
-REAL_OPERASIONAL = 1860000
-REAL_DARURAT     = 0
+df_tabungan = load_tabungan_cloud()
+REAL_DARURAT = df_tabungan[df_tabungan["Status"] == "Aktif"]["Terkumpul"].sum() if not df_tabungan.empty else 0
+
+REAL_OPERASIONAL = 1860000  
 FIKTIF_BASE      = 140000000
 MULTIPLIER       = 100
 
@@ -536,7 +538,7 @@ if not df_asli[mask_pend].empty:
     vd = pd.to_datetime(df_asli[mask_pend]["Tenggat_Waktu"], errors='coerce').dropna()
     if not vd.empty: due_text = f"Due: {vd.min().strftime('%d %b %y')}"
 
-saldo_op   = REAL_OPERASIONAL - total_out + total_in
+saldo_op   = REAL_OPERASIONAL - total_out + total_in - REAL_DARURAT
 total_real = saldo_op + REAL_DARURAT
 batas_hr   = saldo_op / SISA_HARI
 mult       = 1 if is_real_mode else MULTIPLIER
