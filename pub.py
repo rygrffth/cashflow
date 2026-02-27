@@ -1020,11 +1020,18 @@ with tab_grafik:
                     color_continuous_scale=["#10B981", "#F59E0B", "#EF4444"],
                     title="Top Kategori"
                 )
+
                 fig_bar.update_layout(
                     showlegend=False,
                     coloraxis_showscale=False,
                     yaxis={'categoryorder':'total ascending'},
-                    **PLOT
+                    paper_bgcolor="#1E293B", 
+                    plot_bgcolor="#0F172A", 
+                    font_color="#94A3B8",
+                    font_size=12,
+                    margin=dict(l=20,r=20,t=40,b=20),
+                    xaxis=dict(gridcolor="#334155"), 
+                    yaxis=dict(gridcolor="#334155")
                 )
                 fig_bar.update_traces(hovertemplate="Rp %{x:,.0f}<extra></extra>")
                 st.plotly_chart(fig_bar, use_container_width=True)
