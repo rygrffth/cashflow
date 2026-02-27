@@ -727,13 +727,12 @@ eye_icon = "👁️" if st.session_state.show_aset else "🙈"
 
 st.subheader("💵 Portofolio Aset")
 
-if "show_bank" not in st.session_state:
+# Reset semua hide status setiap kali halaman dimuat
+if "first_load" not in st.session_state:
+    st.session_state.first_load = True
     st.session_state.show_bank = False
-if "show_cash" not in st.session_state:
     st.session_state.show_cash = False
-if "show_tabungan" not in st.session_state:
     st.session_state.show_tabungan = False
-if "show_aset" not in st.session_state:
     st.session_state.show_aset = False
 
 if is_real_mode:
