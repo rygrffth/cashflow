@@ -698,9 +698,41 @@ total_in    = df_asli[mask_income]["Nominal"].sum()
 total_pend  = df_asli[mask_pend]["Nominal"].sum()
 piutang_blm = df_piutang[df_piutang["Status"]=="Belum Lunas"]["Nominal"].sum() if not df_piutang.empty else 0
 
-out_hari  = df_asli[mask_aktif&(df_asli["Tanggal_dt"].dt.date==now.date())]["Nominal"].sum()
-out_minggu= df_asli[mask_aktif&(df_asli["Tanggal_dt"].dt.isocalendar().week==now.isocalendar()[1])&(df_asli["Tanggal_dt"].dt.year==now.year)]["Nominal"].sum()
-out_bulan = df_asli[mask_aktif&(df_asli["Tanggal_dt"].dt.month==now.month)&(df_asli["Tanggal_dt"].dt.year==now.year)]["Nominal"].sum()
+
+penggunaan_cash_hari_ini = 0
+penggunaan_cash_minggu = 0
+penggunaan_cash_bulan = 0
+
+try:
+    res = conn.table("penggunaan_cash").select("*").execute()
+    if res.data:
+        df_cash = pd.DataFrame(res.data)
+        df_cash["tanggal"] = pd.to_datetime(df_cash["tanggal"])
+        today = now.date()
+        df_hari = df_cash[df_cash["tanggal"].dt.date == today]
+        penggunaan_cash_hari_ini = df_hari["nominal"].sum() if not df_hari.empty else 0
+        
+    
+        df_minggu = df_cash[
+            (df_cash["tanggal"].dt.isocalendar().week == now.isocalendar()[1]) &
+            (df_cash["tanggal"].dt.year == now.year)
+        ]
+        penggunaan_cash_minggu = df_minggu["nominal"].sum() if not df_minggu.empty else 0
+        
+       
+        df_bulan = df_cash[
+            (df_cash["tanggal"].dt.month == now.month) &
+            (df_cash["tanggal"].dt.year == now.year)
+        ]
+        penggunaan_cash_bulan = df_bulan["nominal"].sum() if not df_bulan.empty else 0
+        
+except Exception as e:
+    st.sidebar.error(f"Gagal load penggunaan cash: {e}")
+
+
+out_hari = df_asli[mask_aktif & (df_asli["Tanggal_dt"].dt.date == now.date())]["Nominal"].sum() + penggunaan_cash_hari_ini
+out_minggu = df_asli[mask_aktif & (df_asli["Tanggal_dt"].dt.isocalendar().week == now.isocalendar()[1]) & (df_asli["Tanggal_dt"].dt.year == now.year)]["Nominal"].sum() + penggunaan_cash_minggu
+out_bulan = df_asli[mask_aktif & (df_asli["Tanggal_dt"].dt.month == now.month) & (df_asli["Tanggal_dt"].dt.year == now.year)]["Nominal"].sum() + penggunaan_cash_bulan
 
 due_text = "No Pending"
 if not df_asli[mask_pend].empty:
@@ -1234,15 +1266,7 @@ with tab_cash:
         </div>
         """, unsafe_allow_html=True)
     
-    with col_c2:
-        st.markdown(f"""
-        <div class="card">
-            <p class="card-label">🏦 SALDO BANK/ATM</p>
-            <p class="card-value">Rp {REAL_OPERASIONAL - total_out + total_in:,.0f}</p>
-            <p class="card-sub">Uang di rekening (belum termasuk cash)</p>
-        </div>
-        """, unsafe_allow_html=True)
-    
+
     st.markdown("---")
     
     # Dua bagian: TARIK TUNAI dan PENGGUNAAN CASH
