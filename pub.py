@@ -286,6 +286,31 @@ def save_to_cloud(row_dict):
         st.error(f"Gagal simpan ke Cloud: {e}")
         return False
 
+def load_cash_cloud():
+    """Load data cash dari Supabase"""
+    try:
+        res = conn.table("cash").select("*").order("created_at", desc=True).limit(1).execute()
+        if res.data:
+            return res.data[0]["nominal"]
+    except Exception as e:
+        st.sidebar.error(f"Gagal load cash: {e}")
+    return 0
+
+def update_cash_cloud(nominal_baru, catatan=""):
+    """Update saldo cash"""
+    try:
+        data = {
+            "nominal": nominal_baru,
+            "tanggal_update": datetime.date.today().strftime("%Y-%m-%d"),
+            "catatan": catatan
+        }
+        conn.table("cash").insert(data).execute()
+        st.cache_data.clear()
+        return True
+    except Exception as e:
+        st.error(f"Gagal update cash: {e}")
+        return False
+
 
 def load_data():
     if os.path.exists(DATA_FILE):
@@ -528,6 +553,8 @@ if not df_tabungan.empty:
 else:
     REAL_DARURAT = 0
 
+UANG_CASH = load_cash_cloud()
+
 REAL_OPERASIONAL = 1860000
 FIKTIF_BASE = 140000000
 MULTIPLIER = 100
@@ -640,7 +667,8 @@ if not df_asli[mask_pend].empty:
     vd = pd.to_datetime(df_asli[mask_pend]["Tenggat_Waktu"], errors='coerce').dropna()
     if not vd.empty: due_text = f"Due: {vd.min().strftime('%d %b %y')}"
 
-saldo_op = REAL_OPERASIONAL - total_out + total_in - REAL_DARURAT
+uang_asli_berjalan = REAL_OPERASIONAL - total_out + total_in
+saldo_op = uang_asli_berjalan + UANG_CASH - REAL_DARURAT
 total_real = saldo_op + REAL_DARURAT
 batas_hr   = saldo_op / SISA_HARI
 mult       = 1 if is_real_mode else MULTIPLIER
@@ -707,7 +735,7 @@ PLOT = dict(
 )
 
 tab_grafik, tab_budget_t, tab_piutang_t, tab_recurring_t, tab_laporan_t, tab_mandiri, tab_tabungan = st.tabs([
-    "📊 Grafik", "🎯 Budget Target", "💸 Piutang", "🔄 Recurring", "📋 Laporan", "📧 Mandiri", "🏦 Tabungan"
+    "📊 Grafik", "🎯 Budget Target", "💸 Piutang", "🔄 Recurring", "📋 Laporan", "📧 Mandiri", "🏦 Tabungan", "💵 Uang Cash"
 ])
 
 with tab_grafik:
@@ -1097,13 +1125,83 @@ with tab_mandiri:
                 del st.session_state["mandiri_rows"]
                 st.rerun()
 
+with tab_cash:
+    st.subheader("💵 Uang Cash")
+    st.caption("Catat uang fisik yang kamu pegang (tidak termasuk saldo bank)")
+    
+    col_c1, col_c2 = st.columns([1, 1])
+    
+    with col_c1:
+        st.markdown(f"""
+        <div class="card card-green">
+            <p class="card-label">💰 SALDO CASH SAAT INI</p>
+            <p class="card-value" style="color:#10B981;">Rp {UANG_CASH:,.0f}</p>
+            <p class="card-sub">Update terakhir: {datetime.date.today().strftime('%d %b %Y')}</p>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        with st.form("form_cash", clear_on_submit=True):
+            st.markdown("**➕ Update Saldo Cash**")
+            
+            tindakan = st.radio("Tindakan", ["Setor Cash", "Tarik Cash", "Set Ulang"])
+            
+            if tindakan == "Setor Cash":
+                nominal_cash = st.number_input("Nominal Setor (Rp)", min_value=0, step=10000)
+                catatan_cash = st.text_input("Catatan (misal: Tarik tunai dari ATM)")
+                if st.form_submit_button("💾 Simpan", use_container_width=True):
+                    if nominal_cash > 0:
+                        baru = UANG_CASH + nominal_cash
+                        if update_cash_cloud(baru, f"Setor: {catatan_cash}"):
+                            st.success(f"✅ Cash +Rp {nominal_cash:,.0f}")
+                            st.rerun()
+            
+            elif tindakan == "Tarik Cash":
+                nominal_cash = st.number_input("Nominal Tarik (Rp)", min_value=0, max_value=UANG_CASH, step=10000)
+                catatan_cash = st.text_input("Catatan (misal: Beli makan)")
+                if st.form_submit_button("💾 Simpan", use_container_width=True):
+                    if nominal_cash > 0:
+                        baru = UANG_CASH - nominal_cash
+                        if update_cash_cloud(baru, f"Tarik: {catatan_cash}"):
+                            st.success(f"✅ Cash -Rp {nominal_cash:,.0f}")
+                            st.rerun()
+            
+            else:  # Set Ulang
+                nominal_cash = st.number_input("Nominal Baru (Rp)", min_value=0, step=10000)
+                catatan_cash = st.text_input("Catatan perubahan")
+                if st.form_submit_button("💾 Simpan", use_container_width=True):
+                    if update_cash_cloud(nominal_cash, f"Reset: {catatan_cash}"):
+                        st.success(f"✅ Cash direset ke Rp {nominal_cash:,.0f}")
+                        st.rerun()
+    
+    with col_c2:
+        st.markdown("### 📊 Statistik Cash")
+        
+        # Historis cash (ambil dari database)
+        try:
+            hist = conn.table("cash").select("*").order("created_at", desc=True).limit(10).execute()
+            if hist.data:
+                df_hist = pd.DataFrame(hist.data)
+                df_hist["tanggal"] = pd.to_datetime(df_hist["created_at"]).dt.date
+                df_hist = df_hist[["tanggal", "nominal", "catatan"]]
+                df_hist.columns = ["Tanggal", "Nominal", "Catatan"]
+                st.dataframe(df_hist, use_container_width=True, hide_index=True)
+        except:
+            st.info("Belum ada history cash")
+        
+        st.markdown("---")
+        st.markdown("### 💡 Info")
+        st.info("""
+        **Uang Cash** adalah uang fisik di dompet.
+        - Setor Cash: Tarik tunai dari bank
+        - Tarik Cash: Belanja pakai cash
+        - Set Ulang: Jika lupa/salah input
+        """)
+
 
 with tab_tabungan:
     st.subheader("🏦 Tabungan & Goals")
     st.caption("Kelola target tabungan kamu dan lacak progresnya")
     
-    # Load data tabungan
-
     total_tabungan = df_tabungan[df_tabungan["Status"] == "Aktif"]["Terkumpul"].sum() if not df_tabungan.empty else 0
     
     
