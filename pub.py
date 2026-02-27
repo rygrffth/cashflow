@@ -860,59 +860,278 @@ tab_grafik, tab_budget_t, tab_piutang_t, tab_recurring_t, tab_laporan_t, tab_man
 ])
 
 with tab_grafik:
-    g1,g2,g3 = st.tabs(["📈 Tren Harian","🍩 Per Kategori","⚖️ Arus Kas"])
+    g1, g2, g3 = st.tabs(["📈 Tren Harian", "🍩 Per Kategori", "⚖️ Arus Kas"])
 
     with g1:
-        if not df_asli[mask_aktif].empty:
-            dt = df_asli[mask_aktif].groupby(df_asli[mask_aktif]["Tanggal_dt"].dt.date)["Nominal"].sum().reset_index()
-            dt.columns=["Tanggal","Total"]; dt["Tanggal"]=pd.to_datetime(dt["Tanggal"]); dt["Kumulatif"]=dt["Total"].cumsum()
-            fig=go.Figure()
-            fig.add_trace(go.Scatter(x=dt["Tanggal"],y=dt["Total"],mode="lines+markers",name="Harian",
-                line=dict(color="#10B981",width=2.5),marker=dict(size=7),fill="tozeroy",fillcolor="rgba(16,185,129,.08)"))
-            fig.add_trace(go.Scatter(x=dt["Tanggal"],y=dt["Kumulatif"],mode="lines",name="Kumulatif",
-                line=dict(color="#F59E0B",width=2,dash="dash")))
-            fig.add_hline(y=batas_hr,line_dash="dot",line_color="#EF4444",
-                annotation_text=f"Limit: Rp {batas_hr:,.0f}",annotation_position="top right",annotation_font_color="#EF4444")
-            fig.update_layout(title="Tren Pengeluaran Harian",**PLOT)
-            st.plotly_chart(fig,use_container_width=True)
-        else: st.info("Belum ada data pengeluaran.")
+        st.subheader("📈 Tren Pengeluaran Harian (Bank + Cash)")
+        
+        # Gabungkan data bank dan cash untuk grafik
+        df_bank = df_asli[mask_aktif].copy()
+        df_bank["Sumber"] = "Bank"
+        df_bank["Tanggal"] = df_bank["Tanggal_dt"].dt.date
+        df_bank = df_bank[["Tanggal", "Nominal", "Sumber"]]
+        
+        # Load data cash
+        try:
+            res_cash = conn.table("penggunaan_cash").select("*").execute()
+            if res_cash.data and len(res_cash.data) > 0:
+                df_cash_g = pd.DataFrame(res_cash.data)
+                df_cash_g["Sumber"] = "Cash"
+                df_cash_g["Tanggal"] = pd.to_datetime(df_cash_g["tanggal"]).dt.date
+                df_cash_g["Nominal"] = df_cash_g["nominal"]
+                df_cash_g = df_cash_g[["Tanggal", "Nominal", "Sumber"]]
+                
+                # Gabungkan
+                df_gabungan = pd.concat([df_bank, df_cash_g], ignore_index=True)
+            else:
+                df_gabungan = df_bank
+        except:
+            df_gabungan = df_bank
+        
+        if not df_gabungan.empty:
+            # Group by tanggal dan sumber
+            dt = df_gabungan.groupby(["Tanggal", "Sumber"])["Nominal"].sum().reset_index()
+            
+            # Pivot untuk stacked bar
+            dt_pivot = dt.pivot(index="Tanggal", columns="Sumber", values="Nominal").fillna(0)
+            dt_pivot["Total"] = dt_pivot.sum(axis=1)
+            dt_pivot = dt_pivot.reset_index().sort_values("Tanggal")
+            
+            # Buat figure
+            fig = go.Figure()
+            
+            if "Bank" in dt_pivot.columns:
+                fig.add_trace(go.Bar(
+                    x=dt_pivot["Tanggal"],
+                    y=dt_pivot["Bank"],
+                    name="Bank",
+                    marker_color="#3B82F6",
+                    hovertemplate="Bank: Rp %{y:,.0f}<extra></extra>"
+                ))
+            
+            if "Cash" in dt_pivot.columns:
+                fig.add_trace(go.Bar(
+                    x=dt_pivot["Tanggal"],
+                    y=dt_pivot["Cash"],
+                    name="Cash",
+                    marker_color="#10B981",
+                    hovertemplate="Cash: Rp %{y:,.0f}<extra></extra>"
+                ))
+            
+            # Tambah line total
+            fig.add_trace(go.Scatter(
+                x=dt_pivot["Tanggal"],
+                y=dt_pivot["Total"],
+                mode="lines+markers",
+                name="Total",
+                line=dict(color="#F59E0B", width=2.5),
+                marker=dict(size=8),
+                hovertemplate="Total: Rp %{y:,.0f}<extra></extra>"
+            ))
+            
+            # Tambah limit line
+            fig.add_hline(
+                y=batas_hr,
+                line_dash="dot",
+                line_color="#EF4444",
+                annotation_text=f"Limit: Rp {batas_hr:,.0f}",
+                annotation_position="top right",
+                annotation_font_color="#EF4444"
+            )
+            
+            fig.update_layout(
+                title="Pengeluaran Harian (Bank vs Cash)",
+                xaxis_title="Tanggal",
+                yaxis_title="Nominal (Rp)",
+                barmode="stack",
+                hovermode="x unified",
+                **PLOT
+            )
+            
+            st.plotly_chart(fig, use_container_width=True)
+            
+            # Tampilkan statistik
+            col_s1, col_s2, col_s3 = st.columns(3)
+            with col_s1:
+                total_bank = dt_pivot["Bank"].sum() if "Bank" in dt_pivot.columns else 0
+                st.metric("Total Bank", f"Rp {total_bank:,.0f}")
+            with col_s2:
+                total_cash = dt_pivot["Cash"].sum() if "Cash" in dt_pivot.columns else 0
+                st.metric("Total Cash", f"Rp {total_cash:,.0f}")
+            with col_s3:
+                total_all = dt_pivot["Total"].sum()
+                st.metric("Total Semua", f"Rp {total_all:,.0f}")
+        else:
+            st.info("Belum ada data pengeluaran.")
 
     with g2:
-        if not df_asli[mask_aktif].empty:
-            cd = df_asli[mask_aktif].groupby("Kategori")["Nominal"].sum().reset_index(); cd["Nominal"]
-            cp,cb = st.columns(2)
-            with cp:
-                fp=px.pie(cd,values="Nominal",names="Kategori",hole=.55,
-                    color_discrete_sequence=["#10B981","#34D399","#6EE7B7","#F59E0B","#F97316","#EF4444","#8B5CF6"])
-                fp.update_layout(title="Distribusi",paper_bgcolor="#1E293B",font_color="#94A3B8",
-                    margin=dict(l=20,r=20,t=40,b=20),legend=dict(bgcolor="#1E293B"))
-                st.plotly_chart(fp,use_container_width=True)
-            with cb:
-                fb=px.bar(cd.sort_values("Nominal"),x="Nominal",y="Kategori",orientation="h",
-                    color="Nominal",color_continuous_scale=["#10B981","#F59E0B","#EF4444"])
-                fb.update_layout(title="Ranking",showlegend=False,coloraxis_showscale=False,**PLOT)
-                st.plotly_chart(fb,use_container_width=True)
-        else: st.info("Belum ada data.")
+        st.subheader("🍩 Distribusi Pengeluaran per Kategori")
+        
+        # Gabungkan bank dan cash untuk pie chart
+        df_bank_kat = df_asli[mask_aktif].copy()
+        df_bank_kat = df_bank_kat[["Kategori", "Nominal"]]
+        
+        try:
+            res_cash = conn.table("penggunaan_cash").select("*").execute()
+            if res_cash.data and len(res_cash.data) > 0:
+                df_cash_kat = pd.DataFrame(res_cash.data)
+                df_cash_kat["Kategori"] = df_cash_kat["kategori"] + " (Cash)"
+                df_cash_kat["Nominal"] = df_cash_kat["nominal"]
+                df_cash_kat = df_cash_kat[["Kategori", "Nominal"]]
+                
+                df_kat_gab = pd.concat([df_bank_kat, df_cash_kat], ignore_index=True)
+            else:
+                df_kat_gab = df_bank_kat
+        except:
+            df_kat_gab = df_bank_kat
+        
+        if not df_kat_gab.empty:
+            cd = df_kat_gab.groupby("Kategori")["Nominal"].sum().reset_index()
+            cd = cd.sort_values("Nominal", ascending=False)
+            
+            col_p1, col_p2 = st.columns([1, 1])
+            
+            with col_p1:
+                # Pie chart
+                fig_pie = px.pie(
+                    cd,
+                    values="Nominal",
+                    names="Kategori",
+                    hole=0.55,
+                    color_discrete_sequence=px.colors.sequential.Viridis,
+                    title="Distribusi Pengeluaran"
+                )
+                fig_pie.update_traces(
+                    textposition='inside',
+                    textinfo='percent+label',
+                    hovertemplate="<b>%{label}</b><br>Rp %{value:,.0f}<br>%{percent}<extra></extra>"
+                )
+                fig_pie.update_layout(**PLOT)
+                st.plotly_chart(fig_pie, use_container_width=True)
+            
+            with col_p2:
+                # Bar chart
+                fig_bar = px.bar(
+                    cd.head(10),
+                    x="Nominal",
+                    y="Kategori",
+                    orientation="h",
+                    color="Nominal",
+                    color_continuous_scale=["#10B981", "#F59E0B", "#EF4444"],
+                    title="Top Kategori"
+                )
+                fig_bar.update_layout(
+                    showlegend=False,
+                    coloraxis_showscale=False,
+                    yaxis={'categoryorder':'total ascending'},
+                    **PLOT
+                )
+                fig_bar.update_traces(hovertemplate="Rp %{x:,.0f}<extra></extra>")
+                st.plotly_chart(fig_bar, use_container_width=True)
+        else:
+            st.info("Belum ada data pengeluaran.")
 
     with g3:
-        df_cf=pd.DataFrame({"Tipe":["Pemasukan","Pengeluaran","Pending"],
-            "Nominal":[total_in,total_out,total_pend]})
-        fc=px.bar(df_cf,x="Tipe",y="Nominal",color="Tipe",text_auto=True,
-            color_discrete_map={"Pemasukan":"#10B981","Pengeluaran":"#EF4444","Pending":"#F59E0B"})
-        fc.update_layout(title="Ringkasan Arus Kas",showlegend=False,**PLOT)
-        st.plotly_chart(fc,use_container_width=True)
-        fig_g=go.Figure(go.Indicator(mode="gauge+number+delta",value=saldo_op,
-            delta={"reference":REAL_OPERASIONAL,"valueformat":",.0f"},
-            title={"text":"Saldo Operasional","font":{"color":"#94A3B8"}},
-            number={"prefix":"Rp ","valueformat":",.0f","font":{"color":"#F1F5F9"}},
-            gauge={"axis":{"range":[0,REAL_OPERASIONAL]},"bar":{"color":"#10B981"},
-                   "bgcolor":"#0F172A","bordercolor":"#334155",
-                   "steps":[{"range":[0,REAL_OPERASIONAL*.3],"color":"rgba(239,68,68,.2)"},
-                             {"range":[REAL_OPERASIONAL*.3,REAL_OPERASIONAL*.7],"color":"rgba(245,158,11,.2)"},
-                             {"range":[REAL_OPERASIONAL*.7,REAL_OPERASIONAL],"color":"rgba(16,185,129,.2)"}],
-                   "threshold":{"line":{"color":"#F59E0B","width":3},"thickness":.75,"value":REAL_OPERASIONAL*.3}}))
-        fig_g.update_layout(paper_bgcolor="#1E293B",font_color="#94A3B8",height=300,margin=dict(l=30,r=30,t=30,b=10))
-        st.plotly_chart(fig_g,use_container_width=True)
+        st.subheader("⚖️ Ringkasan Arus Kas")
+        
+        # Hitung ulang dengan cash
+        total_pemasukan = df_asli[mask_income]["Nominal"].sum()
+        
+        total_pengeluaran_bank = df_asli[mask_aktif]["Nominal"].sum()
+        try:
+            res_cash = conn.table("penggunaan_cash").select("*").execute()
+            if res_cash.data and len(res_cash.data) > 0:
+                df_cash_all = pd.DataFrame(res_cash.data)
+                total_pengeluaran_cash = df_cash_all["nominal"].sum()
+            else:
+                total_pengeluaran_cash = 0
+        except:
+            total_pengeluaran_cash = 0
+        
+        total_pengeluaran = total_pengeluaran_bank + total_pengeluaran_cash
+        
+        # Data untuk chart
+        df_cf = pd.DataFrame({
+            "Tipe": ["Pemasukan", "Pengeluaran Bank", "Pengeluaran Cash", "Pending"],
+            "Nominal": [total_pemasukan, total_pengeluaran_bank, total_pengeluaran_cash, total_pend],
+            "Warna": ["#10B981", "#3B82F6", "#10B981", "#F59E0B"]
+        })
+        
+        # Bar chart
+        fig_cf = px.bar(
+            df_cf,
+            x="Tipe",
+            y="Nominal",
+            color="Tipe",
+            text_auto=".0f",
+            color_discrete_map={
+                "Pemasukan": "#10B981",
+                "Pengeluaran Bank": "#3B82F6",
+                "Pengeluaran Cash": "#10B981",
+                "Pending": "#F59E0B"
+            },
+            title="Arus Kas (Bank vs Cash)"
+        )
+        fig_cf.update_traces(
+            texttemplate="Rp %{y:,.0f}",
+            textposition="outside",
+            hovertemplate="%{x}<br>Rp %{y:,.0f}<extra></extra>"
+        )
+        fig_cf.update_layout(**PLOT)
+        st.plotly_chart(fig_cf, use_container_width=True)
+        
+        # Gauge chart untuk saldo operasional
+        col_g1, col_g2 = st.columns(2)
+        
+        with col_g1:
+            fig_gauge = go.Figure(go.Indicator(
+                mode="gauge+number+delta",
+                value=saldo_op,
+                delta={"reference": REAL_OPERASIONAL + UANG_CASH, "valueformat": ",.0f"},
+                title={"text": "Saldo Operasional", "font": {"color": "#F1F5F9"}},
+                number={"prefix": "Rp ", "valueformat": ",.0f", "font": {"color": "#F1F5F9"}},
+                gauge={
+                    "axis": {"range": [0, REAL_OPERASIONAL + UANG_CASH], "tickcolor": "#94A3B8"},
+                    "bar": {"color": "#10B981"},
+                    "bgcolor": "#0F172A",
+                    "bordercolor": "#334155",
+                    "steps": [
+                        {"range": [0, (REAL_OPERASIONAL + UANG_CASH) * 0.3], "color": "rgba(239,68,68,0.2)"},
+                        {"range": [(REAL_OPERASIONAL + UANG_CASH) * 0.3, (REAL_OPERASIONAL + UANG_CASH) * 0.7], "color": "rgba(245,158,11,0.2)"},
+                        {"range": [(REAL_OPERASIONAL + UANG_CASH) * 0.7, REAL_OPERASIONAL + UANG_CASH], "color": "rgba(16,185,129,0.2)"}
+                    ],
+                    "threshold": {
+                        "line": {"color": "#F59E0B", "width": 4},
+                        "thickness": 0.75,
+                        "value": (REAL_OPERASIONAL + UANG_CASH) * 0.3
+                    }
+                }
+            ))
+            fig_gauge.update_layout(
+                paper_bgcolor="#1E293B",
+                font_color="#94A3B8",
+                height=300,
+                margin=dict(l=30, r=30, t=50, b=10)
+            )
+            st.plotly_chart(fig_gauge, use_container_width=True)
+        
+        with col_g2:
+            # Statistik tambahan
+            st.markdown("### 💰 Rincian")
+            st.markdown(f"""
+            <div style="background:#1E293B; padding:20px; border-radius:10px; border:1px solid #334155;">
+                <p style="color:#94A3B8; margin:0;">Total Aset</p>
+                <p style="color:#F1F5F9; font-size:24px; font-weight:700;">Rp {total_real:,.0f}</p>
+                <hr style="border-color:#334155;">
+                <p style="color:#94A3B8; margin:0;">Bank</p>
+                <p style="color:#3B82F6; font-size:20px;">Rp {SALDO_BANK:,.0f}</p>
+                <p style="color:#94A3B8; margin:0;">Cash</p>
+                <p style="color:#10B981; font-size:20px;">Rp {UANG_CASH:,.0f}</p>
+                <hr style="border-color:#334155;">
+                <p style="color:#94A3B8; margin:0;">Tabungan</p>
+                <p style="color:#F59E0B; font-size:20px;">Rp {TABUNGAN:,.0f}</p>
+            </div>
+            """, unsafe_allow_html=True)
 
 with tab_budget_t:
     st.subheader("🎯 Budget Target per Kategori")
