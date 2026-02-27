@@ -1245,8 +1245,9 @@ with tab_mandiri:
             if st.button("🗑️ Batal", use_container_width=True):
                 del st.session_state["mandiri_rows"]
                 st.rerun()
-
-
+                
+                
+                
 with tab_cash:
     st.subheader("💵 Uang Cash")
     st.caption("Uang fisik yang sudah ditarik dari ATM")
@@ -1266,7 +1267,6 @@ with tab_cash:
         </div>
         """, unsafe_allow_html=True)
     
-
     st.markdown("---")
     
     # Dua bagian: TARIK TUNAI dan PENGGUNAAN CASH
@@ -1286,14 +1286,8 @@ with tab_cash:
             
             if st.form_submit_button("💾 Simpan Tarik Tunai", use_container_width=True):
                 if nominal_tarik > 0:
-                    # 1. Kurangi saldo bank (REAL_OPERASIONAL akan berkurang)
-                    # Ini akan otomatis karena REAL_OPERASIONAL dikurangi total_out
-                    # Tapi kita perlu catat transaksi bank
-                    
-                    # 2. Tambah saldo cash
                     baru_cash = UANG_CASH + nominal_tarik
                     if update_cash_cloud(baru_cash, f"Tarik tunai: {catatan_tarik}"):
-                        # 3. Catat transaksi bank (sebagai pengeluaran)
                         transaksi_bank = {
                             "Tanggal": tanggal_tarik.strftime("%Y-%m-%d"),
                             "Tipe": "Pengeluaran",
@@ -1306,7 +1300,6 @@ with tab_cash:
                         }
                         save_to_cloud(transaksi_bank)
                         
-                        # 4. Catat transaksi cash
                         trans_cash = {
                             "tanggal": tanggal_tarik.strftime("%Y-%m-%d"),
                             "tipe": "Tarik Tunai",
@@ -1338,39 +1331,42 @@ with tab_cash:
                 
                 if st.form_submit_button("💾 Catat Penggunaan", use_container_width=True):
                     if nominal_pakai > 0:
-                        # 1. Kurangi saldo cash
                         baru_cash = UANG_CASH - nominal_pakai
                         if update_cash_cloud(baru_cash, f"Pakai cash: {catatan_pakai}"):
-                            # 2. Catat penggunaan cash
-                            # TODO: Simpan ke tabel penggunaan_cash
-                            st.success(f"✅ Penggunaan Rp {nominal_pakai:,.0f} dicatat")
-                            st.rerun()
+                            try:
+                                penggunaan_data = {
+                                    "tanggal": tanggal_pakai.strftime("%Y-%m-%d"),
+                                    "nominal": nominal_pakai,
+                                    "kategori": kategori_pakai,
+                                    "catatan": catatan_pakai
+                                }
+                                conn.table("penggunaan_cash").insert(penggunaan_data).execute()
+                                st.success(f"✅ Penggunaan Rp {nominal_pakai:,.0f} dicatat")
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"Gagal simpan: {e}")
         else:
             st.warning("Tidak ada uang cash. Silakan tarik tunai dulu.")
         
         st.markdown("---")
         st.subheader("📋 Riwayat Penggunaan Cash")
-        # Tampilkan history penggunaan cash dari tabel penggunaan_cash
+        
+        try:
+            res = conn.table("penggunaan_cash").select("*").order("tanggal", desc=True).execute()
+            if res.data and len(res.data) > 0:
+                df_penggunaan = pd.DataFrame(res.data)
+                df_display = df_penggunaan[["tanggal", "nominal", "kategori", "catatan"]].copy()
+                df_display.columns = ["Tanggal", "Nominal", "Kategori", "Catatan"]
+                df_display["Nominal"] = df_display["Nominal"].apply(lambda x: f"Rp {x:,.0f}")
+                st.dataframe(df_display, use_container_width=True, hide_index=True)
+                
+                total_penggunaan = df_penggunaan["nominal"].sum()
+                st.info(f"💰 Total penggunaan cash: Rp {total_penggunaan:,.0f}")
+            else:
+                st.info("Belum ada penggunaan cash")
+        except Exception as e:
+            st.error(f"Error load riwayat: {e}")
 
-
-
-def load_penggunaan_cash_cloud():
-    """Load history penggunaan cash"""
-    try:
-        res = conn.table("penggunaan_cash").select("*").order("tanggal", desc=True).execute()
-        if res.data:
-            return pd.DataFrame(res.data)
-    except:
-        pass
-    return pd.DataFrame()
-
-def save_penggunaan_cash_cloud(data):
-    """Simpan penggunaan cash"""
-    try:
-        conn.table("penggunaan_cash").insert(data).execute()
-        return True
-    except:
-        return False
 
 
 
