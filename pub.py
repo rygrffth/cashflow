@@ -728,13 +728,13 @@ eye_icon = "👁️" if st.session_state.show_aset else "🙈"
 st.subheader("💵 Portofolio Aset")
 
 if "show_bank" not in st.session_state:
-    st.session_state.show_bank = True
+    st.session_state.show_bank = False
 if "show_cash" not in st.session_state:
-    st.session_state.show_cash = True
+    st.session_state.show_cash = False
 if "show_tabungan" not in st.session_state:
-    st.session_state.show_tabungan = True
+    st.session_state.show_tabungan = False
 if "show_aset" not in st.session_state:
-    st.session_state.show_aset = True
+    st.session_state.show_aset = False
 
 if is_real_mode:
     r1c1, r1c2, r1c3, r1c4 = st.columns(4)
