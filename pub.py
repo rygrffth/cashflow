@@ -726,14 +726,19 @@ eye_icon = "👁️" if st.session_state.show_aset else "🙈"
 
 st.subheader("💵 Portofolio Aset")
 
+if "show_bank" not in st.session_state:
+    st.session_state.show_bank = True
+if "show_cash" not in st.session_state:
+    st.session_state.show_cash = True
+if "show_tabungan" not in st.session_state:
+    st.session_state.show_tabungan = True
+if "show_aset" not in st.session_state:
+    st.session_state.show_aset = True
+
 if is_real_mode:
-    # Baris pertama: Bank, Cash, Tabungan, Total
     r1c1, r1c2, r1c3, r1c4 = st.columns(4)
     
     with r1c1:
-        # Saldo Bank dengan fitur hide
-        if "show_bank" not in st.session_state:
-            st.session_state.show_bank = True
         bank_display = f"Rp {SALDO_BANK:,.0f}" if st.session_state.show_bank else "Rp ••••••••"
         st.metric("🏦 Saldo Bank/ATM", bank_display)
         if st.button("👁️" if st.session_state.show_bank else "🙈", key="toggle_bank"):
@@ -741,9 +746,6 @@ if is_real_mode:
             st.rerun()
     
     with r1c2:
-        # Uang Cash dengan fitur hide
-        if "show_cash" not in st.session_state:
-            st.session_state.show_cash = True
         cash_display = f"Rp {UANG_CASH:,.0f}" if st.session_state.show_cash else "Rp ••••••••"
         st.metric("💵 Uang Cash", cash_display)
         if st.button("👁️" if st.session_state.show_cash else "🙈", key="toggle_cash"):
@@ -751,36 +753,61 @@ if is_real_mode:
             st.rerun()
     
     with r1c3:
-        st.metric("💰 Tabungan", f"Rp {TABUNGAN:,.0f}")
+        tabungan_display = f"Rp {TABUNGAN:,.0f}" if st.session_state.show_tabungan else "Rp ••••••••"
+        st.metric("💰 Tabungan", tabungan_display)
+        if st.button("👁️" if st.session_state.show_tabungan else "🙈", key="toggle_tabungan"):
+            st.session_state.show_tabungan = not st.session_state.show_tabungan
+            st.rerun()
     
     with r1c4:
-        st.metric("💎 Total Aset", f"Rp {total_real:,.0f}")
+        aset_display = f"Rp {total_real:,.0f}" if st.session_state.show_aset else "Rp ••••••••"
+        st.metric("💎 Total Aset", aset_display)
+        if st.button("👁️" if st.session_state.show_aset else "🙈", key="toggle_aset_real"):
+            st.session_state.show_aset = not st.session_state.show_aset
+            st.rerun()
     
-    # Baris kedua: Operasional dan Limit
-    r2c1, r2c2, r2c3 = st.columns(3)
+    r2c1, r2c2 = st.columns(2)
     r2c1.metric("📊 Dana Operasional", f"Rp {saldo_op:,.0f}")
     r2c2.metric("⏳ Limit Harian", f"Rp {batas_hr:,.0f}")
-    r2c3.metric("📅 Sisa Hari", f"{SISA_HARI} hari")
+
+else:
+    c1, c2 = st.columns(2)
+    
+    with c1:
+        aset_display = f"Rp {total_aset:,.0f}" if st.session_state.show_aset else "Rp ••••••••"
+        st.metric("💰 Total Aset", aset_display)
+        if st.button("👁️" if st.session_state.show_aset else "🙈", key="toggle_aset_biasa"):
+            st.session_state.show_aset = not st.session_state.show_aset
+            st.rerun()
+    
+    with c2:
+        cash_display = f"Rp {UANG_CASH:,.0f}" if st.session_state.show_cash else "Rp ••••••••"
+        st.metric("💵 Uang Cash", cash_display)
+        if st.button("👁️" if st.session_state.show_cash else "🙈", key="toggle_cash_biasa"):
+            st.session_state.show_cash = not st.session_state.show_cash
+            st.rerun()
+    
+    st.caption(f"📊 Dana Operasional: Rp {saldo_op:,.0f} • Limit Harian: Rp {batas_hr:,.0f}")
 
 st.markdown("##### 📈 Analitik Pengeluaran Aktif")
-m1,m2,m3,m4 = st.columns(4)
-m1.metric("Pengeluaran Hari Ini",   f"Rp {out_hari:,.0f}")
+m1, m2, m3, m4 = st.columns(4)
+m1.metric("Pengeluaran Hari Ini", f"Rp {out_hari:,.0f}")
 m2.metric("Pengeluaran Minggu Ini", f"Rp {out_minggu:,.0f}")
-m3.metric("Pengeluaran Bulan Ini",  f"Rp {out_bulan:,.0f}")
+m3.metric("Pengeluaran Bulan Ini", f"Rp {out_bulan:,.0f}")
 m4.metric("⏳ Scheduled Settlement", f"Rp {total_pend:,.0f}", delta=due_text, delta_color="off")
 
-pct_hr  = min(out_hari/batas_hr,1.0) if batas_hr>0 else 0
-ico     = "🟢" if pct_hr<0.5 else ("🟡" if pct_hr<0.85 else "🔴")
-sts_txt = "Aman" if pct_hr<0.5 else ("Perhatian" if pct_hr<0.85 else "Kritis")
-pb1,pb2 = st.columns([4,1])
+pct_hr = min(out_hari / batas_hr, 1.0) if batas_hr > 0 else 0
+ico = "🟢" if pct_hr < 0.5 else ("🟡" if pct_hr < 0.85 else "🔴")
+sts_txt = "Aman" if pct_hr < 0.5 else ("Perhatian" if pct_hr < 0.85 else "Kritis")
+pb1, pb2 = st.columns([4, 1])
 with pb1:
-    st.caption(f"{ico} Budget Harian — {sts_txt} ({pct_hr*100:.1f}% terpakai)")
+    st.caption(f"{ico} Budget Harian — {sts_txt} ({pct_hr * 100:.1f}% terpakai)")
     st.progress(pct_hr)
 with pb2:
     st.caption(f"Rp {out_hari:,.0f} / Rp {batas_hr:,.0f}")
 
 if piutang_blm > 0:
-    n_blm = len(df_piutang[df_piutang["Status"]=="Belum Lunas"])
+    n_blm = len(df_piutang[df_piutang["Status"] == "Belum Lunas"])
     st.warning(f"💸 Ada **{n_blm} piutang aktif** senilai **Rp {piutang_blm:,.0f}** yang belum kembali.")
 
 st.divider()
