@@ -724,6 +724,7 @@ if "show_aset" not in st.session_state:
 aset_display = f"Rp {total_aset:,.0f}" if st.session_state.show_aset else "Rp ••••••••"
 eye_icon = "👁️" if st.session_state.show_aset else "🙈"
 
+
 st.subheader("💵 Portofolio Aset")
 
 if "show_bank" not in st.session_state:
@@ -766,28 +767,31 @@ if is_real_mode:
             st.session_state.show_aset = not st.session_state.show_aset
             st.rerun()
     
-    r2c1, r2c2 = st.columns(2)
+    r2c1, r2c2, r2c3 = st.columns(3)
     r2c1.metric("📊 Dana Operasional", f"Rp {saldo_op:,.0f}")
     r2c2.metric("⏳ Limit Harian", f"Rp {batas_hr:,.0f}")
+    r2c3.metric("📅 Sisa Hari", f"{SISA_HARI} hari")
 
 else:
-    c1, c2 = st.columns(2)
+    r1c1, r1c2 = st.columns(2)
     
-    with c1:
+    with r1c1:
         aset_display = f"Rp {total_aset:,.0f}" if st.session_state.show_aset else "Rp ••••••••"
         st.metric("💰 Total Aset", aset_display)
         if st.button("👁️" if st.session_state.show_aset else "🙈", key="toggle_aset_biasa"):
             st.session_state.show_aset = not st.session_state.show_aset
             st.rerun()
     
-    with c2:
+    with r1c2:
         cash_display = f"Rp {UANG_CASH:,.0f}" if st.session_state.show_cash else "Rp ••••••••"
         st.metric("💵 Uang Cash", cash_display)
         if st.button("👁️" if st.session_state.show_cash else "🙈", key="toggle_cash_biasa"):
             st.session_state.show_cash = not st.session_state.show_cash
             st.rerun()
     
-    st.caption(f"📊 Dana Operasional: Rp {saldo_op:,.0f} • Limit Harian: Rp {batas_hr:,.0f}")
+    r2c1, r2c2 = st.columns(2)
+    r2c1.metric("📊 Dana Operasional", f"Rp {saldo_op:,.0f}")
+    r2c2.metric("⏳ Limit Harian", f"Rp {batas_hr:,.0f}")
 
 st.markdown("##### 📈 Analitik Pengeluaran Aktif")
 m1, m2, m3, m4 = st.columns(4)
