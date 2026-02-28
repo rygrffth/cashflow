@@ -2011,18 +2011,19 @@ with lc:
             pil_k = st.selectbox("🏷️ Kategori", kategori_options)
         
         # ===== INPUT MANUAL UNTUK KATEGORI LAINNYA =====
-        kat_f = pil_k
         if pil_k == "Lainnya (Ketik Manual...)":
             kat_f = st.text_input("✏️ Nama Kategori Baru", placeholder="Contoh: Beli Buku, Hadiah, Belanja Online, dll")
+        else:
+            kat_f = pil_k
         
         # ===== SCHEDULED SETTLEMENT =====
         st_i, tg_i, tb_i = "Cleared", "", ""
         
-        is_scheduled = (kat_f == "Scheduled Settlement")
-        
-        if is_scheduled:
+        # Cek apakah kategori adalah Scheduled Settlement
+        if kat_f == "Scheduled Settlement":
             st.info("📌 Dana Pending tidak memotong saldo sampai di-set 'Cleared'.")
             
+            # Baris untuk Status dan Jatuh Tempo
             col_s1, col_s2 = st.columns(2)
             with col_s1:
                 st_i = st.selectbox("⏳ Status", ["Pending", "Cleared"], index=0)
@@ -2030,6 +2031,7 @@ with lc:
                 min_date = datetime.date.today()
                 tg_i = st.date_input("📅 Jatuh Tempo", min_value=min_date).strftime("%Y-%m-%d")
             
+            # Set Tanggal Bayar jika Cleared
             if st_i == "Cleared":
                 tb_i = tgl_i.strftime("%Y-%m-%d")
         
@@ -2055,8 +2057,8 @@ with lc:
                 error = True
             
             # Validasi jatuh tempo untuk pending settlement
-            elif is_scheduled and st_i == "Pending" and not tg_i:
-                st.warning("⚠️ Isi tanggal untuk pending settlement!")
+            elif kat_f == "Scheduled Settlement" and st_i == "Pending" and not tg_i:
+                st.warning("⚠️ Isi tanggal jatuh tempo untuk pending settlement!")
                 error = True
             
             # ===== VALIDASI SALDO =====
@@ -2067,10 +2069,6 @@ with lc:
                         st.error(f"❌ Saldo bank tidak cukup! (Sisa: Rp {SALDO_BANK:,.0f})")
                         error = True
                 
-                # CEK BANK - PEMASUKAN (selalu valid)
-                elif sumber_i == "Bank" and tipe_i == "Pemasukan":
-                    pass  # Pemasukan bank selalu valid
-                
                 # CEK CASH - PENGELUARAN
                 elif sumber_i == "Cash" and tipe_i == "Pengeluaran":
                     cash_sekarang = load_cash_cloud()
@@ -2078,9 +2076,7 @@ with lc:
                         st.error(f"❌ Saldo cash tidak cukup! (Sisa: Rp {cash_sekarang:,.0f})")
                         error = True
                 
-                # CEK CASH - PEMASUKAN (selalu valid)
-                elif sumber_i == "Cash" and tipe_i == "Pemasukan":
-                    pass  # Pemasukan cash selalu valid
+                # Pemasukan (Bank atau Cash) selalu valid, tidak perlu cek saldo
             
             # ===== PROSES TRANSAKSI =====
             if not error:
