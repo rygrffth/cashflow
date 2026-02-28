@@ -576,6 +576,9 @@ if not df_cloud.empty:
     df_asli = df_cloud
 else:
     df_asli = load_data()
+if "Sumber" not in df_asli.columns:
+    df_asli["Sumber"] = "Bank"
+    st.sidebar.info("🔄 Data lama: semua transaksi dianggap sebagai Bank")
 df_piutang   = load_piutang()
 df_budget    = load_budget()
 df_recurring = load_recurring()
@@ -731,28 +734,42 @@ except Exception as e:
 
 
 
-mask_aktif = (df_asli["Tipe"]=="Pengeluaran") & ~((df_asli["Kategori"]=="Scheduled Settlement")&(df_asli["Status"]=="Pending"))
-mask_bank = (df_asli["Sumber"] == "Bank") | (df_asli["Sumber"].isna())  # Bank atau null (untuk data lama)
-mask_cash = df_asli["Sumber"] == "Cash"
+# ===== FILTER UNTUK TRANSAKSI =====
+mask_aktif = (df_asli["Tipe"] == "Pengeluaran") & ~((df_asli["Kategori"] == "Scheduled Settlement") & (df_asli["Status"] == "Pending"))
+
+# ===== FILTER BERDASARKAN SUMBER (AMAN) =====
+if "Sumber" in df_asli.columns:
+    mask_bank = (df_asli["Sumber"] == "Bank") | (df_asli["Sumber"].isna())
+    mask_cash = df_asli["Sumber"] == "Cash"
+else:
+    # Fallback untuk data lama yang belum punya kolom Sumber
+    mask_bank = pd.Series([True] * len(df_asli), index=df_asli.index)
+    mask_cash = pd.Series([False] * len(df_asli), index=df_asli.index)
+
+# ===== HITUNG PENGELUARAN PER PERIODE =====
+now = datetime.datetime.now()
+
+# Hari ini
 out_hari_bank = df_asli[mask_aktif & mask_bank & (df_asli["Tanggal_dt"].dt.date == now.date())]["Nominal"].sum()
 out_hari_cash = df_asli[mask_aktif & mask_cash & (df_asli["Tanggal_dt"].dt.date == now.date())]["Nominal"].sum()
 out_hari = out_hari_bank + out_hari_cash
 
+# Minggu ini
 out_minggu_bank = df_asli[mask_aktif & mask_bank & 
-                         (df_asli["Tanggal_dt"].dt.isocalendar().week == now.isocalendar()[1]) & 
-                         (df_asli["Tanggal_dt"].dt.year == now.year)]["Nominal"].sum()
+                          (df_asli["Tanggal_dt"].dt.isocalendar().week == now.isocalendar()[1]) & 
+                          (df_asli["Tanggal_dt"].dt.year == now.year)]["Nominal"].sum()
 out_minggu_cash = df_asli[mask_aktif & mask_cash & 
-                         (df_asli["Tanggal_dt"].dt.isocalendar().week == now.isocalendar()[1]) & 
-                         (df_asli["Tanggal_dt"].dt.year == now.year)]["Nominal"].sum()
+                          (df_asli["Tanggal_dt"].dt.isocalendar().week == now.isocalendar()[1]) & 
+                          (df_asli["Tanggal_dt"].dt.year == now.year)]["Nominal"].sum()
 out_minggu = out_minggu_bank + out_minggu_cash
 
-
+# Bulan ini
 out_bulan_bank = df_asli[mask_aktif & mask_bank & 
-                        (df_asli["Tanggal_dt"].dt.month == now.month) & 
-                        (df_asli["Tanggal_dt"].dt.year == now.year)]["Nominal"].sum()
+                         (df_asli["Tanggal_dt"].dt.month == now.month) & 
+                         (df_asli["Tanggal_dt"].dt.year == now.year)]["Nominal"].sum()
 out_bulan_cash = df_asli[mask_aktif & mask_cash & 
-                        (df_asli["Tanggal_dt"].dt.month == now.month) & 
-                        (df_asli["Tanggal_dt"].dt.year == now.year)]["Nominal"].sum()
+                         (df_asli["Tanggal_dt"].dt.month == now.month) & 
+                         (df_asli["Tanggal_dt"].dt.year == now.year)]["Nominal"].sum()
 out_bulan = out_bulan_bank + out_bulan_cash
 
 
