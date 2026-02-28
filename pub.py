@@ -730,9 +730,31 @@ except Exception as e:
     st.sidebar.error(f"Gagal load penggunaan cash: {e}")
 
 
-out_hari = df_asli[mask_aktif & (df_asli["Tanggal_dt"].dt.date == now.date())]["Nominal"].sum() + penggunaan_cash_hari_ini
-out_minggu = df_asli[mask_aktif & (df_asli["Tanggal_dt"].dt.isocalendar().week == now.isocalendar()[1]) & (df_asli["Tanggal_dt"].dt.year == now.year)]["Nominal"].sum() + penggunaan_cash_minggu
-out_bulan = df_asli[mask_aktif & (df_asli["Tanggal_dt"].dt.month == now.month) & (df_asli["Tanggal_dt"].dt.year == now.year)]["Nominal"].sum() + penggunaan_cash_bulan
+
+mask_aktif = (df_asli["Tipe"]=="Pengeluaran") & ~((df_asli["Kategori"]=="Scheduled Settlement")&(df_asli["Status"]=="Pending"))
+mask_bank = (df_asli["Sumber"] == "Bank") | (df_asli["Sumber"].isna())  # Bank atau null (untuk data lama)
+mask_cash = df_asli["Sumber"] == "Cash"
+out_hari_bank = df_asli[mask_aktif & mask_bank & (df_asli["Tanggal_dt"].dt.date == now.date())]["Nominal"].sum()
+out_hari_cash = df_asli[mask_aktif & mask_cash & (df_asli["Tanggal_dt"].dt.date == now.date())]["Nominal"].sum()
+out_hari = out_hari_bank + out_hari_cash
+
+out_minggu_bank = df_asli[mask_aktif & mask_bank & 
+                         (df_asli["Tanggal_dt"].dt.isocalendar().week == now.isocalendar()[1]) & 
+                         (df_asli["Tanggal_dt"].dt.year == now.year)]["Nominal"].sum()
+out_minggu_cash = df_asli[mask_aktif & mask_cash & 
+                         (df_asli["Tanggal_dt"].dt.isocalendar().week == now.isocalendar()[1]) & 
+                         (df_asli["Tanggal_dt"].dt.year == now.year)]["Nominal"].sum()
+out_minggu = out_minggu_bank + out_minggu_cash
+
+
+out_bulan_bank = df_asli[mask_aktif & mask_bank & 
+                        (df_asli["Tanggal_dt"].dt.month == now.month) & 
+                        (df_asli["Tanggal_dt"].dt.year == now.year)]["Nominal"].sum()
+out_bulan_cash = df_asli[mask_aktif & mask_cash & 
+                        (df_asli["Tanggal_dt"].dt.month == now.month) & 
+                        (df_asli["Tanggal_dt"].dt.year == now.year)]["Nominal"].sum()
+out_bulan = out_bulan_bank + out_bulan_cash
+
 
 due_text = "No Pending"
 if not df_asli[mask_pend].empty:
@@ -1479,68 +1501,261 @@ with tab_mandiri:
                 
 with tab_cash:
     st.subheader("💵 Uang Cash")
-    st.caption("Uang fisik yang sudah ditarik dari ATM")
+    st.caption("Kelola uang fisik di dompetmu")
     
-    # Load data
-    UANG_CASH = load_cash_cloud()
-    df_transaksi_cash = load_transaksi_cash_cloud(50)
+    if "show_cash_amount" not in st.session_state:
+        st.session_state.show_cash_amount = False  
     
-    # Tampilan saldo
-    col_c1, col_c2 = st.columns(2)
-    with col_c1:
-        st.markdown(f"""
-        <div class="card card-green">
-            <p class="card-label">💰 UANG CASH DI DOMPET</p>
-            <p class="card-value" style="color:#10B981;">Rp {UANG_CASH:,.0f}</p>
-            <p class="card-sub">Sisa uang fisik yang belum dipakai</p>
-        </div>
-        """, unsafe_allow_html=True)
+ 
+        UANG_CASH = load_cash_cloud()
+    
+    col_hide1, col_hide2 = st.columns([3, 1])
+    with col_hide1:
+        if st.session_state.show_cash_amount:
+            st.markdown(f"""
+            <div class="card card-green">
+                <p class="card-label">💰 UANG CASH DI DOMPET</p>
+                <p class="card-value" style="color:#10B981;">Rp {UANG_CASH:,.0f}</p>
+                <p class="card-sub">Sisa uang fisik yang belum dipakai</p>
+            </div>
+            """, unsafe_allow_html=True)
+        else:
+            st.markdown(f"""
+            <div class="card card-green">
+                <p class="card-label">💰 UANG CASH DI DOMPET</p>
+                <p class="card-value" style="color:#10B981;">Rp ••••••••</p>
+                <p class="card-sub">Klik tombol 👁️ untuk melihat</p>
+            </div>
+            """, unsafe_allow_html=True)
+    
+    with col_hide2:
+        st.markdown("<br>", unsafe_allow_html=True)  # Spacer
+        if st.button("👁️" if not st.session_state.show_cash_amount else "🙈", key="toggle_cash_tab", use_container_width=True):
+            st.session_state.show_cash_amount = not st.session_state.show_cash_amount
+            st.rerun()
     
     st.markdown("---")
     
-    # Dua bagian: TARIK TUNAI dan PENGGUNAAN CASH
-    tab_tarik, tab_penggunaan = st.tabs(["💰 Tarik Tunai (ATM → Cash)", "💸 Penggunaan Cash"])
+    df_cash_transactions = df_asli[df_asli.get("Sumber", "Bank") == "Cash"].copy()
     
-    with tab_tarik:
-        st.subheader("Tarik Tunai dari ATM")
-        st.caption("Saldo bank berkurang, uang cash bertambah")
+    if not df_cash_transactions.empty:
+  
+        total_masuk = df_cash_transactions[df_cash_transactions["Tipe"] == "Pemasukan"]["Nominal"].sum()
+        total_keluar = df_cash_transactions[df_cash_transactions["Tipe"] == "Pengeluaran"]["Nominal"].sum()
         
-        with st.form("form_tarik_tunai", clear_on_submit=True):
-            col_t1, col_t2 = st.columns(2)
-            with col_t1:
-                nominal_tarik = st.number_input("Nominal Tarik (Rp)", min_value=0, step=50000)
-                tanggal_tarik = st.date_input("Tanggal Tarik", datetime.date.today())
-            with col_t2:
-                catatan_tarik = st.text_input("Catatan", placeholder="Misal: Tarik BCA ATM")
+        col_r1, col_r2, col_r3 = st.columns(3)
+        
+        with col_r1:
+            st.markdown(f"""
+            <div class="card">
+                <p class="card-label">📥 TOTAL MASUK</p>
+                <p class="card-value" style="color:#10B981;">Rp {total_masuk:,.0f}</p>
+                <p class="card-sub">Uang cash masuk</p>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        with col_r2:
+            st.markdown(f"""
+            <div class="card">
+                <p class="card-label">📤 TOTAL KELUAR</p>
+                <p class="card-value" style="color:#EF4444;">Rp {total_keluar:,.0f}</p>
+                <p class="card-sub">Uang cash terpakai</p>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        with col_r3:
+            st.markdown(f"""
+            <div class="card">
+                <p class="card-label">⚖️ SELISIH</p>
+                <p class="card-value" style="color:#F59E0B;">Rp {total_masuk - total_keluar:,.0f}</p>
+                <p class="card-sub">Masuk - Keluar</p>
+            </div>
+            """, unsafe_allow_html=True)
+        
+    
+        with st.expander("📈 Grafik Penggunaan Cash", expanded=False):
+            df_cash_daily = df_cash_transactions.copy()
+            df_cash_daily["Tanggal"] = pd.to_datetime(df_cash_daily["Tanggal"])
+            df_cash_daily = df_cash_daily[df_cash_daily["Tipe"] == "Pengeluaran"]
             
-            if st.form_submit_button("💾 Simpan Tarik Tunai", use_container_width=True):
-                if nominal_tarik > 0:
-                    baru_cash = UANG_CASH + nominal_tarik
-                    if update_cash_cloud(baru_cash, f"Tarik tunai: {catatan_tarik}"):
+            if not df_cash_daily.empty:
+                daily_sum = df_cash_daily.groupby(df_cash_daily["Tanggal"].dt.date)["Nominal"].sum().reset_index()
+                daily_sum.columns = ["Tanggal", "Total"]
+                daily_sum = daily_sum.sort_values("Tanggal")
+                
+                fig_cash = px.line(daily_sum, x="Tanggal", y="Total", 
+                                   title="Tren Pengeluaran Cash",
+                                   markers=True,
+                                   color_discrete_sequence=["#10B981"])
+                fig_cash.update_layout(**PLOT)
+                st.plotly_chart(fig_cash, use_container_width=True)
+                
+           
+                avg_cash = daily_sum["Total"].mean()
+                st.info(f"📊 Rata-rata pengeluaran cash: Rp {avg_cash:,.0f} per hari")
+          
+                if avg_cash > 0 and UANG_CASH > 0:
+                    hari_habis = int(UANG_CASH / avg_cash)
+                    if hari_habis > 0:
+                        tgl_habis = datetime.date.today() + datetime.timedelta(days=hari_habis)
+                        st.warning(f"⏳ Prediksi cash habis dalam **{hari_habis} hari** ({tgl_habis.strftime('%d %b %Y')})")
+            else:
+                st.info("Belum ada pengeluaran cash")
+        
+  
+        with st.expander("📋 Riwayat Transaksi Cash", expanded=True):
+            # Filter tambahan          col_filter1, col_filter2 = st.columns(2)
+            with col_filter1:
+                filter_tipe_cash = st.selectbox("Filter Tipe", ["Semua", "Pemasukan", "Pengeluaran"], key="filter_cash_tipe")
+            with col_filter2:
+                filter_bulan_cash = st.selectbox("Filter Bulan", ["Semua", "Bulan Ini", "Bulan Lalu"], key="filter_cash_bulan")
+            
+            df_display_cash = df_cash_transactions.copy()
+            
+      
+            if filter_tipe_cash != "Semua":
+                df_display_cash = df_display_cash[df_display_cash["Tipe"] == filter_tipe_cash]
+            
+    
+            today = datetime.date.today()
+            if filter_bulan_cash == "Bulan Ini":
+                df_display_cash = df_display_cash[
+                    (pd.to_datetime(df_display_cash["Tanggal"]).dt.month == today.month) &
+                    (pd.to_datetime(df_display_cash["Tanggal"]).dt.year == today.year)
+                ]
+            elif filter_bulanSSS_cash == "Bulan Lalu":
+                last_month = today.month - 1 if today.month > 1 else 12
+                last_month_year = today.year if today.month > 1 else today.year - 1
+                df_display_cash = df_display_cash[
+                    (pd.to_datetime(df_display_cash["Tanggal"]).dt.month == last_month) &
+                    (pd.to_datetime(df_display_cash["Tanggal"]).dt.year == last_month_year)
+                ]
+            
+            if not df_display_cash.empty:
+            
+                df_show = df_display_cash[["Tanggal", "Tipe", "Kategori", "Nominal", "Catatan"]].copy()
+                df_show["Nominal"] = df_show["Nominal"].apply(lambda x: f"Rp {x:,.0f}")
+                df_show = df_show.sort_values("Tanggal", ascending=False)
+                st.dataframe(df_show, use_container_width=True, hide_index=True)
+                st.caption(f"Menampilkan {len(df_show)} transaksi")
+            else:
+                st.info("Tidak ada transaksi cash dengan filter ini")
+    
+    else:
+        st.info("Belum ada transaksi cash. Gunakan form di halaman utama untuk mencatat transaksi cash.")
+    
+    st.markdown("---")
+    
+  
+    st.subheader("⚡ Transaksi Cepat Cash")
+    col_quick1, col_quick2, col_quick3, col_quick4 = st.columns(4)
+    
+    with col_quick1:
+        if st.button("💰 Tarik Tunai", use_container_width=True):
+            st.session_state["quick_cash"] = "tarik"
+    
+    with col_quick2:
+        if st.button("🍜 Makan", use_container_width=True):
+            st.session_state["quick_cash"] = "makan"
+    
+    with col_quick3:
+        if st.button("🚗 Transport", use_container_width=True):
+            st.session_state["quick_cash"] = "transport"
+    
+    with col_quick4:
+        if st.button("🛒 Belanja", use_container_width=True):
+            st.session_state["quick_cash"] = "belanja"
+    
+
+    if "quick_cash" in st.session_state:
+        st.markdown("---")
+        with st.form("quick_cash_form"):
+            st.markdown(f"**📝 Transaksi Cepat: {st.session_state['quick_cash'].title()}**")
+            
+            if st.session_state["quick_cash"] == "tarik":
+                st.caption("Tarik tunai dari ATM (akan dicatat sebagai pengeluaran bank dan pemasukan cash)")
+                nominal_quick = st.number_input("Nominal Tarik (Rp)", min_value=0, step=50000)
+                catatan_quick = st.text_input("Catatan", placeholder="Misal: Tarik BCA")
+                
+                if st.form_submit_button("✅ Konfirmasi Tarik Tunai"):
+                    if nominal_quick > 0:
+                       
                         transaksi_bank = {
-                            "Tanggal": tanggal_tarik.strftime("%Y-%m-%d"),
+                            "Tanggal": datetime.date.today().strftime("%Y-%m-%d"),
                             "Tipe": "Pengeluaran",
                             "Kategori": "Tarik Tunai",
-                            "Nominal": nominal_tarik,
-                            "Catatan": f"Tarik tunai - {catatan_tarik}",
+                            "Nominal": nominal_quick,
+                            "Catatan": f"Tarik tunai - {catatan_quick}",
                             "Status": "Cleared",
                             "Tenggat_Waktu": "",
-                            "Tanggal_Bayar": tanggal_tarik.strftime("%Y-%m-%d")
+                            "Tanggal_Bayar": datetime.date.today().strftime("%Y-%m-%d"),
+                            "Sumber": "Bank"
                         }
                         save_to_cloud(transaksi_bank)
                         
-                        trans_cash = {
-                            "tanggal": tanggal_tarik.strftime("%Y-%m-%d"),
-                            "tipe": "Tarik Tunai",
-                            "nominal": nominal_tarik,
-                            "kategori": "Tarik ATM",
-                            "catatan": catatan_tarik,
-                            "status": "Selesai"
+  
+                        transaksi_cash = {
+                            "Tanggal": datetime.date.today().strftime("%Y-%m-%d"),
+                            "Tipe": "Pemasukan",
+                            "Kategori": "Tarik Tunai",
+                            "Nominal": nominal_quick,
+                            "Catatan": f"Dari ATM - {catatan_quick}",
+                            "Status": "Cleared",
+                            "Tenggat_Waktu": "",
+                            "Tanggal_Bayar": datetime.date.today().strftime("%Y-%m-%d"),
+                            "Sumber": "Cash"
                         }
-                        save_transaksi_cash_cloud(trans_cash)
+                        save_to_cloud(transaksi_cash)
+                    
+                        baru_cash = UANG_CASH + nominal_quick
+                        update_cash_cloud(baru_cash, f"Tarik tunai: {catatan_quick}")
                         
-                        st.success(f"✅ Berhasil tarik Rp {nominal_tarik:,.0f}")
+                        st.success(f"✅ Berhasil tarik Rp {nominal_quick:,.0f}")
+                        del st.session_state["quick_cash"]
                         st.rerun()
+            
+            else:
+               
+                preset_nominal = {
+                    "makan": 25000,
+                    "transport": 20000,
+                    "belanja": 100000
+                }.get(st.session_state["quick_cash"], 0)
+                
+                nominal_quick = st.number_input("Nominal (Rp)", min_value=0, step=10000, value=preset_nominal)
+                catatan_quick = st.text_input("Catatan", placeholder=f"Misal: {st.session_state['quick_cash'].title()}...")
+                
+                if st.form_submit_button("✅ Konfirmasi"):
+                    if nominal_quick > 0 and nominal_quick <= UANG_CASH:
+                       
+                        transaksi = {
+                            "Tanggal": datetime.date.today().strftime("%Y-%m-%d"),
+                            "Tipe": "Pengeluaran",
+                            "Kategori": st.session_state["quick_cash"].title(),
+                            "Nominal": nominal_quick,
+                            "Catatan": catatan_quick,
+                            "Status": "Cleared",
+                            "Tenggat_Waktu": "",
+                            "Tanggal_Bayar": datetime.date.today().strftime("%Y-%m-%d"),
+                            "Sumber": "Cash"
+                        }
+                        save_to_cloud(transaksi)
+                        
+        
+                        baru_cash = UANG_CASH - nominal_quick
+                        update_cash_cloud(baru_cash, f"{st.session_state['quick_cash']}: {catatan_quick}")
+                        
+                        st.success(f"✅ Berhasil mencatat pengeluaran Rp {nominal_quick:,.0f}")
+                        del st.session_state["quick_cash"]
+                        st.rerun()
+                    elif nominal_quick > UANG_CASH:
+                        st.error(f"Saldo cash tidak cukup! (Sisa: Rp {UANG_CASH:,.0f})")
+            
+            if st.form_submit_button("❌ Batal"):
+                del st.session_state["quick_cash"]
+                st.rerun()
+                
+                
     
     with tab_penggunaan:
         st.subheader("Penggunaan Uang Cash")
@@ -1819,28 +2034,70 @@ with tab_tabungan:
         st.info("Belum ada target tabungan. Buat yang baru di form sebelah kiri!")
 
 
-lc,rc=st.columns([1.2,1])
+lc, rc = st.columns([1.2, 1])
 with lc:
     st.subheader("📝 Catat Transaksi Baru")
     with st.form("form_transaksi", clear_on_submit=True):
-        tgl_i  = st.date_input("Tanggal Transaksi", datetime.date.today())
-        tipe_i = st.selectbox("Tipe",["Pengeluaran","Pemasukan"])
-        pil_k  = st.selectbox("Kategori",["Makan (Sahur/Buka)","Bensin / Mobilitas","Bukber / Hiburan","Kebutuhan Lab / Magang","Scheduled Settlement","Lainnya (Ketik Manual...)"])
-        kat_f  = st.text_input("Nama Kategori") if pil_k=="Lainnya (Ketik Manual...)" else pil_k
+      
+        col_f1, col_f2 = st.columns(2)
+        with col_f1:
+            tgl_i = st.date_input("📅 Tanggal", datetime.date.today())
+        with col_f2:
+            tipe_i = st.selectbox("📊 Tipe", ["Pengeluaran", "Pemasukan"])
         
+       
+        col_f3, col_f4 = st.columns(2)
+        with col_f3:
+            sumber_i = st.selectbox("💰 Sumber Dana", ["Bank", "Cash"], index=0)
+        with col_f4:
+   
+            kategori_options = [
+                "Makan (Sahur/Buka)", 
+                "Bensin / Mobilitas", 
+                "Bukber / Hiburan", 
+                "Kebutuhan Lab / Magang", 
+                "Scheduled Settlement",
+                "Lainnya (Ketik Manual...)"
+            ]
+            pil_k = st.selectbox("🏷️ Kategori", kategori_options)
+        
+
+        if pil_k == "Lainnya (Ketik Manual...)":
+            kat_f = st.text_input("✏️ Nama Kategori Baru", placeholder="Contoh: Beli Buku, Hadiah, dll")
+        else:
+            kat_f = pil_k
+        
+      
         st_i, tg_i, tb_i = "Cleared", "", ""
+        
         if kat_f == "Scheduled Settlement":
             st.info("📌 Dana Pending tidak memotong saldo sampai di-set 'Cleared'.")
-            ss1, ss2 = st.columns(2)
-            with ss1: st_i = st.selectbox("Status", ["Pending", "Cleared"])
-            with ss2: tg_i = st.date_input("Jatuh Tempo").strftime("%Y-%m-%d")
-            if st_i == "Cleared": tb_i = tgl_i.strftime("%Y-%m-%d")
+            col_s1, col_s2 = st.columns(2)
+            with col_s1:
+                st_i = st.selectbox("⏳ Status", ["Pending", "Cleared"], index=0)
+            with col_s2:
+                min_date = datetime.date.today()
+                tg_i = st.date_input("📅 Jatuh Tempo", min_value=min_date).strftime("%Y-%m-%d")
             
-        nom_i = st.number_input("Nominal (Rp)", min_value=0, step=5000)
-        cat_i = st.text_input("Catatan (opsional)")
+            if st_i == "Cleared":
+                tb_i = tgl_i.strftime("%Y-%m-%d")
+        
+ 
+        nom_i = st.number_input("💰 Nominal (Rp)", min_value=0, step=5000, format="%d")
+        cat_i = st.text_input("📝 Catatan", placeholder="Contoh: Beli makan siang, Isi bensin, dll")
 
-        if st.form_submit_button("💾 Simpan Transaksi", use_container_width=True):
-            if nom_i > 0:
+   
+        submitted = st.form_submit_button("💾 Simpan Transaksi", use_container_width=True)
+        
+        if submitted:
+            if nom_i <= 0:
+                st.warning("⚠️ Nominal harus lebih dari 0!")
+            elif pil_k == "Lainnya (Ketik Manual...)" and not kat_f.strip():
+                st.warning("⚠️ Silakan isi nama kategori baru!")
+            elif kat_f == "Scheduled Settlement" and st_i == "Pending" and not tg_i:
+                st.warning("⚠️ Isi tanggal jatuh tempo untuk pending settlement!")
+            else:
+              
                 nr = {
                     "Tanggal": tgl_i.strftime("%Y-%m-%d"),
                     "Tipe": tipe_i,
@@ -1849,19 +2106,30 @@ with lc:
                     "Catatan": cat_i,
                     "Status": st_i,
                     "Tenggat_Waktu": tg_i,
-                    "Tanggal_Bayar": tb_i
+                    "Tanggal_Bayar": tb_i,
+                    "Sumber": sumber_i 
                 }
-              
+                
+           
+                if sumber_i == "Cash":
+                    if tipe_i == "Pengeluaran":
+                       
+                        UANG_CASH_sekarang = load_cash_cloud()
+                        update_cash_cloud(UANG_CASH_sekarang - nom_i, f"Transaksi: {cat_i}")
+                    elif tipe_i == "Pemasukan":
+                      
+                        UANG_CASH_sekarang = load_cash_cloud()
+                        update_cash_cloud(UANG_CASH_sekarang + nom_i, f"Pemasukan cash: {cat_i}")
+                
                 save_to_cloud(nr)
-      
+                
                 df_asli = pd.concat([df_asli, pd.DataFrame([nr])], ignore_index=True)
                 save_data(df_asli)
                 
-                st.success("✅ Tersimpan di Cloud & Lokal!")
+                st.success("✅ Transaksi berhasil disimpan!")
                 st.rerun()
-            else: 
-                st.warning("⚠️ Nominal harus lebih dari 0.")
-
+                
+                
 with rc:
     st.subheader("📋 Ringkasan Cepat")
     sisa=batas_hr-out_hari; wc="#10B981" if sisa>=0 else "#EF4444"
