@@ -1772,62 +1772,6 @@ with tab_cash:
                 del st.session_state["quick_cash"]
                 st.rerun()
                 
-                
-    
-    with tab_penggunaan:
-        st.subheader("Penggunaan Uang Cash")
-        st.caption("Catat detail penggunaan uang cash yang sudah ditarik")
-        
-        if UANG_CASH > 0:
-            st.info(f"💰 Sisa cash yang bisa digunakan: **Rp {UANG_CASH:,.0f}**")
-            
-            with st.form("form_penggunaan_cash", clear_on_submit=True):
-                col_p1, col_p2 = st.columns(2)
-                with col_p1:
-                    nominal_pakai = st.number_input("Nominal Penggunaan (Rp)", min_value=0, max_value=UANG_CASH, step=10000)
-                    tanggal_pakai = st.date_input("Tanggal Penggunaan", datetime.date.today())
-                with col_p2:
-                    kategori_pakai = st.selectbox("Kategori", ["Makan", "Transport", "Belanja", "Hiburan", "Lainnya"])
-                    catatan_pakai = st.text_input("Catatan", placeholder="Misal: Beli makan siang")
-                
-                if st.form_submit_button("💾 Catat Penggunaan", use_container_width=True):
-                    if nominal_pakai > 0:
-                        baru_cash = UANG_CASH - nominal_pakai
-                        if update_cash_cloud(baru_cash, f"Pakai cash: {catatan_pakai}"):
-                            try:
-                                penggunaan_data = {
-                                    "tanggal": tanggal_pakai.strftime("%Y-%m-%d"),
-                                    "nominal": nominal_pakai,
-                                    "kategori": kategori_pakai,
-                                    "catatan": catatan_pakai
-                                }
-                                conn.table("penggunaan_cash").insert(penggunaan_data).execute()
-                                st.success(f"✅ Penggunaan Rp {nominal_pakai:,.0f} dicatat")
-                                st.rerun()
-                            except Exception as e:
-                                st.error(f"Gagal simpan: {e}")
-        else:
-            st.warning("Tidak ada uang cash. Silakan tarik tunai dulu.")
-        
-        st.markdown("---")
-        st.subheader("📋 Riwayat Penggunaan Cash")
-        
-        try:
-            res = conn.table("penggunaan_cash").select("*").order("tanggal", desc=True).execute()
-            if res.data and len(res.data) > 0:
-                df_penggunaan = pd.DataFrame(res.data)
-                df_display = df_penggunaan[["tanggal", "nominal", "kategori", "catatan"]].copy()
-                df_display.columns = ["Tanggal", "Nominal", "Kategori", "Catatan"]
-                df_display["Nominal"] = df_display["Nominal"].apply(lambda x: f"Rp {x:,.0f}")
-                st.dataframe(df_display, use_container_width=True, hide_index=True)
-                
-                total_penggunaan = df_penggunaan["nominal"].sum()
-                st.info(f"💰 Total penggunaan cash: Rp {total_penggunaan:,.0f}")
-            else:
-                st.info("Belum ada penggunaan cash")
-        except Exception as e:
-            st.error(f"Error load riwayat: {e}")
-
 
 
 
