@@ -925,6 +925,7 @@ else:
     st.error(f"🔴 KRITIS! Budget hampir habis! Sisa Rp {sisa_budget:,.0f}")
 
 # ===== FITUR SIMULASI JAJAN =====
+# ===== FITUR SIMULASI JAJAN =====
 st.markdown("---")
 st.subheader("🔮 Simulasi Jajan")
 
@@ -994,10 +995,21 @@ with col_dampak3:
             st.info(f"📅 Limit besok: Rp {limit_besok:,.0f}")
     else:
         st.error("🚫 Melebihi budget!")
+        # Set default values untuk menghindari NameError
+        limit_besok = 0
+        selisih_limit = 0
 
 # Rekomendasi berdasarkan simulasi
 st.markdown("---")
 st.subheader("💡 Rekomendasi")
+
+# Pastikan variabel ada sebelum dipakai
+if 'selisih' not in locals():
+    selisih = 0
+if 'selisih_limit' not in locals():
+    selisih_limit = 0
+if 'sisa_setelah_jajan' not in locals():
+    sisa_setelah_jajan = sisa_budget
 
 if simulasi_jajan > out_hari:
     # Boros
@@ -1007,14 +1019,14 @@ if simulasi_jajan > out_hari:
             st.info(f"📉 Limit besok turun Rp {abs(selisih_limit):,.0f}")
     else:
         st.error(f"🚨 JANGAN! Defisit Rp {abs(sisa_setelah_jajan):,.0f}! Ambil dari tabungan?")
-else:
+elif simulasi_jajan < out_hari:
     # Hemat
-    if simulasi_jajan < out_hari:
-        st.success(f"🎉 Hemat Rp {selisih:,.0f}! Sisa budget jadi Rp {sisa_setelah_jajan:,.0f}")
-        if selisih_limit > 0:
-            st.success(f"📈 Limit besok naik Rp {selisih_limit:,.0f}")
-    else:
-        st.info(f"⚖️ Sama seperti biasanya")
+    st.success(f"🎉 Hemat Rp {selisih:,.0f}! Sisa budget jadi Rp {sisa_setelah_jajan:,.0f}")
+    if selisih_limit > 0:
+        st.success(f"📈 Limit besok naik Rp {selisih_limit:,.0f}")
+else:
+    # Sama
+    st.info(f"⚖️ Sama seperti biasanya (Rp {out_hari:,.0f})")
 
 # ===== TIPS BERDASARKAN SISA HARI =====
 st.markdown("---")
