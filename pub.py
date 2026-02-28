@@ -592,39 +592,7 @@ else:
     if "Sumber" not in df_asli.columns:
         df_asli["Sumber"] = "Bank"
         
-        
-# ===== DEBUG LENGKAP - TAMBAHKAN DI SINI =====
-st.sidebar.markdown("---")
-st.sidebar.subheader("🔍 DEBUG INFO")
 
-# 1. Cek semua tanggal unik di database
-if not df_asli.empty:
-    semua_tanggal = sorted(df_asli["Tanggal"].unique())
-    st.sidebar.write("📅 Semua tanggal di database:", semua_tanggal)
-    
-    # 2. Cek data untuk 1 Maret 2026
-    today_str = datetime.date.today().strftime("%Y-%m-%d")
-    df_today = df_asli[df_asli["Tanggal"] == today_str]
-    st.sidebar.write(f"📊 Data untuk {today_str}:")
-    st.sidebar.write(f"Jumlah transaksi: {len(df_today)}")
-    if not df_today.empty:
-        st.sidebar.dataframe(df_today[["Tipe", "Nominal", "Kategori"]])
-    else:
-        st.sidebar.warning("TIDAK ADA DATA untuk hari ini!")
-    
-    # 3. Cek langsung dari Supabase (bypass cache)
-    try:
-        res = conn.table("transaksi").select("*").eq("tanggal", today_str).execute()
-        st.sidebar.write(f"🔄 Dari Supabase langsung ({today_str}):")
-        st.sidebar.write(f"Data: {len(res.data)} transaksi")
-        if res.data:
-            total = sum([d["nominal"] for d in res.data if d["tipe"] == "Pengeluaran"])
-            st.sidebar.success(f"Total: Rp {total:,.0f}")
-    except Exception as e:
-        st.sidebar.error(f"Error: {e}")
-
-# 4. Cek nilai out_hari yang dihitung
-st.sidebar.write(f"📈 out_hari dari kode: Rp {out_hari:,.0f}")
 
 df_piutang   = load_piutang()
 df_budget    = load_budget()
@@ -743,6 +711,7 @@ def cashflow_date(row):
 
 df_asli["Cashflow_Date"] = df_asli.apply(cashflow_date, axis=1)
 df_asli["Tanggal_dt"]    = pd.to_datetime(df_asli["Cashflow_Date"], errors='coerce')
+
 now = datetime.datetime.now()
 
 mask_aktif  = (df_asli["Tipe"]=="Pengeluaran") & ~((df_asli["Kategori"]=="Scheduled Settlement")&(df_asli["Status"]=="Pending"))
@@ -799,8 +768,7 @@ else:
     mask_bank = pd.Series([True] * len(df_asli), index=df_asli.index)
     mask_cash = pd.Series([False] * len(df_asli), index=df_asli.index)
 
-# ===== HITUNG PENGELUARAN PER PERIODE =====
-now = datetime.datetime.now()
+
 
 # Hari ini
 out_hari_bank = df_asli[mask_aktif & mask_bank & (df_asli["Tanggal_dt"].dt.date == now.date())]["Nominal"].sum()
@@ -840,6 +808,44 @@ total_real = SALDO_BANK + UANG_CASH
 batas_hr = saldo_op / SISA_HARI                        
 mult = 1 if is_real_mode else MULTIPLIER
 total_aset = total_real if is_real_mode else (FIKTIF_BASE + total_real)
+
+
+# ===== DEBUG LENGKAP - TAMBAHKAN DI SINI (SETELAH out_hari) =====
+st.sidebar.markdown("---")
+st.sidebar.subheader("🔍 DEBUG INFO")
+
+# 1. Cek semua tanggal unik di database
+if not df_asli.empty:
+    semua_tanggal = sorted(df_asli["Tanggal"].unique())
+    st.sidebar.write("📅 Semua tanggal di database:", semua_tanggal)
+    
+    # 2. Cek data untuk hari ini
+    today_str = datetime.date.today().strftime("%Y-%m-%d")
+    df_today = df_asli[df_asli["Tanggal"] == today_str]
+    st.sidebar.write(f"📊 Data untuk {today_str}:")
+    st.sidebar.write(f"Jumlah transaksi: {len(df_today)}")
+    if not df_today.empty:
+        st.sidebar.dataframe(df_today[["Tipe", "Nominal", "Kategori", "Sumber"]])
+        out_today = df_today[df_today["Tipe"] == "Pengeluaran"]["Nominal"].sum()
+        st.sidebar.success(f"Total pengeluaran: Rp {out_today:,.0f}")
+    else:
+        st.sidebar.warning("TIDAK ADA DATA untuk hari ini!")
+    
+    # 3. Cek langsung dari Supabase (bypass cache)
+    try:
+        res = conn.table("transaksi").select("*").eq("tanggal", today_str).execute()
+        st.sidebar.write(f"🔄 Dari Supabase langsung ({today_str}):")
+        st.sidebar.write(f"Data: {len(res.data)} transaksi")
+        if res.data:
+            total = sum([d["nominal"] for d in res.data if d["tipe"] == "Pengeluaran"])
+            st.sidebar.success(f"Total: Rp {total:,.0f}")
+    except Exception as e:
+        st.sidebar.error(f"Error: {e}")
+
+# 4. Cek nilai out_hari yang dihitung
+st.sidebar.write(f"📈 out_hari dari kode: Rp {out_hari:,.0f}")
+st.sidebar.write(f"📈 out_hari_bank: Rp {out_hari_bank:,.0f}")
+st.sidebar.write(f"📈 out_hari_cash: Rp {out_hari_cash:,.0f}")
 
 
 if "show_aset" not in st.session_state:
