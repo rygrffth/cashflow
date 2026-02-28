@@ -946,10 +946,12 @@ with col_sim1:
         selisih = simulasi_jajan - out_hari
         sisa_setelah_jajan = sisa_budget - selisih
         persentase_setelah = (simulasi_jajan / batas_hr * 100) if batas_hr > 0 else 0
+        dana_setelah_simulasi = saldo_op - selisih
     else:
         selisih = out_hari - simulasi_jajan
         sisa_setelah_jajan = sisa_budget + selisih
         persentase_setelah = (simulasi_jajan / batas_hr * 100) if batas_hr > 0 else 0
+        dana_setelah_simulasi = saldo_op + selisih
 
 with col_sim2:
     st.markdown(f"""
@@ -975,20 +977,44 @@ with col_dampak2:
 
 with col_dampak3:
     if persentase_setelah <= 100:
-        sisa_hari_setelah = (saldo_op - (out_hari - (simulasi_jajan - out_hari))) / SISA_HARI if SISA_HARI > 0 else 0
-        st.info(f"📅 Limit besok: Rp {sisa_hari_setelah:,.0f}")
+        # Hitung limit besok (sisa hari dikurangi 1)
+        if SISA_HARI > 1:
+            limit_besok = dana_setelah_simulasi / (SISA_HARI - 1)
+        else:
+            limit_besok = dana_setelah_simulasi
+        
+        # Hitung selisih dengan limit hari ini
+        selisih_limit = limit_besok - batas_hr
+        
+        if selisih_limit > 0:
+            st.success(f"📈 Limit besok: Rp {limit_besok:,.0f} (+Rp {selisih_limit:,.0f})")
+        elif selisih_limit < 0:
+            st.warning(f"📉 Limit besok: Rp {limit_besok:,.0f} (Rp {abs(selisih_limit):,.0f})")
+        else:
+            st.info(f"📅 Limit besok: Rp {limit_besok:,.0f}")
     else:
         st.error("🚫 Melebihi budget!")
 
 # Rekomendasi berdasarkan simulasi
+st.markdown("---")
+st.subheader("💡 Rekomendasi")
+
 if simulasi_jajan > out_hari:
+    # Boros
     if sisa_setelah_jajan >= 0:
-        st.warning(f"⚠️ Kalau jajan Rp {simulasi_jajan:,.0f}, sisa budget jadi Rp {sisa_setelah_jajan:,.0f}")
+        st.warning(f"⚠️ Kalau jajan Rp {simulasi_jajan:,.0f}, kamu boros Rp {selisih:,.0f} dari budget")
+        if selisih_limit < 0:
+            st.info(f"📉 Limit besok turun Rp {abs(selisih_limit):,.0f}")
     else:
-        st.error(f"🚨 JANGAN! Defisit Rp {abs(sisa_setelah_jajan):,.0f}!")
+        st.error(f"🚨 JANGAN! Defisit Rp {abs(sisa_setelah_jajan):,.0f}! Ambil dari tabungan?")
 else:
-    if sisa_setelah_jajan > sisa_budget:
-        st.success(f"🎉 Hemat Rp {selisih:,.0f}! Sisa jadi Rp {sisa_setelah_jajan:,.0f}")
+    # Hemat
+    if simulasi_jajan < out_hari:
+        st.success(f"🎉 Hemat Rp {selisih:,.0f}! Sisa budget jadi Rp {sisa_setelah_jajan:,.0f}")
+        if selisih_limit > 0:
+            st.success(f"📈 Limit besok naik Rp {selisih_limit:,.0f}")
+    else:
+        st.info(f"⚖️ Sama seperti biasanya")
 
 # ===== TIPS BERDASARKAN SISA HARI =====
 st.markdown("---")
@@ -1244,16 +1270,7 @@ with tab_grafik:
             st.plotly_chart(fig, use_container_width=True)
             
             # Tampilkan statistik
-            col_s1, col_s2, col_s3 = st.columns(3)
-            with col_s1:
-                total_bank = dt_pivot["Bank"].sum() if "Bank" in dt_pivot.columns else 0
-                st.metric("Total Bank", f"Rp {total_bank:,.0f}")
-            with col_s2:
-                total_cash = dt_pivot["Cash"].sum() if "Cash" in dt_pivot.columns else 0
-                st.metric("Total Cash", f"Rp {total_cash:,.0f}")
-            with col_s3:
-                total_all = dt_pivot["Total"].sum()
-                st.metric("Total Semua", f"Rp {total_all:,.0f}")
+
         else:
             st.info("Belum ada data pengeluaran.")
 
