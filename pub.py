@@ -617,6 +617,12 @@ SISA_HARI = max((tanggal_gajian - hari_ini_tgl).days, 1)
 with st.sidebar:
     st.markdown("### ⚙️ Settings")
     st.markdown("---")
+     
+    if st.button("🔄 Refresh Data", use_container_width=True):
+        st.cache_data.clear()
+        st.rerun()
+    
+    st.markdown("---")
     
     # ===== TAMBAHKAN INI =====
     # Setting tanggal gajian
