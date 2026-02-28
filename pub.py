@@ -2167,26 +2167,74 @@ st.divider()
 
 st.subheader("📜 Log Transaksi")
 
-# Filter dengan 4 kolom
-f1, f2, f3, f4 = st.columns(4)
+# ===== GABUNGKAN DATA DARI DUA TABEL =====
+# 1. Data dari tabel transaksi (Bank + Cash yang tersimpan di sini)
+df_transaksi = df_asli.copy() if not df_asli.empty else pd.DataFrame()
 
-with f1: 
-    ft = st.selectbox("Filter Tipe", ["Semua", "Pengeluaran", "Pemasukan"], key="log_filter_tipe")
+# 2. Data dari tabel penggunaan_cash
+df_penggunaan_cash = pd.DataFrame()
+try:
+    res = conn.table("penggunaan_cash").select("*").execute()
+    if res.data and len(res.data) > 0:
+        df_penggunaan_cash = pd.DataFrame(res.data)
+        # Rename kolom agar sesuai dengan df_transaksi
+        df_penggunaan_cash = df_penggunaan_cash.rename(columns={
+            "tanggal": "Tanggal",
+            "nominal": "Nominal",
+            "kategori": "Kategori",
+            "catatan": "Catatan"
+        })
+        # Tambah kolom yang diperlukan
+        df_penggunaan_cash["Tipe"] = "Pengeluaran"  # Semua penggunaan adalah pengeluaran
+        df_penggunaan_cash["Sumber"] = "Cash"
+        df_penggunaan_cash["Status"] = "Cleared"
+        df_penggunaan_cash["Tenggat_Waktu"] = ""
+        df_penggunaan_cash["Tanggal_Bayar"] = df_penggunaan_cash["Tanggal"]
+        
+        st.sidebar.success(f"📥 Load {len(df_penggunaan_cash)} transaksi dari tabel penggunaan_cash")
+except Exception as e:
+    st.sidebar.error(f"Gagal load penggunaan_cash: {e}")
 
-with f2: 
-    fs = st.selectbox("Filter Status", ["Semua", "Cleared", "Pending"], key="log_filter_status")
+# 3. Gabungkan kedua dataframe
+if not df_transaksi.empty and not df_penggunaan_cash.empty:
+    df_gabungan = pd.concat([df_transaksi, df_penggunaan_cash], ignore_index=True, sort=False)
+elif not df_transaksi.empty:
+    df_gabungan = df_transaksi
+elif not df_penggunaan_cash.empty:
+    df_gabungan = df_penggunaan_cash
+else:
+    df_gabungan = pd.DataFrame()
 
-with f3:
-    # Filter SUMBER
-    fsumber = st.selectbox("Filter Sumber", ["Semua", "Bank", "Cash"], key="log_filter_sumber")
+# ===== FILTER =====
+if not df_gabungan.empty:
+    f1, f2, f3, f4 = st.columns(4)
 
-with f4:
-    kl = ["Semua"] + sorted(df_asli["Kategori"].dropna().unique().tolist())
-    fk = st.selectbox("Filter Kategori", kl, key="log_filter_kategori")
+    with f1: 
+        ft = st.selectbox("Filter Tipe", ["Semua", "Pengeluaran", "Pemasukan"], key="log_filter_tipe")
 
-if not df_asli.empty:
+    with f2: 
+        fs = st.selectbox("Filter Status", ["Semua", "Cleared", "Pending"], key="log_filter_status")
+
+    with f3:
+        fsumber = st.selectbox("Filter Sumber", ["Semua", "Bank", "Cash"], key="log_filter_sumber")
+
+    with f4:
+        # Gabungkan kategori dari kedua sumber
+        semua_kategori = []
+        if not df_transaksi.empty:
+            semua_kategori.extend(df_transaksi["Kategori"].dropna().unique().tolist())
+        if not df_penggunaan_cash.empty:
+            semua_kategori.extend(df_penggunaan_cash["Kategori"].dropna().unique().tolist())
+        semua_kategori = sorted(set(semua_kategori))  # Unique & sort
+        kl = ["Semua"] + semua_kategori
+        fk = st.selectbox("Filter Kategori", kl, key="log_filter_kategori")
+
     # Siapkan dataframe untuk ditampilkan
-    de = df_asli.drop(columns=[c for c in ["Tanggal_dt", "Cashflow_Date"] if c in df_asli.columns], errors='ignore').iloc[::-1].reset_index(drop=True)
+    de = df_gabungan.copy()
+    
+    # Urutkan berdasarkan tanggal (terbaru di atas)
+    de["Tanggal_sort"] = pd.to_datetime(de["Tanggal"], errors='coerce')
+    de = de.sort_values("Tanggal_sort", ascending=False).drop(columns=["Tanggal_sort"])
     
     # Apply filters
     if ft != "Semua":
@@ -2203,24 +2251,31 @@ if not df_asli.empty:
         if c in de.columns:
             de[c] = pd.to_datetime(de[c], errors="coerce").dt.date
     
-    st.caption(f"Menampilkan {len(de)} transaksi")
+    st.caption(f"Menampilkan {len(de)} transaksi (Bank: {len(de[de['Sumber']=='Bank']) if 'Sumber' in de.columns else 0}, Cash: {len(de[de['Sumber']=='Cash']) if 'Sumber' in de.columns else 0})")
     
-    # Data editor dengan kolom lengkap
+    # Tampilkan data editor
+    column_config = {
+        "Tanggal": st.column_config.DateColumn("Tanggal", format="YYYY-MM-DD"),
+        "Tipe": st.column_config.SelectboxColumn("Tipe", options=["Pengeluaran", "Pemasukan"], required=True),
+        "Kategori": st.column_config.TextColumn("Kategori"),
+        "Nominal": st.column_config.NumberColumn("Nominal (Rp)", format="Rp %d", step=1000),
+        "Catatan": st.column_config.TextColumn("Catatan"),
+        "Sumber": st.column_config.SelectboxColumn("Sumber", options=["Bank", "Cash"], required=True),
+    }
+    
+    # Tambah kolom status dan tanggal jika ada
+    if "Status" in de.columns:
+        column_config["Status"] = st.column_config.SelectboxColumn("Status", options=["Pending", "Cleared"], required=True)
+    if "Tenggat_Waktu" in de.columns:
+        column_config["Tenggat_Waktu"] = st.column_config.DateColumn("Tenggat", format="YYYY-MM-DD")
+    if "Tanggal_Bayar" in de.columns:
+        column_config["Tanggal_Bayar"] = st.column_config.DateColumn("Tgl Bayar", format="YYYY-MM-DD")
+    
     rd = st.data_editor(
         de,
         use_container_width=True,
         num_rows="dynamic",
-        column_config={
-            "Tanggal": st.column_config.DateColumn("Tanggal", format="YYYY-MM-DD"),
-            "Tipe": st.column_config.SelectboxColumn("Tipe", options=["Pengeluaran", "Pemasukan"], required=True),
-            "Kategori": st.column_config.TextColumn("Kategori"),
-            "Nominal": st.column_config.NumberColumn("Nominal (Rp)", format="Rp %d", step=1000),
-            "Catatan": st.column_config.TextColumn("Catatan"),
-            "Status": st.column_config.SelectboxColumn("Status", options=["Pending", "Cleared"], required=True),
-            "Sumber": st.column_config.SelectboxColumn("Sumber", options=["Bank", "Cash"], required=True),
-            "Tenggat_Waktu": st.column_config.DateColumn("Tenggat", format="YYYY-MM-DD"),
-            "Tanggal_Bayar": st.column_config.DateColumn("Tgl Bayar", format="YYYY-MM-DD"),
-        },
+        column_config=column_config,
         hide_index=True
     )
     
@@ -2236,39 +2291,51 @@ if not df_asli.empty:
                 if c in fn.columns:
                     fn[c] = fn[c].apply(lambda x: x.strftime("%Y-%m-%d") if pd.notnull(x) and hasattr(x, 'strftime') else "")
             
-            # Isi Tanggal_Bayar jika kosong dan status Cleared
-            for i, r in fn.iterrows():
-                if r["Status"] == "Cleared" and (pd.isna(r.get("Tanggal_Bayar")) or str(r.get("Tanggal_Bayar", "")).strip() == ""):
-                    fn.at[i, "Tanggal_Bayar"] = datetime.date.today().strftime("%Y-%m-%d")
+            # Pisahkan data Bank dan Cash
+            data_bank = fn[fn["Sumber"] == "Bank"] if "Sumber" in fn.columns else pd.DataFrame()
+            data_cash = fn[fn["Sumber"] == "Cash"] if "Sumber" in fn.columns else pd.DataFrame()
             
-            # Simpan ke CSV
-            save_data(fn)
+            # Update tabel transaksi (untuk Bank)
+            if not data_bank.empty:
+                save_data(data_bank)
+                try:
+                    data_update = data_bank.to_dict(orient="records")
+                    data_update = [{k.lower(): v for k, v in r.items()} for r in data_update]
+                    conn.table("transaksi").delete().neq("id", -1).execute()
+                    if data_update:
+                        conn.table("transaksi").insert(data_update).execute()
+                except Exception as e:
+                    st.error(f"Gagal update transaksi bank: {e}")
             
-            # Update ke Cloud
-            try:
-                data_update = fn.to_dict(orient="records")
-                data_update = [{k.lower(): v for k, v in r.items()} for r in data_update]
-                
-                # Hapus semua data lama di cloud
-                conn.table("transaksi").delete().neq("id", -1).execute()
-                
-                # Insert data baru
-                if data_update:
-                    conn.table("transaksi").insert(data_update).execute()
-                
-                st.cache_data.clear()
-                st.success(f"✅ {len(data_update)} transaksi berhasil diupdate ke Cloud & Lokal!")
-                st.rerun()
-            except Exception as e:
-                st.error(f"Gagal update cloud: {e}")
+            # Update tabel penggunaan_cash (untuk Cash)
+            if not data_cash.empty:
+                data_cash_simpan = data_cash[["Tanggal", "Nominal", "Kategori", "Catatan"]].copy()
+                data_cash_simpan = data_cash_simpan.rename(columns={
+                    "Tanggal": "tanggal",
+                    "Nominal": "nominal",
+                    "Kategori": "kategori",
+                    "Catatan": "catatan"
+                })
+                try:
+                    # Hapus semua data lama di penggunaan_cash
+                    conn.table("penggunaan_cash").delete().neq("id", -1).execute()
+                    # Insert data baru
+                    if not data_cash_simpan.empty:
+                        conn.table("penggunaan_cash").insert(data_cash_simpan.to_dict(orient="records")).execute()
+                except Exception as e:
+                    st.error(f"Gagal update penggunaan_cash: {e}")
+            
+            st.cache_data.clear()
+            st.success(f"✅ {len(data_bank)} transaksi bank & {len(data_cash)} transaksi cash berhasil diupdate!")
+            st.rerun()
     
     with col_btn2:
         if st.button("🔄 Refresh", use_container_width=True):
             st.cache_data.clear()
             st.rerun()
     
-    # Statistik singkat
-    with st.expander("📊 Statistik Log", expanded=False):
+    # Statistik
+    with st.expander("📊 Statistik", expanded=False):
         col_stat1, col_stat2, col_stat3, col_stat4 = st.columns(4)
         
         with col_stat1:
@@ -2278,12 +2345,15 @@ if not df_asli.empty:
             st.metric("Total Nominal", f"Rp {total_nominal:,.0f}")
         with col_stat3:
             if "Sumber" in de.columns:
-                cash_count = len(de[de["Sumber"] == "Cash"])
-                st.metric("Transaksi Cash", cash_count)
+                cash_total = de[de["Sumber"] == "Cash"]["Nominal"].sum()
+                st.metric("Total Cash", f"Rp {cash_total:,.0f}")
         with col_stat4:
             if "Sumber" in de.columns:
-                bank_count = len(de[de["Sumber"] == "Bank"])
-                st.metric("Transaksi Bank", bank_count)
+                bank_total = de[de["Sumber"] == "Bank"]["Nominal"].sum()
+                st.metric("Total Bank", f"Rp {bank_total:,.0f}")
+
+else:
+    st.info("Belum ada data transaksi")
 
 
 st.markdown("---")
