@@ -2200,6 +2200,8 @@ except Exception as e:
 semua_kategori = []
 if not df_tampil.empty:
     semua_kategori = sorted(df_tampil["Kategori"].dropna().unique().tolist())
+    # Tambah opsi untuk kategori baru
+    semua_kategori.append("➕ Tambah Kategori Baru...")
 
 # ===== TAMPILKAN DATA =====
 if not df_tampil.empty:
@@ -2212,7 +2214,6 @@ if not df_tampil.empty:
     with col3:
         filter_status = st.selectbox("Filter Status", ["Semua", "Cleared", "Pending"], key="filter_status_log")
     with col4:
-        # Pilihan jumlah baris per halaman
         rows_per_page = st.selectbox("Baris per halaman", [10, 25, 50, 100], index=0, key="rows_per_page")
     
     # Apply filter
@@ -2229,48 +2230,70 @@ if not df_tampil.empty:
         if col in df_filter.columns:
             df_filter[col] = pd.to_datetime(df_filter[col], errors="coerce").dt.date
     
-    # ===== DATA EDITOR DENGAN DROPDOWN KATEGORI =====
+    # ===== DATA EDITOR DENGAN EDITABLE SEMUA KOLOM =====
     st.caption(f"Total: {len(df_filter)} transaksi")
     
     # Konfigurasi kolom untuk data editor
     column_config = {
-        "Tanggal": st.column_config.DateColumn("Tanggal", format="YYYY-MM-DD"),
-        "Tipe": st.column_config.SelectboxColumn("Tipe", options=["Pengeluaran", "Pemasukan"], required=True),
-        "Kategori": st.column_config.SelectboxColumn(  # <-- UBAH JADI SELECTBOX
-            "Kategori", 
-            options=semua_kategori + ["Lainnya (Ketik Manual...)"],  # Tambah opsi manual
-            required=True
+        "Tanggal": st.column_config.DateColumn(
+            "Tanggal", 
+            format="YYYY-MM-DD",
+            help="Klik untuk memilih tanggal"
         ),
-        "Nominal": st.column_config.NumberColumn("Nominal (Rp)", format="Rp %d", step=1000),
-        "Catatan": st.column_config.TextColumn("Catatan"),
-        "Sumber": st.column_config.SelectboxColumn("Sumber", options=["Bank", "Cash"], required=True),
-        "Status": st.column_config.SelectboxColumn("Status", options=["Pending", "Cleared"], required=True),
-        "Tenggat_Waktu": st.column_config.DateColumn("Tenggat", format="YYYY-MM-DD"),
-        "Tanggal_Bayar": st.column_config.DateColumn("Tgl Bayar", format="YYYY-MM-DD"),
+        "Tipe": st.column_config.SelectboxColumn(
+            "Tipe", 
+            options=["Pengeluaran", "Pemasukan"], 
+            required=True,
+            help="Pilih tipe transaksi"
+        ),
+        "Kategori": st.column_config.TextColumn(  # <-- UBAH JADI TEXT (BIASA)
+            "Kategori",
+            help="Ketik kategori baru atau pilih dari dropdown",
+            default=""
+        ),
+        "Nominal": st.column_config.NumberColumn(
+            "Nominal (Rp)", 
+            format="Rp %d", 
+            step=1000,
+            min_value=0
+        ),
+        "Catatan": st.column_config.TextColumn(
+            "Catatan",
+            help="Ketik catatan transaksi"
+        ),
+        "Sumber": st.column_config.SelectboxColumn(
+            "Sumber", 
+            options=["Bank", "Cash"], 
+            required=True,
+            help="Pilih sumber dana"
+        ),
+        "Status": st.column_config.SelectboxColumn(
+            "Status", 
+            options=["Pending", "Cleared"], 
+            required=True,
+            help="Pilih status"
+        ),
+        "Tenggat_Waktu": st.column_config.DateColumn(
+            "Tenggat", 
+            format="YYYY-MM-DD",
+            help="Klik untuk memilih tanggal jatuh tempo"
+        ),
+        "Tanggal_Bayar": st.column_config.DateColumn(
+            "Tgl Bayar", 
+            format="YYYY-MM-DD",
+            help="Klik untuk memilih tanggal bayar"
+        ),
     }
     
     # Tampilkan data editor
     edited_df = st.data_editor(
         df_filter,
         use_container_width=True,
-        num_rows="dynamic",  # Bisa hapus/tambah baris
+        num_rows="dynamic",
         column_config=column_config,
         hide_index=True,
         key="log_data_editor"
     )
-    
-    # ===== HANDLE KATEGORI MANUAL =====
-    # Cek apakah ada baris dengan kategori "Lainnya (Ketik Manual...)"
-    if not edited_df.empty and "Lainnya (Ketik Manual...)" in edited_df["Kategori"].values:
-        st.warning("⚠️ Ada kategori 'Lainnya' yang perlu diisi manual")
-        
-        # Tampilkan form untuk input manual
-        with st.expander("✏️ Isi Kategori Manual", expanded=True):
-            for idx, row in edited_df[edited_df["Kategori"] == "Lainnya (Ketik Manual...)"].iterrows():
-                st.write(f"**Baris {idx}** - Nominal: Rp {row['Nominal']:,.0f}")
-                kategori_baru = st.text_input(f"Kategori baru untuk baris ini", key=f"kategori_manual_{idx}")
-                if kategori_baru:
-                    edited_df.at[idx, "Kategori"] = kategori_baru
     
     # ===== TOMBOL SIMPAN PERUBAHAN =====
     col_simpan1, col_simpan2, col_simpan3 = st.columns([1, 1, 2])
@@ -2279,9 +2302,9 @@ if not df_tampil.empty:
         if st.button("💾 Simpan Perubahan", use_container_width=True):
             with st.spinner("Menyimpan ke database..."):
                 try:
-                    # Validasi tidak ada kategori "Lainnya" yang belum diisi
-                    if "Lainnya (Ketik Manual...)" in edited_df["Kategori"].values:
-                        st.error("❌ Masih ada kategori 'Lainnya' yang belum diisi!")
+                    # Validasi nominal tidak boleh 0
+                    if (edited_df["Nominal"] <= 0).any():
+                        st.error("❌ Ada nominal yang 0 atau kurang!")
                     else:
                         # Konversi kembali ke format database
                         data_to_save = edited_df.copy()
@@ -2358,7 +2381,7 @@ if not df_tampil.empty:
         
         with col_hapus4:
             # Hapus berdasarkan ID
-            id_hapus = st.number_input("ID yang dihapus", min_value=1, step=1)
+            id_hapus = st.number_input("ID yang dihapus", min_value=1, step=1, key="id_hapus")
             if st.button("Hapus ID", use_container_width=True):
                 conn.table("transaksi").delete().eq("id", id_hapus).execute()
                 st.success(f"ID {id_hapus} dihapus!")
