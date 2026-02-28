@@ -2299,13 +2299,15 @@ if not df_gabungan.empty:
             if not data_bank.empty:
                 save_data(data_bank)
                 try:
-                    data_update = data_bank.to_dict(orient="records")
-                    data_update = [{k.lower(): v for k, v in r.items()} for r in data_update]
-                    conn.table("transaksi").delete().neq("id", -1).execute()
-                    if data_update:
-                        conn.table("transaksi").insert(data_update).execute()
+            
+                    if not data_bank.empty:
+                        data_update = data_bank.to_dict(orient="records")
+                        data_update = [{k.lower(): v for k, v in r.items()} for r in data_update]
+                        conn.table("transaksi").upsert(data_update).execute()  # upsert lebih aman
                 except Exception as e:
                     st.error(f"Gagal update transaksi bank: {e}")
+                    
+                    save_data(data_bank)
             
             # Update tabel penggunaan_cash (untuk Cash)
             if not data_cash.empty:
