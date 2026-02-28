@@ -2165,7 +2165,7 @@ st.divider()
 
 
 
-sst.subheader("📜 Log Transaksi")
+st.subheader("📜 Log Transaksi")
 
 # Filter dengan 4 kolom
 f1, f2, f3, f4 = st.columns(4)
