@@ -1523,8 +1523,8 @@ with tab_cash:
     if "show_cash_amount" not in st.session_state:
         st.session_state.show_cash_amount = False  
     
- 
-        UANG_CASH = load_cash_cloud()
+    # Load data cash
+    UANG_CASH = load_cash_cloud()
     
     col_hide1, col_hide2 = st.columns([3, 1])
     with col_hide1:
@@ -1546,7 +1546,7 @@ with tab_cash:
             """, unsafe_allow_html=True)
     
     with col_hide2:
-        st.markdown("<br>", unsafe_allow_html=True)  # Spacer
+        st.markdown("<br>", unsafe_allow_html=True)
         if st.button("👁️" if not st.session_state.show_cash_amount else "🙈", key="toggle_cash_tab", use_container_width=True):
             st.session_state.show_cash_amount = not st.session_state.show_cash_amount
             st.rerun()
@@ -1556,7 +1556,6 @@ with tab_cash:
     df_cash_transactions = df_asli[df_asli.get("Sumber", "Bank") == "Cash"].copy()
     
     if not df_cash_transactions.empty:
-  
         total_masuk = df_cash_transactions[df_cash_transactions["Tipe"] == "Pemasukan"]["Nominal"].sum()
         total_keluar = df_cash_transactions[df_cash_transactions["Tipe"] == "Pengeluaran"]["Nominal"].sum()
         
@@ -1589,7 +1588,6 @@ with tab_cash:
             </div>
             """, unsafe_allow_html=True)
         
-    
         with st.expander("📈 Grafik Penggunaan Cash", expanded=False):
             df_cash_daily = df_cash_transactions.copy()
             df_cash_daily["Tanggal"] = pd.to_datetime(df_cash_daily["Tanggal"])
@@ -1607,10 +1605,9 @@ with tab_cash:
                 fig_cash.update_layout(**PLOT)
                 st.plotly_chart(fig_cash, use_container_width=True)
                 
-           
                 avg_cash = daily_sum["Total"].mean()
                 st.info(f"📊 Rata-rata pengeluaran cash: Rp {avg_cash:,.0f} per hari")
-          
+                
                 if avg_cash > 0 and UANG_CASH > 0:
                     hari_habis = int(UANG_CASH / avg_cash)
                     if hari_habis > 0:
@@ -1619,9 +1616,9 @@ with tab_cash:
             else:
                 st.info("Belum ada pengeluaran cash")
         
-  
         with st.expander("📋 Riwayat Transaksi Cash", expanded=True):
-            # Filter tambahan          col_filter1, col_filter2 = st.columns(2)
+            # Filter tambahan
+            col_filter1, col_filter2 = st.columns(2)
             with col_filter1:
                 filter_tipe_cash = st.selectbox("Filter Tipe", ["Semua", "Pemasukan", "Pengeluaran"], key="filter_cash_tipe")
             with col_filter2:
@@ -1629,18 +1626,16 @@ with tab_cash:
             
             df_display_cash = df_cash_transactions.copy()
             
-      
             if filter_tipe_cash != "Semua":
                 df_display_cash = df_display_cash[df_display_cash["Tipe"] == filter_tipe_cash]
             
-    
             today = datetime.date.today()
             if filter_bulan_cash == "Bulan Ini":
                 df_display_cash = df_display_cash[
                     (pd.to_datetime(df_display_cash["Tanggal"]).dt.month == today.month) &
                     (pd.to_datetime(df_display_cash["Tanggal"]).dt.year == today.year)
                 ]
-            elif filter_bulanSSS_cash == "Bulan Lalu":
+            elif filter_bulan_cash == "Bulan Lalu":
                 last_month = today.month - 1 if today.month > 1 else 12
                 last_month_year = today.year if today.month > 1 else today.year - 1
                 df_display_cash = df_display_cash[
@@ -1649,7 +1644,6 @@ with tab_cash:
                 ]
             
             if not df_display_cash.empty:
-            
                 df_show = df_display_cash[["Tanggal", "Tipe", "Kategori", "Nominal", "Catatan"]].copy()
                 df_show["Nominal"] = df_show["Nominal"].apply(lambda x: f"Rp {x:,.0f}")
                 df_show = df_show.sort_values("Tanggal", ascending=False)
@@ -1663,7 +1657,6 @@ with tab_cash:
     
     st.markdown("---")
     
-  
     st.subheader("⚡ Transaksi Cepat Cash")
     col_quick1, col_quick2, col_quick3, col_quick4 = st.columns(4)
     
@@ -1683,7 +1676,6 @@ with tab_cash:
         if st.button("🛒 Belanja", use_container_width=True):
             st.session_state["quick_cash"] = "belanja"
     
-
     if "quick_cash" in st.session_state:
         st.markdown("---")
         with st.form("quick_cash_form"):
@@ -1696,7 +1688,6 @@ with tab_cash:
                 
                 if st.form_submit_button("✅ Konfirmasi Tarik Tunai"):
                     if nominal_quick > 0:
-                       
                         transaksi_bank = {
                             "Tanggal": datetime.date.today().strftime("%Y-%m-%d"),
                             "Tipe": "Pengeluaran",
@@ -1710,7 +1701,6 @@ with tab_cash:
                         }
                         save_to_cloud(transaksi_bank)
                         
-  
                         transaksi_cash = {
                             "Tanggal": datetime.date.today().strftime("%Y-%m-%d"),
                             "Tipe": "Pemasukan",
@@ -1723,7 +1713,7 @@ with tab_cash:
                             "Sumber": "Cash"
                         }
                         save_to_cloud(transaksi_cash)
-                    
+                        
                         baru_cash = UANG_CASH + nominal_quick
                         update_cash_cloud(baru_cash, f"Tarik tunai: {catatan_quick}")
                         
@@ -1732,7 +1722,6 @@ with tab_cash:
                         st.rerun()
             
             else:
-               
                 preset_nominal = {
                     "makan": 25000,
                     "transport": 20000,
@@ -1744,7 +1733,6 @@ with tab_cash:
                 
                 if st.form_submit_button("✅ Konfirmasi"):
                     if nominal_quick > 0 and nominal_quick <= UANG_CASH:
-                       
                         transaksi = {
                             "Tanggal": datetime.date.today().strftime("%Y-%m-%d"),
                             "Tipe": "Pengeluaran",
@@ -1758,7 +1746,6 @@ with tab_cash:
                         }
                         save_to_cloud(transaksi)
                         
-        
                         baru_cash = UANG_CASH - nominal_quick
                         update_cash_cloud(baru_cash, f"{st.session_state['quick_cash']}: {catatan_quick}")
                         
