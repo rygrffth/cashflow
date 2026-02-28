@@ -2186,6 +2186,10 @@ try:
             "sumber": "Sumber"
         })
         df_tampil["Nominal"] = pd.to_numeric(df_tampil["Nominal"], errors="coerce").fillna(0)
+        
+        # Pastikan kolom ID ada
+        if "id" not in df_tampil.columns:
+            df_tampil["id"] = range(1, len(df_tampil) + 1)
     else:
         df_tampil = pd.DataFrame()
 except Exception as e:
@@ -2195,13 +2199,16 @@ except Exception as e:
 # ===== TAMPILKAN DATA =====
 if not df_tampil.empty:
     # Filter
-    col1, col2, col3 = st.columns(3)
+    col1, col2, col3, col4 = st.columns(4)
     with col1:
-        filter_tipe = st.selectbox("Filter Tipe", ["Semua", "Pengeluaran", "Pemasukan"])
+        filter_tipe = st.selectbox("Filter Tipe", ["Semua", "Pengeluaran", "Pemasukan"], key="filter_tipe_log")
     with col2:
-        filter_sumber = st.selectbox("Filter Sumber", ["Semua", "Bank", "Cash"])
+        filter_sumber = st.selectbox("Filter Sumber", ["Semua", "Bank", "Cash"], key="filter_sumber_log")
     with col3:
-        filter_status = st.selectbox("Filter Status", ["Semua", "Cleared", "Pending"])
+        filter_status = st.selectbox("Filter Status", ["Semua", "Cleared", "Pending"], key="filter_status_log")
+    with col4:
+        # Pilihan jumlah baris per halaman
+        rows_per_page = st.selectbox("Baris per halaman", [10, 25, 50, 100], index=0, key="rows_per_page")
     
     # Apply filter
     df_filter = df_tampil.copy()
@@ -2217,44 +2224,119 @@ if not df_tampil.empty:
         if col in df_filter.columns:
             df_filter[col] = pd.to_datetime(df_filter[col], errors="coerce").dt.date
     
-    st.dataframe(
-        df_filter[["Tanggal", "Tipe", "Kategori", "Nominal", "Catatan", "Sumber", "Status"]],
-        use_container_width=True,
-        hide_index=True
-    )
-    
+    # ===== DATA EDITOR DENGAN FITUR HAPUS =====
     st.caption(f"Total: {len(df_filter)} transaksi")
     
-    # ===== TOMBOL HAPUS =====
-    st.subheader("🗑️ Hapus Data")
+    # Konfigurasi kolom untuk data editor
+    column_config = {
+        "Tanggal": st.column_config.DateColumn("Tanggal", format="YYYY-MM-DD"),
+        "Tipe": st.column_config.SelectboxColumn("Tipe", options=["Pengeluaran", "Pemasukan"], required=True),
+        "Kategori": st.column_config.TextColumn("Kategori"),
+        "Nominal": st.column_config.NumberColumn("Nominal (Rp)", format="Rp %d", step=1000),
+        "Catatan": st.column_config.TextColumn("Catatan"),
+        "Sumber": st.column_config.SelectboxColumn("Sumber", options=["Bank", "Cash"], required=True),
+        "Status": st.column_config.SelectboxColumn("Status", options=["Pending", "Cleared"], required=True),
+        "Tenggat_Waktu": st.column_config.DateColumn("Tenggat", format="YYYY-MM-DD"),
+        "Tanggal_Bayar": st.column_config.DateColumn("Tgl Bayar", format="YYYY-MM-DD"),
+    }
     
-    col_hapus1, col_hapus2, col_hapus3 = st.columns(3)
+    # Tampilkan data editor
+    edited_df = st.data_editor(
+        df_filter,
+        use_container_width=True,
+        num_rows="dynamic",  # <-- INI MEMUNGKINKAN HAPUS/TAMBAH BARIS
+        column_config=column_config,
+        hide_index=True,
+        key="log_data_editor"
+    )
     
-    with col_hapus1:
-        if st.button("Hapus Semua Data Bank", use_container_width=True):
-            conn.table("transaksi").delete().eq("sumber", "Bank").execute()
-            st.success("Data bank dihapus!")
+    # ===== TOMBOL SIMPAN PERUBAHAN =====
+    col_simpan1, col_simpan2, col_simpan3 = st.columns([1, 1, 2])
+    
+    with col_simpan1:
+        if st.button("💾 Simpan Perubahan", use_container_width=True):
+            with st.spinner("Menyimpan ke database..."):
+                try:
+                    # Konversi kembali ke format database
+                    data_to_save = edited_df.copy()
+                    
+                    # Format tanggal ke string
+                    for col in ["Tanggal", "Tenggat_Waktu", "Tanggal_Bayar"]:
+                        if col in data_to_save.columns:
+                            data_to_save[col] = data_to_save[col].apply(
+                                lambda x: x.strftime("%Y-%m-%d") if pd.notnull(x) and hasattr(x, 'strftime') else ""
+                            )
+                    
+                    # Rename ke lowercase untuk Supabase
+                    data_to_save = data_to_save.rename(columns={
+                        "Tanggal": "tanggal",
+                        "Tipe": "tipe",
+                        "Kategori": "kategori",
+                        "Nominal": "nominal",
+                        "Catatan": "catatan",
+                        "Status": "status",
+                        "Tenggat_Waktu": "tenggat_waktu",
+                        "Tanggal_Bayar": "tanggal_bayar",
+                        "Sumber": "sumber"
+                    })
+                    
+                    # Hapus kolom yang tidak ada di database
+                    cols_to_keep = ["tanggal", "tipe", "kategori", "nominal", 
+                                   "catatan", "status", "tenggat_waktu", "tanggal_bayar", "sumber"]
+                    data_to_save = data_to_save[[c for c in cols_to_keep if c in data_to_save.columns]]
+                    
+                    records = data_to_save.to_dict(orient="records")
+                    
+                    # Hapus semua data lama
+                    conn.table("transaksi").delete().neq("id", -1).execute()
+                    
+                    # Insert data baru
+                    if records:
+                        conn.table("transaksi").insert(records).execute()
+                    
+                    st.success(f"✅ {len(records)} transaksi berhasil disimpan!")
+                    st.cache_data.clear()
+                    st.rerun()
+                    
+                except Exception as e:
+                    st.error(f"Error: {e}")
+    
+    with col_simpan2:
+        if st.button("🔄 Refresh", use_container_width=True):
+            st.cache_data.clear()
             st.rerun()
     
-    with col_hapus2:
-        if st.button("Hapus Semua Data Cash", use_container_width=True):
-            conn.table("transaksi").delete().eq("sumber", "Cash").execute()
-            st.success("Data cash dihapus!")
-            st.rerun()
-    
-    with col_hapus3:
-        if st.button("Hapus SEMUA Data (⚠️)", use_container_width=True):
-            conn.table("transaksi").delete().neq("id", -1).execute()
-            st.success("Semua data dihapus!")
-            st.rerun()
-    
-    # Hapus berdasarkan ID (input manual)
-    with st.expander("Hapus berdasarkan ID"):
-        id_hapus = st.number_input("Masukkan ID yang ingin dihapus", min_value=1, step=1)
-        if st.button("Hapus ID Tersebut"):
-            conn.table("transaksi").delete().eq("id", id_hapus).execute()
-            st.success(f"ID {id_hapus} dihapus!")
-            st.rerun()
+    # ===== TOMBOL HAPUS MASAL =====
+    with st.expander("🗑️ Hapus Data Massal", expanded=False):
+        st.warning("⚠️ Hati-hati! Aksi ini tidak bisa dibatalkan.")
+        
+        col_hapus1, col_hapus2, col_hapus3, col_hapus4 = st.columns(4)
+        
+        with col_hapus1:
+            if st.button("Hapus Semua Data Bank", use_container_width=True):
+                conn.table("transaksi").delete().eq("sumber", "Bank").execute()
+                st.success("Data bank dihapus!")
+                st.rerun()
+        
+        with col_hapus2:
+            if st.button("Hapus Semua Data Cash", use_container_width=True):
+                conn.table("transaksi").delete().eq("sumber", "Cash").execute()
+                st.success("Data cash dihapus!")
+                st.rerun()
+        
+        with col_hapus3:
+            if st.button("Hapus SEMUA Data", use_container_width=True):
+                conn.table("transaksi").delete().neq("id", -1).execute()
+                st.success("Semua data dihapus!")
+                st.rerun()
+        
+        with col_hapus4:
+            # Hapus berdasarkan ID
+            id_hapus = st.number_input("ID yang dihapus", min_value=1, step=1)
+            if st.button("Hapus ID", use_container_width=True):
+                conn.table("transaksi").delete().eq("id", id_hapus).execute()
+                st.success(f"ID {id_hapus} dihapus!")
+                st.rerun()
 
 else:
     st.info("Belum ada data transaksi")
@@ -2263,7 +2345,7 @@ else:
     if st.button("➕ Insert Contoh Data"):
         contoh = [
             {
-                "tanggal": "2026-02-28",
+                "tanggal": datetime.date.today().strftime("%Y-%m-%d"),
                 "tipe": "Pengeluaran",
                 "kategori": "Makan",
                 "nominal": 50000,
@@ -2272,7 +2354,7 @@ else:
                 "sumber": "Bank"
             },
             {
-                "tanggal": "2026-02-28",
+                "tanggal": datetime.date.today().strftime("%Y-%m-%d"),
                 "tipe": "Pengeluaran",
                 "kategori": "Transport",
                 "nominal": 20000,
@@ -2285,7 +2367,7 @@ else:
             conn.table("transaksi").insert(data).execute()
         st.success("Contoh data ditambahkan!")
         st.rerun()
-
+        
 
 st.markdown("---")
 st.markdown("""<div style="text-align:center;color:#334155;font-size:.75rem;padding:10px 0;">
