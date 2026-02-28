@@ -1629,12 +1629,14 @@ with tab_cash:
     st.subheader("💵 Uang Cash")
     st.caption("Kelola uang fisik di dompetmu")
     
+    # ===== INISIALISASI HIDE/SHOW =====
     if "show_cash_amount" not in st.session_state:
-        st.session_state.show_cash_amount = False  
+        st.session_state.show_cash_amount = False
     
     # Load data cash
     UANG_CASH = load_cash_cloud()
     
+    # ===== HEADER DENGAN HIDE/SHOW =====
     col_hide1, col_hide2 = st.columns([3, 1])
     with col_hide1:
         if st.session_state.show_cash_amount:
@@ -1662,9 +1664,19 @@ with tab_cash:
     
     st.markdown("---")
     
-    df_cash_transactions = df_asli[df_asli.get("Sumber", "Bank") == "Cash"].copy()
+    # ===== AMBIL TRANSAKSI CASH =====
+    # Pastikan kolom Sumber ada
+    if "Sumber" in df_asli.columns:
+        df_cash_transactions = df_asli[df_asli["Sumber"] == "Cash"].copy()
+    else:
+        df_cash_transactions = pd.DataFrame()
+        st.warning("Kolom 'Sumber' belum ada di database. Transaksi cash tidak bisa ditampilkan.")
     
+    # ===== TAMPILKAN DATA CASH =====
     if not df_cash_transactions.empty:
+        st.success(f"✅ Ditemukan {len(df_cash_transactions)} transaksi cash")
+        
+        # Statistik
         total_masuk = df_cash_transactions[df_cash_transactions["Tipe"] == "Pemasukan"]["Nominal"].sum()
         total_keluar = df_cash_transactions[df_cash_transactions["Tipe"] == "Pengeluaran"]["Nominal"].sum()
         
@@ -1689,14 +1701,17 @@ with tab_cash:
             """, unsafe_allow_html=True)
         
         with col_r3:
+            selisih = total_masuk - total_keluar
+            warna = "#10B981" if selisih >= 0 else "#EF4444"
             st.markdown(f"""
             <div class="card">
                 <p class="card-label">⚖️ SELISIH</p>
-                <p class="card-value" style="color:#F59E0B;">Rp {total_masuk - total_keluar:,.0f}</p>
+                <p class="card-value" style="color:{warna};">Rp {selisih:,.0f}</p>
                 <p class="card-sub">Masuk - Keluar</p>
             </div>
             """, unsafe_allow_html=True)
         
+        # ===== GRAFIK PENGGUNAAN CASH =====
         with st.expander("📈 Grafik Penggunaan Cash", expanded=False):
             df_cash_daily = df_cash_transactions.copy()
             df_cash_daily["Tanggal"] = pd.to_datetime(df_cash_daily["Tanggal"])
@@ -1725,8 +1740,9 @@ with tab_cash:
             else:
                 st.info("Belum ada pengeluaran cash")
         
+        # ===== RIWAYAT TRANSAKSI CASH =====
         with st.expander("📋 Riwayat Transaksi Cash", expanded=True):
-            # Filter tambahan
+            # Filter
             col_filter1, col_filter2 = st.columns(2)
             with col_filter1:
                 filter_tipe_cash = st.selectbox("Filter Tipe", ["Semua", "Pemasukan", "Pengeluaran"], key="filter_cash_tipe")
@@ -1735,9 +1751,11 @@ with tab_cash:
             
             df_display_cash = df_cash_transactions.copy()
             
+            # Apply filter tipe
             if filter_tipe_cash != "Semua":
                 df_display_cash = df_display_cash[df_display_cash["Tipe"] == filter_tipe_cash]
             
+            # Apply filter bulan
             today = datetime.date.today()
             if filter_bulan_cash == "Bulan Ini":
                 df_display_cash = df_display_cash[
@@ -1753,6 +1771,7 @@ with tab_cash:
                 ]
             
             if not df_display_cash.empty:
+                # Format untuk tampilan
                 df_show = df_display_cash[["Tanggal", "Tipe", "Kategori", "Nominal", "Catatan"]].copy()
                 df_show["Nominal"] = df_show["Nominal"].apply(lambda x: f"Rp {x:,.0f}")
                 df_show = df_show.sort_values("Tanggal", ascending=False)
@@ -1762,10 +1781,24 @@ with tab_cash:
                 st.info("Tidak ada transaksi cash dengan filter ini")
     
     else:
-        st.info("Belum ada transaksi cash. Gunakan form di halaman utama untuk mencatat transaksi cash.")
+        # ===== TIDAK ADA TRANSAKSI CASH =====
+        st.warning("⚠️ Belum ada transaksi cash")
+        
+        # Debug info (bisa dihapus nanti)
+        with st.expander("🔍 Debug Info", expanded=False):
+            st.write("**Kolom di df_asli:**", df_asli.columns.tolist())
+            if "Sumber" in df_asli.columns:
+                st.write("**Nilai unik Sumber:**", df_asli["Sumber"].unique())
+                st.write("**Contoh 5 data terakhir:**")
+                st.dataframe(df_asli[["Tanggal", "Tipe", "Kategori", "Nominal", "Sumber"]].tail(5))
+            else:
+                st.error("❌ Kolom 'Sumber' tidak ditemukan di dataframe!")
+        
+        st.info("💡 Gunakan form di halaman utama untuk mencatat transaksi cash dengan memilih sumber **'Cash'**")
     
     st.markdown("---")
     
+    # ===== TRANSAKSI CEPAT CASH =====
     st.subheader("⚡ Transaksi Cepat Cash")
     col_quick1, col_quick2, col_quick3, col_quick4 = st.columns(4)
     
@@ -1785,6 +1818,7 @@ with tab_cash:
         if st.button("🛒 Belanja", use_container_width=True):
             st.session_state["quick_cash"] = "belanja"
     
+    # ===== FORM QUICK CASH =====
     if "quick_cash" in st.session_state:
         st.markdown("---")
         with st.form("quick_cash_form"):
@@ -1797,6 +1831,7 @@ with tab_cash:
                 
                 if st.form_submit_button("✅ Konfirmasi Tarik Tunai"):
                     if nominal_quick > 0:
+                        # Transaksi Bank (pengeluaran)
                         transaksi_bank = {
                             "Tanggal": datetime.date.today().strftime("%Y-%m-%d"),
                             "Tipe": "Pengeluaran",
@@ -1810,6 +1845,7 @@ with tab_cash:
                         }
                         save_to_cloud(transaksi_bank)
                         
+                        # Transaksi Cash (pemasukan)
                         transaksi_cash = {
                             "Tanggal": datetime.date.today().strftime("%Y-%m-%d"),
                             "Tipe": "Pemasukan",
@@ -1823,6 +1859,7 @@ with tab_cash:
                         }
                         save_to_cloud(transaksi_cash)
                         
+                        # Update saldo cash
                         baru_cash = UANG_CASH + nominal_quick
                         update_cash_cloud(baru_cash, f"Tarik tunai: {catatan_quick}")
                         
@@ -1831,6 +1868,7 @@ with tab_cash:
                         st.rerun()
             
             else:
+                # Transaksi pengeluaran cash biasa
                 preset_nominal = {
                     "makan": 25000,
                     "transport": 20000,
@@ -1841,29 +1879,33 @@ with tab_cash:
                 catatan_quick = st.text_input("Catatan", placeholder=f"Misal: {st.session_state['quick_cash'].title()}...")
                 
                 if st.form_submit_button("✅ Konfirmasi"):
-                    if nominal_quick > 0 and nominal_quick <= UANG_CASH:
-                        transaksi = {
-                            "Tanggal": datetime.date.today().strftime("%Y-%m-%d"),
-                            "Tipe": "Pengeluaran",
-                            "Kategori": st.session_state["quick_cash"].title(),
-                            "Nominal": nominal_quick,
-                            "Catatan": catatan_quick,
-                            "Status": "Cleared",
-                            "Tenggat_Waktu": "",
-                            "Tanggal_Bayar": datetime.date.today().strftime("%Y-%m-%d"),
-                            "Sumber": "Cash"
-                        }
-                        save_to_cloud(transaksi)
-                        
-                        baru_cash = UANG_CASH - nominal_quick
-                        update_cash_cloud(baru_cash, f"{st.session_state['quick_cash']}: {catatan_quick}")
-                        
-                        st.success(f"✅ Berhasil mencatat pengeluaran Rp {nominal_quick:,.0f}")
-                        del st.session_state["quick_cash"]
-                        st.rerun()
-                    elif nominal_quick > UANG_CASH:
-                        st.error(f"Saldo cash tidak cukup! (Sisa: Rp {UANG_CASH:,.0f})")
+                    if nominal_quick > 0:
+                        if nominal_quick <= UANG_CASH:
+                            # Catat transaksi cash
+                            transaksi = {
+                                "Tanggal": datetime.date.today().strftime("%Y-%m-%d"),
+                                "Tipe": "Pengeluaran",
+                                "Kategori": st.session_state["quick_cash"].title(),
+                                "Nominal": nominal_quick,
+                                "Catatan": catatan_quick,
+                                "Status": "Cleared",
+                                "Tenggat_Waktu": "",
+                                "Tanggal_Bayar": datetime.date.today().strftime("%Y-%m-%d"),
+                                "Sumber": "Cash"
+                            }
+                            save_to_cloud(transaksi)
+                            
+                            # Update saldo cash
+                            baru_cash = UANG_CASH - nominal_quick
+                            update_cash_cloud(baru_cash, f"{st.session_state['quick_cash']}: {catatan_quick}")
+                            
+                            st.success(f"✅ Berhasil mencatat pengeluaran Rp {nominal_quick:,.0f}")
+                            del st.session_state["quick_cash"]
+                            st.rerun()
+                        else:
+                            st.error(f"❌ Saldo cash tidak cukup! (Sisa: Rp {UANG_CASH:,.0f})")
             
+            # Tombol batal
             if st.form_submit_button("❌ Batal"):
                 del st.session_state["quick_cash"]
                 st.rerun()
@@ -2120,43 +2162,74 @@ with rc:
         </div>""", unsafe_allow_html=True)
 
 st.divider()
-st.subheader("📜 Log Transaksi")
-f1,f2,f3=st.columns(3)
-with f1: ft=st.selectbox("Filter Tipe",  ["Semua","Pengeluaran","Pemasukan"])
-with f2: fs=st.selectbox("Filter Status",["Semua","Cleared","Pending"])
+
+
+
+sst.subheader("📜 Log Transaksi")
+
+# Filter dengan 4 kolom
+f1, f2, f3, f4 = st.columns(4)
+
+with f1: 
+    ft = st.selectbox("Filter Tipe", ["Semua", "Pengeluaran", "Pemasukan"], key="log_filter_tipe")
+
+with f2: 
+    fs = st.selectbox("Filter Status", ["Semua", "Cleared", "Pending"], key="log_filter_status")
+
 with f3:
-    kl=["Semua"]+sorted(df_asli["Kategori"].dropna().unique().tolist())
-    fk=st.selectbox("Filter Kategori",kl)
+    # Filter SUMBER (BARU!)
+    fsumber = st.selectbox("Filter Sumber", ["Semua", "Bank", "Cash"], key="log_filter_sumber")
+
+with f4:
+    kl = ["Semua"] + sorted(df_asli["Kategori"].dropna().unique().tolist())
+    fk = st.selectbox("Filter Kategori", kl, key="log_filter_kategori")
 
 if not df_asli.empty:
-    de=df_asli.drop(columns=[c for c in ["Tanggal_dt","Cashflow_Date"] if c in df_asli.columns],errors='ignore').iloc[::-1].reset_index(drop=True)
-    if ft!="Semua": de=de[de["Tipe"]==ft]
-    if fs!="Semua": de=de[de["Status"]==fs]
-    if fk!="Semua": de=de[de["Kategori"]==fk]
-    for c in ["Tanggal","Tenggat_Waktu","Tanggal_Bayar"]:
-        de[c]=pd.to_datetime(de[c],errors="coerce").dt.date
-    st.caption(f"Menampilkan {len(de)} transaksi")
-    rd=st.data_editor(de,use_container_width=True,num_rows="dynamic",
-        column_config={
-            "Status": st.column_config.SelectboxColumn("Status",options=["Pending","Cleared"],required=True),
-            "Nominal":st.column_config.NumberColumn("Nominal (Rp)",format="Rp %d"),
-            "Tipe":   st.column_config.SelectboxColumn("Tipe",options=["Pengeluaran","Pemasukan"],required=True),
-        })
+    de = df_asli.drop(columns=[c for c in ["Tanggal_dt", "Cashflow_Date"] if c in df_asli.columns], errors='ignore').iloc[::-1].reset_index(drop=True)
     
+    # Apply filters
+    if ft != "Semua":
+        de = de[de["Tipe"] == ft]
+    if fs != "Semua":
+        de = de[de["Status"] == fs]
+    if fsumber != "Semua" and "Sumber" in de.columns:  # FILTER SUMBER
+        de = de[de["Sumber"] == fsumber]
+    if fk != "Semua":
+        de = de[de["Kategori"] == fk]
+    
+    for c in ["Tanggal", "Tenggat_Waktu", "Tanggal_Bayar"]:
+        if c in de.columns:
+            de[c] = pd.to_datetime(de[c], errors="coerce").dt.date
+    
+    st.caption(f"Menampilkan {len(de)} transaksi")
+    
+    rd = st.data_editor(
+        de,
+        use_container_width=True,
+        num_rows="dynamic",
+        column_config={
+            "Status": st.column_config.SelectboxColumn("Status", options=["Pending", "Cleared"], required=True),
+            "Nominal": st.column_config.NumberColumn("Nominal (Rp)", format="Rp %d"),
+            "Tipe": st.column_config.SelectboxColumn("Tipe", options=["Pengeluaran", "Pemasukan"], required=True),
+            "Sumber": st.column_config.SelectboxColumn("Sumber", options=["Bank", "Cash"], required=True),  # TAMBAH INI
+        }
+    )
+    
+    # Tombol Update Database
     if st.button("💾 Update Database"):
         fn = rd.iloc[::-1].reset_index(drop=True)
         
         for c in ["Tanggal", "Tenggat_Waktu", "Tanggal_Bayar"]:
-            fn[c] = fn[c].apply(lambda x: x.strftime("%Y-%m-%d") if pd.notnull(x) and hasattr(x, 'strftime') else (str(x) if pd.notnull(x) else ""))
+            if c in fn.columns:
+                fn[c] = fn[c].apply(lambda x: x.strftime("%Y-%m-%d") if pd.notnull(x) and hasattr(x, 'strftime') else (str(x) if pd.notnull(x) else ""))
         
         for i, r in fn.iterrows():
-            if r["Status"] == "Cleared" and str(r["Tanggal_Bayar"]).strip() == "":
+            if r["Status"] == "Cleared" and str(r.get("Tanggal_Bayar", "")).strip() == "":
                 fn.at[i, "Tanggal_Bayar"] = datetime.date.today().strftime("%Y-%m-%d")
         
         save_data(fn)
         
         try:
-            
             data_update = fn.to_dict(orient="records")
             data_update = [{k.lower(): v for k, v in r.items()} for r in data_update]
             conn.table("transaksi").delete().neq("id", -1).execute() 
