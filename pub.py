@@ -99,7 +99,7 @@ conn = st.connection(
 )
 
 
-@st.cache_data(ttl=10)  # Cache hanya 10 detik, atau bisa 0 untuk no cache
+@st.cache_data(ttl=5)  # Cache hanya 10 detik, atau bisa 0 untuk no cache
 def load_data_cloud():
     """Fungsi ambil data dari Supabase menggunakan .table().select()"""
     try:
