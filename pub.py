@@ -2056,7 +2056,7 @@ with lc:
             
             # Validasi jatuh tempo untuk pending settlement
             elif is_scheduled and st_i == "Pending" and not tg_i:
-                st.warning("⚠️ Isi tenggat untuk pending settlement!")
+                st.warning("⚠️ Isi tanggal untuk pending settlement!")
                 error = True
             
             # ===== VALIDASI SALDO =====
