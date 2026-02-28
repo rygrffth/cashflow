@@ -1982,6 +1982,19 @@ with tab_tabungan:
         st.info("Belum ada target tabungan. Buat yang baru di form sebelah kiri!")
 
 
+
+# ===== DEBUG: CEK SEBELUM FORM =====
+st.write("### DEBUG: Sebelum Form")
+st.write(f"UANG_CASH: {UANG_CASH}")
+st.write(f"SALDO_BANK: {SALDO_BANK}")
+st.write(f"len df_asli: {len(df_asli)}")
+
+# ===== FORM TRANSAKSI =====
+lc, rc = st.columns([1.2, 1])
+with lc:
+    st.subheader("📝 Catat Transaksi Baru")
+    with st.form("form_transaksi", clear_on_submit=True):
+        # ... (isi formnya)
 lc, rc = st.columns([1.2, 1])
 with lc:
     st.subheader("📝 Catat Transaksi Baru")
