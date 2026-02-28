@@ -101,7 +101,6 @@ conn = st.connection(
 def load_data_cloud():
     """Fungsi ambil data dari Supabase menggunakan .table().select()"""
     try:
-
         res = conn.table("transaksi").select("*").execute()
         
         if res.data:
@@ -115,19 +114,30 @@ def load_data_cloud():
                 "catatan": "Catatan",
                 "status": "Status",
                 "tenggat_waktu": "Tenggat_Waktu",
-                "tanggal_bayar": "Tanggal_Bayar"
+                "tanggal_bayar": "Tanggal_Bayar",
+                "sumber": "Sumber"  # <-- TAMBAHKAN INI
             }
             
             df = df.rename(columns=nama_kolom_baru)
             
             df["Nominal"] = pd.to_numeric(df["Nominal"], errors="coerce").fillna(0)
             
+            # Debug: cek apakah kolom Sumber ada
+            if "Sumber" not in df.columns:
+                df["Sumber"] = "Bank"  # Default kalau tidak ada
+                st.sidebar.warning("⚠️ Kolom Sumber tidak ditemukan, set default ke Bank")
+            
             return df
             
     except Exception as e:
         st.sidebar.error(f"Koneksi Cloud Bermasalah: {e}")
         
-    return pd.DataFrame(columns=["Tanggal","Tipe","Kategori","Nominal","Catatan","Status","Tenggat_Waktu","Tanggal_Bayar"])
+    # Return dengan kolom Sumber
+    return pd.DataFrame(columns=[
+        "Tanggal","Tipe","Kategori","Nominal",
+        "Catatan","Status","Tenggat_Waktu",
+        "Tanggal_Bayar","Sumber"  # <-- TAMBAHKAN SUMBER
+    ])
 
 def load_settings_cloud():
     """Load settings dari Supabase"""
@@ -575,10 +585,11 @@ df_cloud = load_data_cloud()
 if not df_cloud.empty:
     df_asli = df_cloud
 else:
-    df_asli = load_data()
-if "Sumber" not in df_asli.columns:
-    df_asli["Sumber"] = "Bank"
-    st.sidebar.info("🔄 Data lama: semua transaksi dianggap sebagai Bank")
+    df_asli = load_data()  # Ini mungkin tidak perlu karena sudah cloud-only
+    # Tapi kalau tetap dipakai, pastikan:
+    if "Sumber" not in df_asli.columns:
+        df_asli["Sumber"] = "Bank"
+
 df_piutang   = load_piutang()
 df_budget    = load_budget()
 df_recurring = load_recurring()
