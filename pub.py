@@ -870,15 +870,94 @@ m2.metric("Pengeluaran Minggu Ini", f"Rp {out_minggu:,.0f}")
 m3.metric("Pengeluaran Bulan Ini", f"Rp {out_bulan:,.0f}")
 m4.metric("⏳ Scheduled Settlement", f"Rp {total_pend:,.0f}", delta=due_text, delta_color="off")
 
-pct_hr = min(out_hari / batas_hr, 1.0) if batas_hr > 0 else 0
-ico = "🟢" if pct_hr < 0.5 else ("🟡" if pct_hr < 0.85 else "🔴")
-sts_txt = "Aman" if pct_hr < 0.5 else ("Perhatian" if pct_hr < 0.85 else "Kritis")
-pb1, pb2 = st.columns([4, 1])
-with pb1:
-    st.caption(f"{ico} Budget Harian — {sts_txt} ({pct_hr * 100:.1f}% terpakai)")
-    st.progress(pct_hr)
-with pb2:
-    st.caption(f"Rp {out_hari:,.0f} / Rp {batas_hr:,.0f}")
+# ===== DISPLAY LIMIT HARIAN YANG LEBIH INFORMATIF =====
+st.markdown("---")
+st.subheader("💰 Limit Harian")
+
+# Hitung sisa budget
+sisa_budget = saldo_op - out_hari
+warna_sisa = "#10B981" if sisa_budget >= 0 else "#EF4444"
+persentase = (out_hari / batas_hr * 100) if batas_hr > 0 else 0
+
+# Tampilan utama limit harian
+col_l1, col_l2, col_l3 = st.columns(3)
+
+with col_l1:
+    st.markdown(f"""
+    <div class="card card-green">
+        <p class="card-label">📊 BUDGET HARI INI</p>
+        <p class="card-value" style="color:#10B981;">Rp {batas_hr:,.0f}</p>
+        <p class="card-sub">Maksimal belanja hari ini</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+with col_l2:
+    st.markdown(f"""
+    <div class="card">
+        <p class="card-label">💰 TERPAKAI</p>
+        <p class="card-value" style="color:#F59E0B;">Rp {out_hari:,.0f}</p>
+        <p class="card-sub">{persentase:.1f}% dari budget</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+with col_l3:
+    st.markdown(f"""
+    <div class="card">
+        <p class="card-label">⏳ SISA</p>
+        <p class="card-value" style="color:{warna_sisa};">Rp {sisa_budget:,.0f}</p>
+        <p class="card-sub">Bisa belanja lagi</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+# Progress bar
+st.progress(min(persentase / 100, 1.0))
+
+# Status berdasarkan penggunaan
+if persentase < 30:
+    st.success(f"🟢 Aman Banget! Kamu masih bisa jajan Rp {sisa_budget:,.0f} hari ini")
+elif persentase < 50:
+    st.info(f"🔵 Hemat! Sisa budget Rp {sisa_budget:,.0f}")
+elif persentase < 70:
+    st.warning(f"🟡 Perhatian! Budget sudah {persentase:.1f}% terpakai")
+elif persentase < 90:
+    st.warning(f"🟠 Hampir Habis! Sisa Rp {sisa_budget:,.0f}")
+else:
+    st.error(f"🔴 KRITIS! Budget hampir habis! Sisa Rp {sisa_budget:,.0f}")
+
+# Tips berdasarkan sisa hari
+st.markdown("---")
+st.subheader("💡 Tips Hari Ini")
+
+with st.expander("📈 Rata-rata Pengeluaran", expanded=False):
+    avg_per_hari = out_bulan / 30 if out_bulan > 0 else 0
+    proyeksi_akhir = avg_per_hari * SISA_HARI
+    
+    col_t1, col_t2 = st.columns(2)
+    with col_t1:
+        st.metric("Rata-rata per hari", f"Rp {avg_per_hari:,.0f}")
+    with col_t2:
+        st.metric("Proyeksi sampai gajian", f"Rp {proyeksi_akhir:,.0f}")
+    
+    if proyeksi_akhir > saldo_op:
+        st.error(f"⚠️ Proyeksi defisit Rp {proyeksi_akhir - saldo_op:,.0f} jika terus begini")
+    else:
+        st.success(f"✅ Proyeksi surplus Rp {saldo_op - proyeksi_akhir:,.0f}")
+
+# Rekomendasi jajan
+st.subheader("🛒 Rekomendasi Jajan Hari Ini")
+
+if sisa_budget <= 0:
+    st.error("🚫 STOP! Kamu sudah melebihi budget hari ini!")
+elif sisa_budget < 10000:
+    st.warning(f"💔 Budget sisa Rp {sisa_budget:,.0f} - Cukup untuk jajan kecil")
+elif sisa_budget < 30000:
+    st.info(f"🍜 Bisa buat makan siang + minum (Rp {sisa_budget:,.0f})")
+elif sisa_budget < 50000:
+    st.success(f"🍱 Bisa buat makan enak! (Rp {sisa_budget:,.0f})")
+elif sisa_budget < 100000:
+    st.success(f"🎉 Bisa buat nonton atau hangout! (Rp {sisa_budget:,.0f})")
+else:
+    st.success(f"💰 Sisa banyak! Bisa ditabung atau investasi")
 
 if piutang_blm > 0:
     n_blm = len(df_piutang[df_piutang["Status"] == "Belum Lunas"])
