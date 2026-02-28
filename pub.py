@@ -2167,76 +2167,53 @@ st.divider()
 
 st.subheader("📜 Log Transaksi")
 
-# ===== GABUNGKAN DATA DARI DUA TABEL =====
-# 1. Data dari tabel transaksi (Bank + Cash yang tersimpan di sini)
-df_transaksi = df_asli.copy() if not df_asli.empty else pd.DataFrame()
-
-# 2. Data dari tabel penggunaan_cash
-df_penggunaan_cash = pd.DataFrame()
+# ===== AMBIL DATA DARI SUPABASE =====
 try:
-    res = conn.table("penggunaan_cash").select("*").execute()
-    if res.data and len(res.data) > 0:
-        df_penggunaan_cash = pd.DataFrame(res.data)
-        # Rename kolom agar sesuai dengan df_transaksi
-        df_penggunaan_cash = df_penggunaan_cash.rename(columns={
-            "tanggal": "Tanggal",
-            "nominal": "Nominal",
-            "kategori": "Kategori",
-            "catatan": "Catatan"
-        })
-        # Tambah kolom yang diperlukan
-        df_penggunaan_cash["Tipe"] = "Pengeluaran"  # Semua penggunaan adalah pengeluaran
-        df_penggunaan_cash["Sumber"] = "Cash"
-        df_penggunaan_cash["Status"] = "Cleared"
-        df_penggunaan_cash["Tenggat_Waktu"] = ""
-        df_penggunaan_cash["Tanggal_Bayar"] = df_penggunaan_cash["Tanggal"]
+    res = conn.table("transaksi").select("*").execute()
+    if res.data:
+        df_tampil = pd.DataFrame(res.data)
         
-        st.sidebar.success(f"📥 Load {len(df_penggunaan_cash)} transaksi dari tabel penggunaan_cash")
+        # Rename kolom ke format Indonesia
+        column_map = {
+            "tanggal": "Tanggal",
+            "tipe": "Tipe",
+            "kategori": "Kategori",
+            "nominal": "Nominal",
+            "catatan": "Catatan",
+            "status": "Status",
+            "tenggat_waktu": "Tenggat_Waktu",
+            "tanggal_bayar": "Tanggal_Bayar",
+            "sumber": "Sumber"
+        }
+        df_tampil = df_tampil.rename(columns=column_map)
+        df_tampil["Nominal"] = pd.to_numeric(df_tampil["Nominal"], errors="coerce").fillna(0)
+    else:
+        df_tampil = pd.DataFrame()
+        st.warning("Tabel transaksi kosong")
 except Exception as e:
-    st.sidebar.error(f"Gagal load penggunaan_cash: {e}")
-
-# 3. Gabungkan kedua dataframe
-if not df_transaksi.empty and not df_penggunaan_cash.empty:
-    df_gabungan = pd.concat([df_transaksi, df_penggunaan_cash], ignore_index=True, sort=False)
-elif not df_transaksi.empty:
-    df_gabungan = df_transaksi
-elif not df_penggunaan_cash.empty:
-    df_gabungan = df_penggunaan_cash
-else:
-    df_gabungan = pd.DataFrame()
+    st.error(f"Gagal load data: {e}")
+    df_tampil = pd.DataFrame()
 
 # ===== FILTER =====
-if not df_gabungan.empty:
+if not df_tampil.empty:
     f1, f2, f3, f4 = st.columns(4)
 
     with f1: 
-        ft = st.selectbox("Filter Tipe", ["Semua", "Pengeluaran", "Pemasukan"], key="log_filter_tipe")
+        ft = st.selectbox("Filter Tipe", ["Semua", "Pengeluaran", "Pemasukan"], key="filter_tipe")
 
     with f2: 
-        fs = st.selectbox("Filter Status", ["Semua", "Cleared", "Pending"], key="log_filter_status")
+        fs = st.selectbox("Filter Status", ["Semua", "Cleared", "Pending"], key="filter_status")
 
     with f3:
-        fsumber = st.selectbox("Filter Sumber", ["Semua", "Bank", "Cash"], key="log_filter_sumber")
+        sumber_options = ["Semua"] + sorted(df_tampil["Sumber"].dropna().unique().tolist()) if "Sumber" in df_tampil.columns else ["Semua"]
+        fsumber = st.selectbox("Filter Sumber", sumber_options, key="filter_sumber")
 
     with f4:
-        # Gabungkan kategori dari kedua sumber
-        semua_kategori = []
-        if not df_transaksi.empty:
-            semua_kategori.extend(df_transaksi["Kategori"].dropna().unique().tolist())
-        if not df_penggunaan_cash.empty:
-            semua_kategori.extend(df_penggunaan_cash["Kategori"].dropna().unique().tolist())
-        semua_kategori = sorted(set(semua_kategori))  # Unique & sort
-        kl = ["Semua"] + semua_kategori
-        fk = st.selectbox("Filter Kategori", kl, key="log_filter_kategori")
+        kategori_options = ["Semua"] + sorted(df_tampil["Kategori"].dropna().unique().tolist())
+        fk = st.selectbox("Filter Kategori", kategori_options, key="filter_kategori")
 
-    # Siapkan dataframe untuk ditampilkan
-    de = df_gabungan.copy()
-    
-    # Urutkan berdasarkan tanggal (terbaru di atas)
-    de["Tanggal_sort"] = pd.to_datetime(de["Tanggal"], errors='coerce')
-    de = de.sort_values("Tanggal_sort", ascending=False).drop(columns=["Tanggal_sort"])
-    
-    # Apply filters
+    # Apply filter
+    de = df_tampil.copy()
     if ft != "Semua":
         de = de[de["Tipe"] == ft]
     if fs != "Semua":
@@ -2245,15 +2222,15 @@ if not df_gabungan.empty:
         de = de[de["Sumber"] == fsumber]
     if fk != "Semua":
         de = de[de["Kategori"] == fk]
-    
-    # Format kolom tanggal
+
+    # Format tanggal
     for c in ["Tanggal", "Tenggat_Waktu", "Tanggal_Bayar"]:
         if c in de.columns:
             de[c] = pd.to_datetime(de[c], errors="coerce").dt.date
-    
-    st.caption(f"Menampilkan {len(de)} transaksi (Bank: {len(de[de['Sumber']=='Bank']) if 'Sumber' in de.columns else 0}, Cash: {len(de[de['Sumber']=='Cash']) if 'Sumber' in de.columns else 0})")
-    
-    # Tampilkan data editor
+
+    st.caption(f"Menampilkan {len(de)} transaksi")
+
+    # ===== DATA EDITOR =====
     column_config = {
         "Tanggal": st.column_config.DateColumn("Tanggal", format="YYYY-MM-DD"),
         "Tipe": st.column_config.SelectboxColumn("Tipe", options=["Pengeluaran", "Pemasukan"], required=True),
@@ -2262,81 +2239,82 @@ if not df_gabungan.empty:
         "Catatan": st.column_config.TextColumn("Catatan"),
         "Sumber": st.column_config.SelectboxColumn("Sumber", options=["Bank", "Cash"], required=True),
     }
-    
-    # Tambah kolom status dan tanggal jika ada
+
     if "Status" in de.columns:
         column_config["Status"] = st.column_config.SelectboxColumn("Status", options=["Pending", "Cleared"], required=True)
     if "Tenggat_Waktu" in de.columns:
         column_config["Tenggat_Waktu"] = st.column_config.DateColumn("Tenggat", format="YYYY-MM-DD")
     if "Tanggal_Bayar" in de.columns:
         column_config["Tanggal_Bayar"] = st.column_config.DateColumn("Tgl Bayar", format="YYYY-MM-DD")
-    
-    rd = st.data_editor(
+
+    edited_df = st.data_editor(
         de,
         use_container_width=True,
         num_rows="dynamic",
         column_config=column_config,
-        hide_index=True
+        hide_index=True,
+        key="log_data_editor"
     )
-    
-    # Tombol Update Database
+
+    # ===== TOMBOL UPDATE =====
     col_btn1, col_btn2, col_btn3 = st.columns([1, 1, 2])
-    
+
     with col_btn1:
-        if st.button("💾 Update Database", use_container_width=True):
-            fn = rd.copy()
-            
-            # Format tanggal ke string untuk disimpan
-            for c in ["Tanggal", "Tenggat_Waktu", "Tanggal_Bayar"]:
-                if c in fn.columns:
-                    fn[c] = fn[c].apply(lambda x: x.strftime("%Y-%m-%d") if pd.notnull(x) and hasattr(x, 'strftime') else "")
-            
-            # Pisahkan data Bank dan Cash
-            data_bank = fn[fn["Sumber"] == "Bank"] if "Sumber" in fn.columns else pd.DataFrame()
-            data_cash = fn[fn["Sumber"] == "Cash"] if "Sumber" in fn.columns else pd.DataFrame()
-            
-            # Update tabel transaksi (untuk Bank)
-            if not data_bank.empty:
-                save_data(data_bank)
+        if st.button("💾 Simpan Perubahan", use_container_width=True):
+            with st.spinner("Menyimpan ke database..."):
                 try:
-            
-                    if not data_bank.empty:
-                        data_update = data_bank.to_dict(orient="records")
-                        data_update = [{k.lower(): v for k, v in r.items()} for r in data_update]
-                        conn.table("transaksi").upsert(data_update).execute()  # upsert lebih aman
-                except Exception as e:
-                    st.error(f"Gagal update transaksi bank: {e}")
+                    # Konversi kembali ke format database
+                    data_to_save = edited_df.copy()
                     
-                    save_data(data_bank)
-            
-            # Update tabel penggunaan_cash (untuk Cash)
-            if not data_cash.empty:
-                data_cash_simpan = data_cash[["Tanggal", "Nominal", "Kategori", "Catatan"]].copy()
-                data_cash_simpan = data_cash_simpan.rename(columns={
-                    "Tanggal": "tanggal",
-                    "Nominal": "nominal",
-                    "Kategori": "kategori",
-                    "Catatan": "catatan"
-                })
-                try:
-                    # Hapus semua data lama di penggunaan_cash
-                    conn.table("penggunaan_cash").delete().neq("id", -1).execute()
+                    # Format tanggal ke string
+                    for c in ["Tanggal", "Tenggat_Waktu", "Tanggal_Bayar"]:
+                        if c in data_to_save.columns:
+                            data_to_save[c] = data_to_save[c].apply(
+                                lambda x: x.strftime("%Y-%m-%d") if pd.notnull(x) and hasattr(x, 'strftime') else None
+                            )
+                    
+                    # Rename ke lowercase untuk Supabase
+                    data_to_save = data_to_save.rename(columns={
+                        "Tanggal": "tanggal",
+                        "Tipe": "tipe",
+                        "Kategori": "kategori",
+                        "Nominal": "nominal",
+                        "Catatan": "catatan",
+                        "Status": "status",
+                        "Tenggat_Waktu": "tenggat_waktu",
+                        "Tanggal_Bayar": "tanggal_bayar",
+                        "Sumber": "sumber"
+                    })
+                    
+                    # Hapus kolom yang tidak ada di database
+                    data_to_save = data_to_save[[
+                        "tanggal", "tipe", "kategori", "nominal", 
+                        "catatan", "status", "tenggat_waktu", "tanggal_bayar", "sumber"
+                    ]]
+                    
+                    records = data_to_save.to_dict(orient="records")
+                    
+                    # ===== UPDATE KE SUPABASE (METODE AMAN) =====
+                    # Hapus semua data lama
+                    conn.table("transaksi").delete().neq("id", -1).execute()
+                    
                     # Insert data baru
-                    if not data_cash_simpan.empty:
-                        conn.table("penggunaan_cash").insert(data_cash_simpan.to_dict(orient="records")).execute()
+                    if records:
+                        conn.table("transaksi").insert(records).execute()
+                    
+                    st.success(f"✅ {len(records)} transaksi berhasil disimpan!")
+                    st.cache_data.clear()
+                    st.rerun()
+                    
                 except Exception as e:
-                    st.error(f"Gagal update penggunaan_cash: {e}")
-            
-            st.cache_data.clear()
-            st.success(f"✅ {len(data_bank)} transaksi bank & {len(data_cash)} transaksi cash berhasil diupdate!")
-            st.rerun()
-    
+                    st.error(f"Error: {e}")
+
     with col_btn2:
-        if st.button("🔄 Refresh", use_container_width=True):
+        if st.button("🔄 Refresh Data", use_container_width=True):
             st.cache_data.clear()
             st.rerun()
-    
-    # Statistik
+
+    # ===== STATISTIK =====
     with st.expander("📊 Statistik", expanded=False):
         col_stat1, col_stat2, col_stat3, col_stat4 = st.columns(4)
         
@@ -2356,8 +2334,25 @@ if not df_gabungan.empty:
 
 else:
     st.info("Belum ada data transaksi")
+    
+    # Tombol untuk insert data test
+    if st.button("➕ Insert Data Test"):
+        test_data = {
+            "tanggal": datetime.date.today().strftime("%Y-%m-%d"),
+            "tipe": "Pengeluaran",
+            "kategori": "Test",
+            "nominal": 10000,
+            "catatan": "Data test",
+            "status": "Cleared",
+            "tenggat_waktu": "",
+            "tanggal_bayar": datetime.date.today().strftime("%Y-%m-%d"),
+            "sumber": "Bank"
+        }
+        conn.table("transaksi").insert(test_data).execute()
+        st.success("Data test berhasil ditambahkan!")
+        st.rerun()
 
 
 st.markdown("---")
 st.markdown("""<div style="text-align:center;color:#334155;font-size:.75rem;padding:10px 0;">
-💼 Financial Dashboard • Streamlit + Plotly</div>""", unsafe_allow_html=True)
+💼 Financial Dashboard</div>""", unsafe_allow_html=True)
