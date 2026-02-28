@@ -98,6 +98,8 @@ conn = st.connection(
     key=s_key
 )
 
+
+@st.cache_data(ttl=10)  # Cache hanya 10 detik, atau bisa 0 untuk no cache
 def load_data_cloud():
     """Fungsi ambil data dari Supabase menggunakan .table().select()"""
     try:
@@ -115,7 +117,7 @@ def load_data_cloud():
                 "status": "Status",
                 "tenggat_waktu": "Tenggat_Waktu",
                 "tanggal_bayar": "Tanggal_Bayar",
-                "sumber": "Sumber"  # <-- TAMBAHKAN INI
+                "sumber": "Sumber"
             }
             
             df = df.rename(columns=nama_kolom_baru)
@@ -124,7 +126,7 @@ def load_data_cloud():
             
             # Debug: cek apakah kolom Sumber ada
             if "Sumber" not in df.columns:
-                df["Sumber"] = "Bank"  # Default kalau tidak ada
+                df["Sumber"] = "Bank"
                 st.sidebar.warning("⚠️ Kolom Sumber tidak ditemukan, set default ke Bank")
             
             return df
@@ -136,7 +138,7 @@ def load_data_cloud():
     return pd.DataFrame(columns=[
         "Tanggal","Tipe","Kategori","Nominal",
         "Catatan","Status","Tenggat_Waktu",
-        "Tanggal_Bayar","Sumber"  # <-- TAMBAHKAN SUMBER
+        "Tanggal_Bayar","Sumber"
     ])
 
 def load_settings_cloud():
