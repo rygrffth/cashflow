@@ -10,6 +10,9 @@ import email
 from email.header import decode_header
 import re
 import tomllib
+import datetime
+now_wib = datetime.datetime.utcnow() + datetime.timedelta(hours=7)
+hari_ini_wib = now_wib.date()
 
 
 DATA_FILE      = "keuangan_ramadan.csv"
@@ -313,7 +316,7 @@ def update_cash_cloud(nominal_baru, catatan=""):
     try:
         data = {
             "nominal": nominal_baru,
-            "tanggal_update": datetime.date.today().strftime("%Y-%m-%d"),
+            "tanggal_update": hari_ini_wib.strftime("%Y-%m-%d"),
             "catatan": catatan
         }
         conn.table("cash").insert(data).execute()
@@ -461,7 +464,7 @@ def fetch_mandiri_emails(gmail_user, gmail_pass, limit=10):
                 tgl_match = re.search(r'(\d{1,2}\s+(?:Jan|Feb|Mar|Apr|Mei|Jun|Jul|Agu|Sep|Okt|Nov|Des)\s+\d{4})', body)
             if not tgl_match:
                 tgl_match = re.search(r'(\d{1,2}\s+(?:Januari|Februari|Maret|April|Mei|Juni|Juli|Agustus|September|Oktober|November|Desember)\s+\d{4})', body)
-            tanggal = str(datetime.date.today())
+            tanggal = str(hari_ini_wib)
             if tgl_match:
                 try:
                     raw_tgl = tgl_match.group(1)
@@ -475,7 +478,7 @@ def fetch_mandiri_emails(gmail_user, gmail_pass, limit=10):
                         raw_tgl = raw_tgl.replace(id_bln, en_bln)
                     tanggal = pd.to_datetime(raw_tgl, dayfirst=True).strftime("%Y-%m-%d")
                 except:
-                    tanggal = str(datetime.date.today())
+                    tanggal = str(hari_ini_wib)
 
       
             jam_match = re.search(r'(\d{2}:\d{2}:\d{2})\s*WIB', body)
@@ -550,7 +553,7 @@ def fetch_mandiri_emails(gmail_user, gmail_pass, limit=10):
    
 
 def generate_recurring_transactions(df_recurring, df_main):
-    today = datetime.date.today()
+    today = hari_ini_wib
     new_rows = []
     for _, r in df_recurring.iterrows():
         if str(r.get("Aktif","True")).lower() != "true": continue
@@ -617,7 +620,7 @@ REAL_OPERASIONAL = 0
 FIKTIF_BASE = 140000000
 MULTIPLIER = 100
 
-hari_ini_tgl = datetime.date.today()
+hari_ini_tgl = hari_ini_wib
 settings = load_settings_cloud()
 tanggal_gajian = settings.get("tanggal_gajian", datetime.date(2026, 3, 17))
 
@@ -648,7 +651,7 @@ with st.sidebar:
             "Tanggal Gajian", 
             value=tanggal_gajian,
             key="setting_tanggal_gajian",
-            min_value=datetime.date.today()
+            min_value=hari_ini_wib
         )
         
         if st.button("💾 Simpan Tanggal Gajian", use_container_width=True):
@@ -733,7 +736,7 @@ try:
     if res.data:
         df_cash = pd.DataFrame(res.data)
         df_cash["tanggal"] = pd.to_datetime(df_cash["tanggal"])
-        today = now.date()
+        today = hari_ini_wib
         df_hari = df_cash[df_cash["tanggal"].dt.date == today]
         penggunaan_cash_hari_ini = df_hari["nominal"].sum() if not df_hari.empty else 0
         
@@ -771,8 +774,8 @@ else:
 
 
 # Hari ini
-out_hari_bank = df_asli[mask_aktif & mask_bank & (df_asli["Tanggal_dt"].dt.date == now.date())]["Nominal"].sum()
-out_hari_cash = df_asli[mask_aktif & mask_cash & (df_asli["Tanggal_dt"].dt.date == now.date())]["Nominal"].sum()
+out_hari_bank = df_asli[mask_aktif & mask_bank & (df_asli["Tanggal_dt"].dt.date == hari_ini_wib)]["Nominal"].sum()
+out_hari_cash = df_asli[mask_aktif & mask_cash & (df_asli["Tanggal_dt"].dt.date == hari_ini_wib)]["Nominal"].sum()
 out_hari = out_hari_bank + out_hari_cash
 
 # Minggu ini
@@ -1104,7 +1107,7 @@ with lc:
         # Baris 1: Tanggal dan Tipe
         col1, col2 = st.columns(2)
         with col1:
-            tgl_i = st.date_input("📅 Tanggal", datetime.date.today())
+            tgl_i = st.date_input("📅 Tanggal", hari_ini_wib)
         with col2:
             tipe_i = st.selectbox("📊 Tipe", ["Pengeluaran", "Pemasukan"])
         
@@ -1136,7 +1139,7 @@ with lc:
             with col_s1:
                 st_i = st.selectbox("⏳ Status", ["Pending", "Cleared"])
             with col_s2:
-                min_date = datetime.date.today()
+                min_date = hari_ini_wib
                 tg_i = st.date_input("📅 Jatuh Tempo", min_value=min_date).strftime("%Y-%m-%d")
             if st_i == "Cleared":
                 tb_i = tgl_i.strftime("%Y-%m-%d")
@@ -1548,17 +1551,17 @@ with tab_piutang_t:
             st.markdown("**➕ Catat Piutang Baru**")
             nama_p    = st.text_input("Nama Peminjam")
             nominal_p = st.number_input("Nominal (Rp)", min_value=0, step=5000)
-            tenggat_p = st.date_input("Tenggat Penagihan", datetime.date.today()+datetime.timedelta(days=7))
+            tenggat_p = st.date_input("Tenggat Penagihan", hari_ini_wib+datetime.timedelta(days=7))
             catatan_p = st.text_input("Catatan (opsional)")
             if st.form_submit_button("💾 Simpan Piutang", use_container_width=True):
                 if nama_p and nominal_p>0:
-                    new_p=pd.DataFrame([{"Tanggal":datetime.date.today().strftime("%Y-%m-%d"),
+                    new_p=pd.DataFrame([{"Tanggal":hari_ini_wib.strftime("%Y-%m-%d"),
                         "Nama":nama_p,"Nominal":nominal_p,"Catatan":catatan_p,
                         "Status":"Belum Lunas","Tenggat":tenggat_p.strftime("%Y-%m-%d"),"Tanggal_Lunas":""}])
-                    new_t=pd.DataFrame([{"Tanggal":datetime.date.today().strftime("%Y-%m-%d"),
+                    new_t=pd.DataFrame([{"Tanggal":hari_ini_wib.strftime("%Y-%m-%d"),
                         "Tipe":"Pengeluaran","Kategori":"Piutang","Nominal":nominal_p,
                         "Catatan":f"Piutang: {nama_p}","Status":"Cleared","Tenggat_Waktu":"",
-                        "Tanggal_Bayar":datetime.date.today().strftime("%Y-%m-%d")}])
+                        "Tanggal_Bayar":hari_ini_wib.strftime("%Y-%m-%d")}])
                     df_piutang=pd.concat([df_piutang,new_p],ignore_index=True)
                     df_asli=pd.concat([df_asli,new_t],ignore_index=True)
                     save_piutang(df_piutang); save_data(df_asli)
@@ -1581,7 +1584,7 @@ with tab_piutang_t:
                 <p class="card-value" style="color:#10B981;">Rp {lns['Nominal'].sum():,.0f}</p>
                 <p class="card-sub">{len(lns)} transaksi lunas</p>
             </div>""", unsafe_allow_html=True)
-            today_s=datetime.date.today().strftime("%Y-%m-%d")
+            today_s=hari_ini_wib.strftime("%Y-%m-%d")
             ov=blm[blm["Tenggat"]<today_s]
             if not ov.empty:
                 st.error(f"🚨 {len(ov)} piutang melewati tenggat!")
@@ -1600,11 +1603,11 @@ with tab_piutang_t:
                 cd.markdown("🟡 Belum Lunas")
                 if ce.button("✅ Lunas", key=f"lunas_{idx}"):
                     df_piutang.at[idx,"Status"]="Lunas"
-                    df_piutang.at[idx,"Tanggal_Lunas"]=datetime.date.today().strftime("%Y-%m-%d")
-                    new_inc=pd.DataFrame([{"Tanggal":datetime.date.today().strftime("%Y-%m-%d"),
+                    df_piutang.at[idx,"Tanggal_Lunas"]=hari_ini_wib.strftime("%Y-%m-%d")
+                    new_inc=pd.DataFrame([{"Tanggal":hari_ini_wib.strftime("%Y-%m-%d"),
                         "Tipe":"Pemasukan","Kategori":"Piutang Kembali","Nominal":row["Nominal"],
                         "Catatan":f"Lunas: {row['Nama']}","Status":"Cleared","Tenggat_Waktu":"",
-                        "Tanggal_Bayar":datetime.date.today().strftime("%Y-%m-%d")}])
+                        "Tanggal_Bayar":hari_ini_wib.strftime("%Y-%m-%d")}])
                     df_asli=pd.concat([df_asli,new_inc],ignore_index=True)
                     save_piutang(df_piutang); save_data(df_asli)
                     st.success(f"✅ {row['Nama']} lunas! Saldo +Rp {row['Nominal']:,.0f}")
@@ -1630,7 +1633,7 @@ with tab_recurring_t:
             nominal_r= st.number_input("Nominal (Rp)",min_value=0,step=5000)
         with r2:
             frek_r   = st.selectbox("Frekuensi",["Bulanan","Mingguan"])
-            tgl_r    = st.date_input("Tanggal Tagihan",datetime.date.today())
+            tgl_r    = st.date_input("Tanggal Tagihan",hari_ini_wib)
             catatan_r= st.text_input("Catatan")
         if st.form_submit_button("💾 Simpan Recurring", use_container_width=True):
             if nama_r and nominal_r>0:
@@ -1933,7 +1936,7 @@ with tab_cash:
                 if avg_cash > 0 and UANG_CASH > 0:
                     hari_habis = int(UANG_CASH / avg_cash)
                     if hari_habis > 0:
-                        tgl_habis = datetime.date.today() + datetime.timedelta(days=hari_habis)
+                        tgl_habis = hari_ini_wib + datetime.timedelta(days=hari_habis)
                         st.warning(f"⏳ Prediksi cash habis dalam **{hari_habis} hari** ({tgl_habis.strftime('%d %b %Y')})")
             else:
                 st.info("Belum ada pengeluaran cash")
@@ -1954,7 +1957,7 @@ with tab_cash:
                 df_display_cash = df_display_cash[df_display_cash["Tipe"] == filter_tipe_cash]
             
             # Apply filter bulan
-            today = datetime.date.today()
+            today = hari_ini_wib
             if filter_bulan_cash == "Bulan Ini":
                 df_display_cash = df_display_cash[
                     (pd.to_datetime(df_display_cash["Tanggal"]).dt.month == today.month) &
@@ -2031,28 +2034,28 @@ with tab_cash:
                     if nominal_quick > 0:
                         # Transaksi Bank (pengeluaran)
                         transaksi_bank = {
-                            "Tanggal": datetime.date.today().strftime("%Y-%m-%d"),
+                            "Tanggal": hari_ini_wib.strftime("%Y-%m-%d"),
                             "Tipe": "Pengeluaran",
                             "Kategori": "Tarik Tunai",
                             "Nominal": nominal_quick,
                             "Catatan": f"Tarik tunai - {catatan_quick}",
                             "Status": "Cleared",
                             "Tenggat_Waktu": "",
-                            "Tanggal_Bayar": datetime.date.today().strftime("%Y-%m-%d"),
+                            "Tanggal_Bayar": hari_ini_wib.strftime("%Y-%m-%d"),
                             "Sumber": "Bank"
                         }
                         save_to_cloud(transaksi_bank)
                         
                         # Transaksi Cash (pemasukan)
                         transaksi_cash = {
-                            "Tanggal": datetime.date.today().strftime("%Y-%m-%d"),
+                            "Tanggal": hari_ini_wib.strftime("%Y-%m-%d"),
                             "Tipe": "Pemasukan",
                             "Kategori": "Tarik Tunai",
                             "Nominal": nominal_quick,
                             "Catatan": f"Dari ATM - {catatan_quick}",
                             "Status": "Cleared",
                             "Tenggat_Waktu": "",
-                            "Tanggal_Bayar": datetime.date.today().strftime("%Y-%m-%d"),
+                            "Tanggal_Bayar": hari_ini_wib.strftime("%Y-%m-%d"),
                             "Sumber": "Cash"
                         }
                         save_to_cloud(transaksi_cash)
@@ -2081,14 +2084,14 @@ with tab_cash:
                         if nominal_quick <= UANG_CASH:
                             # Catat transaksi cash
                             transaksi = {
-                                "Tanggal": datetime.date.today().strftime("%Y-%m-%d"),
+                                "Tanggal": hari_ini_wib.strftime("%Y-%m-%d"),
                                 "Tipe": "Pengeluaran",
                                 "Kategori": st.session_state["quick_cash"].title(),
                                 "Nominal": nominal_quick,
                                 "Catatan": catatan_quick,
                                 "Status": "Cleared",
                                 "Tenggat_Waktu": "",
-                                "Tanggal_Bayar": datetime.date.today().strftime("%Y-%m-%d"),
+                                "Tanggal_Bayar": hari_ini_wib.strftime("%Y-%m-%d"),
                                 "Sumber": "Cash"
                             }
                             save_to_cloud(transaksi)
@@ -2129,10 +2132,10 @@ with tab_tabungan:
             
             col_date1, col_date2 = st.columns(2)
             with col_date1:
-                tgl_mulai = st.date_input("Tanggal Mulai", datetime.date.today())
+                tgl_mulai = st.date_input("Tanggal Mulai", hari_ini_wib)
             with col_date2:
                 tgl_target = st.date_input("Target Tercapai", 
-                                          datetime.date.today() + datetime.timedelta(days=365))
+                                          hari_ini_wib + datetime.timedelta(days=365))
             
             kategori_t = st.selectbox("Kategori", ["Umum", "Kendaraan", "Pendidikan", 
                                                    "Properti", "Investasi", "Liburan", "Darurat"])
@@ -2214,7 +2217,7 @@ with tab_tabungan:
                         # Hitung sisa hari
                         if pd.notna(row["Tanggal_Target"]):
                             tgl_target = pd.to_datetime(row["Tanggal_Target"]).date()
-                            sisa_hari = (tgl_target - datetime.date.today()).days
+                            sisa_hari = (tgl_target - hari_ini_wib).days
                             if sisa_hari > 0:
                                 st.caption(f"⏳ Sisa {sisa_hari} hari")
                             elif sisa_hari == 0:
@@ -2262,7 +2265,7 @@ with tab_tabungan:
                                             # Catat transaksi
                                             transaksi_data = {
                                                 "tabungan_id": row.get("id"),
-                                                "tanggal": datetime.date.today().strftime("%Y-%m-%d"),
+                                                "tanggal": hari_ini_wib.strftime("%Y-%m-%d"),
                                                 "nominal": nominal_setor,
                                                 "tipe": "Setor",
                                                 "catatan": catatan_setor
@@ -2298,7 +2301,7 @@ with tab_tabungan:
                                             # Catat transaksi
                                             transaksi_data = {
                                                 "tabungan_id": row.get("id"),
-                                                "tanggal": datetime.date.today().strftime("%Y-%m-%d"),
+                                                "tanggal": hari_ini_wib.strftime("%Y-%m-%d"),
                                                 "nominal": nominal_tarik,
                                                 "tipe": "Tarik",
                                                 "catatan": catatan_tarik
@@ -2592,7 +2595,7 @@ else:
     if st.button("➕ Insert Contoh Data"):
         contoh = [
             {
-                "tanggal": datetime.date.today().strftime("%Y-%m-%d"),
+                "tanggal": hari_ini_wib.strftime("%Y-%m-%d"),
                 "tipe": "Pengeluaran",
                 "kategori": "Makan",
                 "nominal": 50000,
@@ -2601,7 +2604,7 @@ else:
                 "sumber": "Bank"
             },
             {
-                "tanggal": datetime.date.today().strftime("%Y-%m-%d"),
+                "tanggal": hari_ini_wib.strftime("%Y-%m-%d"),
                 "tipe": "Pengeluaran",
                 "kategori": "Transport",
                 "nominal": 20000,
@@ -2619,8 +2622,8 @@ else:
 with st.sidebar.expander("🔍 DEBUG FILTER TANGGAL", expanded=True):
     st.write("### Informasi Sistem")
     st.write(f"🕒 `datetime.datetime.now()`: {datetime.datetime.now()}")
-    st.write(f"📅 `datetime.date.today()`: {datetime.date.today()}")
-    st.write(f"📅 `now.date()`: {now.date() if 'now' in locals() else 'now not defined'}")
+    st.write(f"📅 `hari_ini_wib`: {hari_ini_wib}")
+    st.write(f"📅 `hari_ini_wib`: {hari_ini_wib if 'now' in locals() else 'now not defined'}")
     
     # Cek timezone
     try:
@@ -2639,7 +2642,7 @@ with st.sidebar.expander("🔍 DEBUG FILTER TANGGAL", expanded=True):
         st.write(f"**Semua tanggal di database:** {unique_dates}")
         
         # Cek tanggal hari ini di database
-        today_str = datetime.date.today().strftime("%Y-%m-%d")
+        today_str = hari_ini_wib.strftime("%Y-%m-%d")
         st.write(f"**Tanggal hari ini (menurut sistem):** {today_str}")
         
         if today_str in df_asli["Tanggal"].values:
@@ -2659,7 +2662,7 @@ with st.sidebar.expander("🔍 DEBUG FILTER TANGGAL", expanded=True):
         st.error("❌ Variabel `out_hari` belum didefinisikan!")
     
     st.write("### Query Langsung ke Supabase")
-    today_str = datetime.date.today().strftime("%Y-%m-%d")
+    today_str = hari_ini_wib.strftime("%Y-%m-%d")
     try:
         res = conn.table("transaksi").select("*").eq("tanggal", today_str).execute()
         st.write(f"**Data dari Supabase untuk {today_str}:**")
