@@ -591,6 +591,40 @@ else:
     # Tapi kalau tetap dipakai, pastikan:
     if "Sumber" not in df_asli.columns:
         df_asli["Sumber"] = "Bank"
+        
+        
+# ===== DEBUG LENGKAP - TAMBAHKAN DI SINI =====
+st.sidebar.markdown("---")
+st.sidebar.subheader("🔍 DEBUG INFO")
+
+# 1. Cek semua tanggal unik di database
+if not df_asli.empty:
+    semua_tanggal = sorted(df_asli["Tanggal"].unique())
+    st.sidebar.write("📅 Semua tanggal di database:", semua_tanggal)
+    
+    # 2. Cek data untuk 1 Maret 2026
+    today_str = datetime.date.today().strftime("%Y-%m-%d")
+    df_today = df_asli[df_asli["Tanggal"] == today_str]
+    st.sidebar.write(f"📊 Data untuk {today_str}:")
+    st.sidebar.write(f"Jumlah transaksi: {len(df_today)}")
+    if not df_today.empty:
+        st.sidebar.dataframe(df_today[["Tipe", "Nominal", "Kategori"]])
+    else:
+        st.sidebar.warning("TIDAK ADA DATA untuk hari ini!")
+    
+    # 3. Cek langsung dari Supabase (bypass cache)
+    try:
+        res = conn.table("transaksi").select("*").eq("tanggal", today_str).execute()
+        st.sidebar.write(f"🔄 Dari Supabase langsung ({today_str}):")
+        st.sidebar.write(f"Data: {len(res.data)} transaksi")
+        if res.data:
+            total = sum([d["nominal"] for d in res.data if d["tipe"] == "Pengeluaran"])
+            st.sidebar.success(f"Total: Rp {total:,.0f}")
+    except Exception as e:
+        st.sidebar.error(f"Error: {e}")
+
+# 4. Cek nilai out_hari yang dihitung
+st.sidebar.write(f"📈 out_hari dari kode: Rp {out_hari:,.0f}")
 
 df_piutang   = load_piutang()
 df_budget    = load_budget()
