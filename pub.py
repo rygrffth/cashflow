@@ -810,42 +810,7 @@ mult = 1 if is_real_mode else MULTIPLIER
 total_aset = total_real if is_real_mode else (FIKTIF_BASE + total_real)
 
 
-# ===== DEBUG LENGKAP - TAMBAHKAN DI SINI (SETELAH out_hari) =====
-st.sidebar.markdown("---")
-st.sidebar.subheader("🔍 DEBUG INFO")
 
-# 1. Cek semua tanggal unik di database
-if not df_asli.empty:
-    semua_tanggal = sorted(df_asli["Tanggal"].unique())
-    st.sidebar.write("📅 Semua tanggal di database:", semua_tanggal)
-    
-    # 2. Cek data untuk hari ini
-    today_str = datetime.date.today().strftime("%Y-%m-%d")
-    df_today = df_asli[df_asli["Tanggal"] == today_str]
-    st.sidebar.write(f"📊 Data untuk {today_str}:")
-    st.sidebar.write(f"Jumlah transaksi: {len(df_today)}")
-    if not df_today.empty:
-        st.sidebar.dataframe(df_today[["Tipe", "Nominal", "Kategori", "Sumber"]])
-        out_today = df_today[df_today["Tipe"] == "Pengeluaran"]["Nominal"].sum()
-        st.sidebar.success(f"Total pengeluaran: Rp {out_today:,.0f}")
-    else:
-        st.sidebar.warning("TIDAK ADA DATA untuk hari ini!")
-    
-    # 3. Cek langsung dari Supabase (bypass cache)
-    try:
-        res = conn.table("transaksi").select("*").eq("tanggal", today_str).execute()
-        st.sidebar.write(f"🔄 Dari Supabase langsung ({today_str}):")
-        st.sidebar.write(f"Data: {len(res.data)} transaksi")
-        if res.data:
-            total = sum([d["nominal"] for d in res.data if d["tipe"] == "Pengeluaran"])
-            st.sidebar.success(f"Total: Rp {total:,.0f}")
-    except Exception as e:
-        st.sidebar.error(f"Error: {e}")
-
-# 4. Cek nilai out_hari yang dihitung
-st.sidebar.write(f"📈 out_hari dari kode: Rp {out_hari:,.0f}")
-st.sidebar.write(f"📈 out_hari_bank: Rp {out_hari_bank:,.0f}")
-st.sidebar.write(f"📈 out_hari_cash: Rp {out_hari_cash:,.0f}")
 
 
 if "show_aset" not in st.session_state:
@@ -2649,6 +2614,61 @@ else:
             conn.table("transaksi").insert(data).execute()
         st.success("Contoh data ditambahkan!")
         st.rerun()
+
+
+with st.sidebar.expander("🔍 DEBUG FILTER TANGGAL", expanded=True):
+    st.write("### Informasi Sistem")
+    st.write(f"🕒 `datetime.datetime.now()`: {datetime.datetime.now()}")
+    st.write(f"📅 `datetime.date.today()`: {datetime.date.today()}")
+    st.write(f"📅 `now.date()`: {now.date() if 'now' in locals() else 'now not defined'}")
+    
+    # Cek timezone
+    try:
+        st.write(f"🕒 Timezone: {datetime.datetime.now().astimezone().tzinfo}")
+    except:
+        pass
+    
+    st.write("### Data di DataFrame")
+    if not df_asli.empty:
+        # Tampilkan 5 transaksi terakhir
+        st.write("**5 Transaksi Terakhir:**")
+        st.dataframe(df_asli[["Tanggal", "Tipe", "Nominal", "Sumber"]].head(5))
+        
+        # Tampilkan unique dates
+        unique_dates = sorted(df_asli["Tanggal"].unique(), reverse=True)
+        st.write(f"**Semua tanggal di database:** {unique_dates}")
+        
+        # Cek tanggal hari ini di database
+        today_str = datetime.date.today().strftime("%Y-%m-%d")
+        st.write(f"**Tanggal hari ini (menurut sistem):** {today_str}")
+        
+        if today_str in df_asli["Tanggal"].values:
+            st.success(f"✅ Tanggal {today_str} ADA di database")
+            df_today = df_asli[df_asli["Tanggal"] == today_str]
+            st.dataframe(df_today[["Tipe", "Nominal", "Kategori"]])
+        else:
+            st.error(f"❌ Tanggal {today_str} TIDAK ADA di database")
+            st.write("Data terakhir di database:", unique_dates[0] if unique_dates else "Tidak ada data")
+    
+    st.write("### Hasil Filter `out_hari`")
+    if 'out_hari' in locals():
+        st.write(f"📊 `out_hari`: Rp {out_hari:,.0f}")
+        st.write(f"📊 `out_hari_bank`: Rp {out_hari_bank:,.0f}")
+        st.write(f"📊 `out_hari_cash`: Rp {out_hari_cash:,.0f}")
+    else:
+        st.error("❌ Variabel `out_hari` belum didefinisikan!")
+    
+    st.write("### Query Langsung ke Supabase")
+    today_str = datetime.date.today().strftime("%Y-%m-%d")
+    try:
+        res = conn.table("transaksi").select("*").eq("tanggal", today_str).execute()
+        st.write(f"**Data dari Supabase untuk {today_str}:**")
+        st.write(f"Jumlah: {len(res.data)} transaksi")
+        if res.data:
+            for d in res.data:
+                st.write(f"- {d['tanggal']} | {d['tipe']} | {d['kategori']} | Rp {d['nominal']:,.0f}")
+    except Exception as e:
+        st.error(f"Error query: {e}")
 
 st.markdown("---")
 st.markdown("""<div style="text-align:center;color:#334155;font-size:.75rem;padding:10px 0;">
