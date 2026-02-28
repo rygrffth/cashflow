@@ -1390,107 +1390,124 @@ with tab_grafik:
         else:
             st.info("Belum ada data pengeluaran.")
 
-    with g3:
-        st.subheader("⚖️ Ringkasan Arus Kas")
-        
-        # Hitung ulang dengan cash
-        total_pemasukan = df_asli[mask_income]["Nominal"].sum()
-        
-        total_pengeluaran_bank = df_asli[mask_aktif]["Nominal"].sum()
-        try:
-            res_cash = conn.table("penggunaan_cash").select("*").execute()
-            if res_cash.data and len(res_cash.data) > 0:
-                df_cash_all = pd.DataFrame(res_cash.data)
-                total_pengeluaran_cash = df_cash_all["nominal"].sum()
-            else:
-                total_pengeluaran_cash = 0
-        except:
-            total_pengeluaran_cash = 0
-        
-        total_pengeluaran = total_pengeluaran_bank + total_pengeluaran_cash
-        
-        # Data untuk chart
-        df_cf = pd.DataFrame({
-            "Tipe": ["Pemasukan", "Pengeluaran Bank", "Pengeluaran Cash", "Pending"],
-            "Nominal": [total_pemasukan, total_pengeluaran_bank, total_pengeluaran_cash, total_pend],
-            "Warna": ["#10B981", "#3B82F6", "#10B981", "#F59E0B"]
-        })
-        
-        # Bar chart
-        fig_cf = px.bar(
-            df_cf,
-            x="Tipe",
-            y="Nominal",
-            color="Tipe",
-            text_auto=".0f",
-            color_discrete_map={
-                "Pemasukan": "#10B981",
-                "Pengeluaran Bank": "#3B82F6",
-                "Pengeluaran Cash": "#10B981",
-                "Pending": "#F59E0B"
-            },
-            title="Arus Kas (Bank vs Cash)"
-        )
-        fig_cf.update_traces(
-            texttemplate="Rp %{y:,.0f}",
-            textposition="outside",
-            hovertemplate="%{x}<br>Rp %{y:,.0f}<extra></extra>"
-        )
-        fig_cf.update_layout(**PLOT)
-        st.plotly_chart(fig_cf, use_container_width=True)
-        
-        # Gauge chart untuk saldo operasional
-        col_g1, col_g2 = st.columns(2)
-        
-        with col_g1:
-            fig_gauge = go.Figure(go.Indicator(
-                mode="gauge+number+delta",
-                value=saldo_op,
-                delta={"reference": REAL_OPERASIONAL + UANG_CASH, "valueformat": ",.0f"},
-                title={"text": "Saldo Operasional", "font": {"color": "#F1F5F9"}},
-                number={"prefix": "Rp ", "valueformat": ",.0f", "font": {"color": "#F1F5F9"}},
-                gauge={
-                    "axis": {"range": [0, REAL_OPERASIONAL + UANG_CASH], "tickcolor": "#94A3B8"},
-                    "bar": {"color": "#10B981"},
-                    "bgcolor": "#0F172A",
-                    "bordercolor": "#334155",
-                    "steps": [
-                        {"range": [0, (REAL_OPERASIONAL + UANG_CASH) * 0.3], "color": "rgba(239,68,68,0.2)"},
-                        {"range": [(REAL_OPERASIONAL + UANG_CASH) * 0.3, (REAL_OPERASIONAL + UANG_CASH) * 0.7], "color": "rgba(245,158,11,0.2)"},
-                        {"range": [(REAL_OPERASIONAL + UANG_CASH) * 0.7, REAL_OPERASIONAL + UANG_CASH], "color": "rgba(16,185,129,0.2)"}
-                    ],
-                    "threshold": {
-                        "line": {"color": "#F59E0B", "width": 4},
-                        "thickness": 0.75,
-                        "value": (REAL_OPERASIONAL + UANG_CASH) * 0.3
-                    }
+with g3:
+    st.subheader("⚖️ Ringkasan Arus Kas")
+    
+    # ===== HITUNG DARI SATU SUMBER (transaksi) =====
+    # Pemasukan (semua)
+    total_pemasukan = df_asli[df_asli["Tipe"] == "Pemasukan"]["Nominal"].sum()
+    
+    # Pengeluaran Bank (Sumber = Bank, bukan pending)
+    total_pengeluaran_bank = df_asli[
+        (df_asli["Tipe"] == "Pengeluaran") & 
+        (df_asli["Sumber"] == "Bank") &
+        ~((df_asli["Kategori"] == "Scheduled Settlement") & (df_asli["Status"] == "Pending"))
+    ]["Nominal"].sum()
+    
+    # Pengeluaran Cash (Sumber = Cash, bukan pending)
+    total_pengeluaran_cash = df_asli[
+        (df_asli["Tipe"] == "Pengeluaran") & 
+        (df_asli["Sumber"] == "Cash") &
+        ~((df_asli["Kategori"] == "Scheduled Settlement") & (df_asli["Status"] == "Pending"))
+    ]["Nominal"].sum()
+    
+    # Pending (Scheduled Settlement yang masih pending)
+    total_pending = df_asli[
+        (df_asli["Tipe"] == "Pengeluaran") & 
+        (df_asli["Kategori"] == "Scheduled Settlement") & 
+        (df_asli["Status"] == "Pending")
+    ]["Nominal"].sum()
+    
+    # ===== BUAT DATAFRAME UNTUK CHART =====
+    df_cf = pd.DataFrame({
+        "Tipe": ["Pemasukan", "Pengeluaran Bank", "Pengeluaran Cash", "Pending"],
+        "Nominal": [total_pemasukan, total_pengeluaran_bank, total_pengeluaran_cash, total_pending],
+    })
+    
+    # ===== BUAT BAR CHART =====
+    fig_cf = px.bar(
+        df_cf,
+        x="Tipe",
+        y="Nominal",
+        color="Tipe",
+        text_auto=".0f",
+        color_discrete_map={
+            "Pemasukan": "#10B981",           # Hijau
+            "Pengeluaran Bank": "#3B82F6",     # Biru
+            "Pengeluaran Cash": "#F59E0B",     # Oranye (biar beda sama pemasukan)
+            "Pending": "#EF4444"                # Merah
+        },
+        title="Arus Kas (Bank vs Cash)"
+    )
+    
+    # Update tampilan chart
+    fig_cf.update_traces(
+        texttemplate="Rp %{y:,.0f}",
+        textposition="outside",
+        hovertemplate="%{x}<br>Rp %{y:,.0f}<extra></extra>"
+    )
+    
+    fig_cf.update_layout(
+        xaxis_title="",
+        yaxis_title="Nominal (Rp)",
+        showlegend=False,
+        margin=dict(l=100, r=50, t=50, b=50),  # Margin kiri diperbesar biar angka gak kepotong
+        paper_bgcolor="#1E293B",
+        plot_bgcolor="#0F172A",
+        font_color="#94A3B8",
+        font_size=12,
+        xaxis=dict(gridcolor="#334155"),
+        yaxis=dict(gridcolor="#334155", tickformat=",.0f")
+    )
+    
+    st.plotly_chart(fig_cf, use_container_width=True)
+    
+    # ===== TAMPILKAN ANGKA DETAIL DI BAWAH =====
+    col_a1, col_a2, col_a3, col_a4 = st.columns(4)
+    with col_a1:
+        st.metric("💰 Pemasukan", f"Rp {total_pemasukan:,.0f}")
+    with col_a2:
+        st.metric("🏦 Pengeluaran Bank", f"Rp {total_pengeluaran_bank:,.0f}")
+    with col_a3:
+        st.metric("💵 Pengeluaran Cash", f"Rp {total_pengeluaran_cash:,.0f}")
+    with col_a4:
+        st.metric("⏳ Pending", f"Rp {total_pending:,.0f}")
+    
+    # ===== GAUGE CHART UNTUK SALDO OPERASIONAL (TETAP) =====
+    col_g1, col_g2 = st.columns(2)
+    
+    with col_g1:
+        fig_gauge = go.Figure(go.Indicator(
+            mode="gauge+number+delta",
+            value=saldo_op,
+            delta={"reference": REAL_OPERASIONAL + UANG_CASH, "valueformat": ",.0f"},
+            title={"text": "Saldo Operasional", "font": {"color": "#F1F5F9"}},
+            number={"prefix": "Rp ", "valueformat": ",.0f", "font": {"color": "#F1F5F9"}},
+            gauge={
+                "axis": {"range": [0, REAL_OPERASIONAL + UANG_CASH], "tickcolor": "#94A3B8"},
+                "bar": {"color": "#10B981"},
+                "bgcolor": "#0F172A",
+                "bordercolor": "#334155",
+                "steps": [
+                    {"range": [0, (REAL_OPERASIONAL + UANG_CASH) * 0.3], "color": "rgba(239,68,68,0.2)"},
+                    {"range": [(REAL_OPERASIONAL + UANG_CASH) * 0.3, (REAL_OPERASIONAL + UANG_CASH) * 0.7], "color": "rgba(245,158,11,0.2)"},
+                    {"range": [(REAL_OPERASIONAL + UANG_CASH) * 0.7, REAL_OPERASIONAL + UANG_CASH], "color": "rgba(16,185,129,0.2)"}
+                ],
+                "threshold": {
+                    "line": {"color": "#F59E0B", "width": 4},
+                    "thickness": 0.75,
+                    "value": (REAL_OPERASIONAL + UANG_CASH) * 0.3
                 }
-            ))
-            fig_gauge.update_layout(
-                paper_bgcolor="#1E293B",
-                font_color="#94A3B8",
-                height=300,
-                margin=dict(l=30, r=30, t=50, b=10)
-            )
-            st.plotly_chart(fig_gauge, use_container_width=True)
-        
-        with col_g2:
-            # Statistik tambahan
-            st.markdown("### 💰 Rincian")
-            st.markdown(f"""
-            <div style="background:#1E293B; padding:20px; border-radius:10px; border:1px solid #334155;">
-                <p style="color:#94A3B8; margin:0;">Total Aset</p>
-                <p style="color:#F1F5F9; font-size:24px; font-weight:700;">Rp {total_real:,.0f}</p>
-                <hr style="border-color:#334155;">
-                <p style="color:#94A3B8; margin:0;">Bank</p>
-                <p style="color:#3B82F6; font-size:20px;">Rp {SALDO_BANK:,.0f}</p>
-                <p style="color:#94A3B8; margin:0;">Cash</p>
-                <p style="color:#10B981; font-size:20px;">Rp {UANG_CASH:,.0f}</p>
-                <hr style="border-color:#334155;">
-                <p style="color:#94A3B8; margin:0;">Tabungan</p>
-                <p style="color:#F59E0B; font-size:20px;">Rp {TABUNGAN:,.0f}</p>
-            </div>
-            """, unsafe_allow_html=True)
+            }
+        ))
+        fig_gauge.update_layout(
+            paper_bgcolor="#1E293B",
+            font_color="#94A3B8",
+            height=300,
+            margin=dict(l=30, r=30, t=50, b=10)
+        )
+        st.plotly_chart(fig_gauge, use_container_width=True)
+    
 
 with tab_budget_t:
     st.subheader("🎯 Budget Target per Kategori")
@@ -2619,59 +2636,7 @@ else:
         st.rerun()
 
 
-with st.sidebar.expander("🔍 DEBUG FILTER TANGGAL", expanded=True):
-    st.write("### Informasi Sistem")
-    st.write(f"🕒 `datetime.datetime.now()`: {datetime.datetime.now()}")
-    st.write(f"📅 `hari_ini_wib`: {hari_ini_wib}")
-    st.write(f"📅 `hari_ini_wib`: {hari_ini_wib if 'now' in locals() else 'now not defined'}")
-    
-    # Cek timezone
-    try:
-        st.write(f"🕒 Timezone: {datetime.datetime.now().astimezone().tzinfo}")
-    except:
-        pass
-    
-    st.write("### Data di DataFrame")
-    if not df_asli.empty:
-        # Tampilkan 5 transaksi terakhir
-        st.write("**5 Transaksi Terakhir:**")
-        st.dataframe(df_asli[["Tanggal", "Tipe", "Nominal", "Sumber"]].head(5))
-        
-        # Tampilkan unique dates
-        unique_dates = sorted(df_asli["Tanggal"].unique(), reverse=True)
-        st.write(f"**Semua tanggal di database:** {unique_dates}")
-        
-        # Cek tanggal hari ini di database
-        today_str = hari_ini_wib.strftime("%Y-%m-%d")
-        st.write(f"**Tanggal hari ini (menurut sistem):** {today_str}")
-        
-        if today_str in df_asli["Tanggal"].values:
-            st.success(f"✅ Tanggal {today_str} ADA di database")
-            df_today = df_asli[df_asli["Tanggal"] == today_str]
-            st.dataframe(df_today[["Tipe", "Nominal", "Kategori"]])
-        else:
-            st.error(f"❌ Tanggal {today_str} TIDAK ADA di database")
-            st.write("Data terakhir di database:", unique_dates[0] if unique_dates else "Tidak ada data")
-    
-    st.write("### Hasil Filter `out_hari`")
-    if 'out_hari' in locals():
-        st.write(f"📊 `out_hari`: Rp {out_hari:,.0f}")
-        st.write(f"📊 `out_hari_bank`: Rp {out_hari_bank:,.0f}")
-        st.write(f"📊 `out_hari_cash`: Rp {out_hari_cash:,.0f}")
-    else:
-        st.error("❌ Variabel `out_hari` belum didefinisikan!")
-    
-    st.write("### Query Langsung ke Supabase")
-    today_str = hari_ini_wib.strftime("%Y-%m-%d")
-    try:
-        res = conn.table("transaksi").select("*").eq("tanggal", today_str).execute()
-        st.write(f"**Data dari Supabase untuk {today_str}:**")
-        st.write(f"Jumlah: {len(res.data)} transaksi")
-        if res.data:
-            for d in res.data:
-                st.write(f"- {d['tanggal']} | {d['tipe']} | {d['kategori']} | Rp {d['nominal']:,.0f}")
-    except Exception as e:
-        st.error(f"Error query: {e}")
+
 
 st.markdown("---")
 st.markdown("""<div style="text-align:center;color:#334155;font-size:.75rem;padding:10px 0;">
