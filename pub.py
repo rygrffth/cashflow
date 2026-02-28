@@ -1986,19 +1986,20 @@ lc, rc = st.columns([1.2, 1])
 with lc:
     st.subheader("📝 Catat Transaksi Baru")
     with st.form("form_transaksi", clear_on_submit=True):
-      
+        
+        # ===== BARIS 1: TANGGAL DAN TIPE =====
         col_f1, col_f2 = st.columns(2)
         with col_f1:
             tgl_i = st.date_input("📅 Tanggal", datetime.date.today())
         with col_f2:
             tipe_i = st.selectbox("📊 Tipe", ["Pengeluaran", "Pemasukan"])
         
-       
+        # ===== BARIS 2: SUMBER DANA DAN KATEGORI =====
         col_f3, col_f4 = st.columns(2)
         with col_f3:
             sumber_i = st.selectbox("💰 Sumber Dana", ["Bank", "Cash"], index=0)
         with col_f4:
-   
+            # Kategori dengan opsi manual
             kategori_options = [
                 "Makan (Sahur/Buka)", 
                 "Bensin / Mobilitas", 
@@ -2009,17 +2010,19 @@ with lc:
             ]
             pil_k = st.selectbox("🏷️ Kategori", kategori_options)
         
-
+        # ===== INPUT MANUAL UNTUK KATEGORI LAINNYA =====
+        kat_f = pil_k
         if pil_k == "Lainnya (Ketik Manual...)":
-            kat_f = st.text_input("✏️ Nama Kategori Baru", placeholder="Contoh: Beli Buku, Hadiah, dll")
-        else:
-            kat_f = pil_k
+            kat_f = st.text_input("✏️ Nama Kategori Baru", placeholder="Contoh: Beli Buku, Hadiah, Belanja Online, dll")
         
-      
+        # ===== SCHEDULED SETTLEMENT =====
         st_i, tg_i, tb_i = "Cleared", "", ""
         
-        if kat_f == "Scheduled Settlement":
+        is_scheduled = (kat_f == "Scheduled Settlement")
+        
+        if is_scheduled:
             st.info("📌 Dana Pending tidak memotong saldo sampai di-set 'Cleared'.")
+            
             col_s1, col_s2 = st.columns(2)
             with col_s1:
                 st_i = st.selectbox("⏳ Status", ["Pending", "Cleared"], index=0)
@@ -2030,22 +2033,58 @@ with lc:
             if st_i == "Cleared":
                 tb_i = tgl_i.strftime("%Y-%m-%d")
         
- 
+        # ===== NOMINAL DAN CATATAN =====
         nom_i = st.number_input("💰 Nominal (Rp)", min_value=0, step=5000, format="%d")
         cat_i = st.text_input("📝 Catatan", placeholder="Contoh: Beli makan siang, Isi bensin, dll")
-
-   
+        
+        # ===== TOMBOL SUBMIT =====
         submitted = st.form_submit_button("💾 Simpan Transaksi", use_container_width=True)
         
         if submitted:
+            # ===== VALIDASI AWAL =====
+            error = False
+            
+            # Validasi nominal
             if nom_i <= 0:
                 st.warning("⚠️ Nominal harus lebih dari 0!")
-            elif pil_k == "Lainnya (Ketik Manual...)" and not kat_f.strip():
+                error = True
+            
+            # Validasi kategori manual
+            elif pil_k == "Lainnya (Ketik Manual...)" and (not kat_f or kat_f.strip() == ""):
                 st.warning("⚠️ Silakan isi nama kategori baru!")
-            elif kat_f == "Scheduled Settlement" and st_i == "Pending" and not tg_i:
-                st.warning("⚠️ Isi tanggal jatuh tempo untuk pending settlement!")
-            else:
-              
+                error = True
+            
+            # Validasi jatuh tempo untuk pending settlement
+            elif is_scheduled and st_i == "Pending" and not tg_i:
+                st.warning("⚠️ Isi tenggat untuk pending settlement!")
+                error = True
+            
+            # ===== VALIDASI SALDO =====
+            if not error:
+                # CEK BANK - PENGELUARAN
+                if sumber_i == "Bank" and tipe_i == "Pengeluaran":
+                    if nom_i > SALDO_BANK:
+                        st.error(f"❌ Saldo bank tidak cukup! (Sisa: Rp {SALDO_BANK:,.0f})")
+                        error = True
+                
+                # CEK BANK - PEMASUKAN (selalu valid)
+                elif sumber_i == "Bank" and tipe_i == "Pemasukan":
+                    pass  # Pemasukan bank selalu valid
+                
+                # CEK CASH - PENGELUARAN
+                elif sumber_i == "Cash" and tipe_i == "Pengeluaran":
+                    cash_sekarang = load_cash_cloud()
+                    if nom_i > cash_sekarang:
+                        st.error(f"❌ Saldo cash tidak cukup! (Sisa: Rp {cash_sekarang:,.0f})")
+                        error = True
+                
+                # CEK CASH - PEMASUKAN (selalu valid)
+                elif sumber_i == "Cash" and tipe_i == "Pemasukan":
+                    pass  # Pemasukan cash selalu valid
+            
+            # ===== PROSES TRANSAKSI =====
+            if not error:
+                # Siapkan data transaksi
                 nr = {
                     "Tanggal": tgl_i.strftime("%Y-%m-%d"),
                     "Tipe": tipe_i,
@@ -2053,24 +2092,33 @@ with lc:
                     "Nominal": nom_i,
                     "Catatan": cat_i,
                     "Status": st_i,
-                    "Tenggat_Waktu": tg_i,
-                    "Tanggal_Bayar": tb_i,
-                    "Sumber": sumber_i 
+                    "Tenggat_Waktu": tg_i if tg_i else "",
+                    "Tanggal_Bayar": tb_i if tb_i else "",
+                    "Sumber": sumber_i  # <-- INI PENTING! Membedakan Bank/Cash
                 }
                 
-           
+                # ===== UPDATE SALDO CASH =====
                 if sumber_i == "Cash":
+                    cash_sekarang = load_cash_cloud()
+                    
                     if tipe_i == "Pengeluaran":
-                       
-                        UANG_CASH_sekarang = load_cash_cloud()
-                        update_cash_cloud(UANG_CASH_sekarang - nom_i, f"Transaksi: {cat_i}")
+                        # KURANGI CASH
+                        cash_baru = cash_sekarang - nom_i
+                        update_cash_cloud(cash_baru, f"Transaksi: {cat_i}")
+                        # Debug (bisa dihapus)
+                        st.sidebar.write(f"Cash: {cash_sekarang} - {nom_i} = {cash_baru}")
+                    
                     elif tipe_i == "Pemasukan":
-                      
-                        UANG_CASH_sekarang = load_cash_cloud()
-                        update_cash_cloud(UANG_CASH_sekarang + nom_i, f"Pemasukan cash: {cat_i}")
+                        # TAMBAH CASH
+                        cash_baru = cash_sekarang + nom_i
+                        update_cash_cloud(cash_baru, f"Pemasukan cash: {cat_i}")
+                        # Debug (bisa dihapus)
+                        st.sidebar.write(f"Cash: {cash_sekarang} + {nom_i} = {cash_baru}")
                 
+                # ===== SIMPAN KE DATABASE =====
                 save_to_cloud(nr)
                 
+                # Update dataframe lokal
                 df_asli = pd.concat([df_asli, pd.DataFrame([nr])], ignore_index=True)
                 save_data(df_asli)
                 
