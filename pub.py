@@ -2177,7 +2177,7 @@ with f2:
     fs = st.selectbox("Filter Status", ["Semua", "Cleared", "Pending"], key="log_filter_status")
 
 with f3:
-    # Filter SUMBER (BARU!)
+    # Filter SUMBER
     fsumber = st.selectbox("Filter Sumber", ["Semua", "Bank", "Cash"], key="log_filter_sumber")
 
 with f4:
@@ -2185,6 +2185,7 @@ with f4:
     fk = st.selectbox("Filter Kategori", kl, key="log_filter_kategori")
 
 if not df_asli.empty:
+    # Siapkan dataframe untuk ditampilkan
     de = df_asli.drop(columns=[c for c in ["Tanggal_dt", "Cashflow_Date"] if c in df_asli.columns], errors='ignore').iloc[::-1].reset_index(drop=True)
     
     # Apply filters
@@ -2192,54 +2193,97 @@ if not df_asli.empty:
         de = de[de["Tipe"] == ft]
     if fs != "Semua":
         de = de[de["Status"] == fs]
-    if fsumber != "Semua" and "Sumber" in de.columns:  # FILTER SUMBER
+    if fsumber != "Semua" and "Sumber" in de.columns:
         de = de[de["Sumber"] == fsumber]
     if fk != "Semua":
         de = de[de["Kategori"] == fk]
     
+    # Format kolom tanggal
     for c in ["Tanggal", "Tenggat_Waktu", "Tanggal_Bayar"]:
         if c in de.columns:
             de[c] = pd.to_datetime(de[c], errors="coerce").dt.date
     
     st.caption(f"Menampilkan {len(de)} transaksi")
     
+    # Data editor dengan kolom lengkap
     rd = st.data_editor(
         de,
         use_container_width=True,
         num_rows="dynamic",
         column_config={
-            "Status": st.column_config.SelectboxColumn("Status", options=["Pending", "Cleared"], required=True),
-            "Nominal": st.column_config.NumberColumn("Nominal (Rp)", format="Rp %d"),
+            "Tanggal": st.column_config.DateColumn("Tanggal", format="YYYY-MM-DD"),
             "Tipe": st.column_config.SelectboxColumn("Tipe", options=["Pengeluaran", "Pemasukan"], required=True),
-            "Sumber": st.column_config.SelectboxColumn("Sumber", options=["Bank", "Cash"], required=True),  # TAMBAH INI
-        }
+            "Kategori": st.column_config.TextColumn("Kategori"),
+            "Nominal": st.column_config.NumberColumn("Nominal (Rp)", format="Rp %d", step=1000),
+            "Catatan": st.column_config.TextColumn("Catatan"),
+            "Status": st.column_config.SelectboxColumn("Status", options=["Pending", "Cleared"], required=True),
+            "Sumber": st.column_config.SelectboxColumn("Sumber", options=["Bank", "Cash"], required=True),
+            "Tenggat_Waktu": st.column_config.DateColumn("Tenggat", format="YYYY-MM-DD"),
+            "Tanggal_Bayar": st.column_config.DateColumn("Tgl Bayar", format="YYYY-MM-DD"),
+        },
+        hide_index=True
     )
     
     # Tombol Update Database
-    if st.button("💾 Update Database"):
-        fn = rd.iloc[::-1].reset_index(drop=True)
-        
-        for c in ["Tanggal", "Tenggat_Waktu", "Tanggal_Bayar"]:
-            if c in fn.columns:
-                fn[c] = fn[c].apply(lambda x: x.strftime("%Y-%m-%d") if pd.notnull(x) and hasattr(x, 'strftime') else (str(x) if pd.notnull(x) else ""))
-        
-        for i, r in fn.iterrows():
-            if r["Status"] == "Cleared" and str(r.get("Tanggal_Bayar", "")).strip() == "":
-                fn.at[i, "Tanggal_Bayar"] = datetime.date.today().strftime("%Y-%m-%d")
-        
-        save_data(fn)
-        
-        try:
-            data_update = fn.to_dict(orient="records")
-            data_update = [{k.lower(): v for k, v in r.items()} for r in data_update]
-            conn.table("transaksi").delete().neq("id", -1).execute() 
-            conn.table("transaksi").insert(data_update).execute()    
+    col_btn1, col_btn2, col_btn3 = st.columns([1, 1, 2])
+    
+    with col_btn1:
+        if st.button("💾 Update Database", use_container_width=True):
+            fn = rd.copy()
             
+            # Format tanggal ke string untuk disimpan
+            for c in ["Tanggal", "Tenggat_Waktu", "Tanggal_Bayar"]:
+                if c in fn.columns:
+                    fn[c] = fn[c].apply(lambda x: x.strftime("%Y-%m-%d") if pd.notnull(x) and hasattr(x, 'strftime') else "")
+            
+            # Isi Tanggal_Bayar jika kosong dan status Cleared
+            for i, r in fn.iterrows():
+                if r["Status"] == "Cleared" and (pd.isna(r.get("Tanggal_Bayar")) or str(r.get("Tanggal_Bayar", "")).strip() == ""):
+                    fn.at[i, "Tanggal_Bayar"] = datetime.date.today().strftime("%Y-%m-%d")
+            
+            # Simpan ke CSV
+            save_data(fn)
+            
+            # Update ke Cloud
+            try:
+                data_update = fn.to_dict(orient="records")
+                data_update = [{k.lower(): v for k, v in r.items()} for r in data_update]
+                
+                # Hapus semua data lama di cloud
+                conn.table("transaksi").delete().neq("id", -1).execute()
+                
+                # Insert data baru
+                if data_update:
+                    conn.table("transaksi").insert(data_update).execute()
+                
+                st.cache_data.clear()
+                st.success(f"✅ {len(data_update)} transaksi berhasil diupdate ke Cloud & Lokal!")
+                st.rerun()
+            except Exception as e:
+                st.error(f"Gagal update cloud: {e}")
+    
+    with col_btn2:
+        if st.button("🔄 Refresh", use_container_width=True):
             st.cache_data.clear()
-            st.success("✅ Database Cloud & Lokal berhasil diupdate!")
             st.rerun()
-        except Exception as e:
-            st.error(f"Gagal update cloud: {e}")
+    
+    # Statistik singkat
+    with st.expander("📊 Statistik Log", expanded=False):
+        col_stat1, col_stat2, col_stat3, col_stat4 = st.columns(4)
+        
+        with col_stat1:
+            st.metric("Total Transaksi", len(de))
+        with col_stat2:
+            total_nominal = de["Nominal"].sum()
+            st.metric("Total Nominal", f"Rp {total_nominal:,.0f}")
+        with col_stat3:
+            if "Sumber" in de.columns:
+                cash_count = len(de[de["Sumber"] == "Cash"])
+                st.metric("Transaksi Cash", cash_count)
+        with col_stat4:
+            if "Sumber" in de.columns:
+                bank_count = len(de[de["Sumber"] == "Bank"])
+                st.metric("Transaksi Bank", bank_count)
 
 
 st.markdown("---")
