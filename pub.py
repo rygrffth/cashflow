@@ -924,11 +924,77 @@ elif persentase < 90:
 else:
     st.error(f"🔴 KRITIS! Budget hampir habis! Sisa Rp {sisa_budget:,.0f}")
 
-# Tips berdasarkan sisa hari
+# ===== FITUR SIMULASI JAJAN =====
+st.markdown("---")
+st.subheader("🔮 Simulasi Jajan")
+
+col_sim1, col_sim2 = st.columns(2)
+
+with col_sim1:
+    # Input untuk simulasi
+    simulasi_jajan = st.number_input(
+        "💰 Coba kalau jajan hari ini (Rp)",
+        min_value=0,
+        max_value=int(saldo_op + out_hari),  # Max total saldo
+        value=int(out_hari),
+        step=5000,
+        key="simulasi_jajan"
+    )
+    
+    # Hitung dampak simulasi
+    if simulasi_jajan > out_hari:
+        selisih = simulasi_jajan - out_hari
+        sisa_setelah_jajan = sisa_budget - selisih
+        persentase_setelah = (simulasi_jajan / batas_hr * 100) if batas_hr > 0 else 0
+    else:
+        selisih = out_hari - simulasi_jajan
+        sisa_setelah_jajan = sisa_budget + selisih
+        persentase_setelah = (simulasi_jajan / batas_hr * 100) if batas_hr > 0 else 0
+
+with col_sim2:
+    st.markdown(f"""
+    <div class="card">
+        <p class="card-label">📊 HASIL SIMULASI</p>
+        <p class="card-value" style="color:#F59E0B;">Rp {simulasi_jajan:,.0f}</p>
+        <p class="card-sub">Kalau jajan segini</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+# Tampilkan dampak simulasi
+col_dampak1, col_dampak2, col_dampak3 = st.columns(3)
+
+with col_dampak1:
+    if sisa_setelah_jajan >= 0:
+        st.success(f"✅ Sisa: Rp {sisa_setelah_jajan:,.0f}")
+    else:
+        st.error(f"❌ Defisit: Rp {abs(sisa_setelah_jajan):,.0f}")
+
+with col_dampak2:
+    warna_persen = "#10B981" if persentase_setelah <= 100 else "#EF4444"
+    st.markdown(f"<span style='color:{warna_persen}; font-weight:bold;'>{persentase_setelah:.1f}%</span> dari budget", unsafe_allow_html=True)
+
+with col_dampak3:
+    if persentase_setelah <= 100:
+        sisa_hari_setelah = (saldo_op - (out_hari - (simulasi_jajan - out_hari))) / SISA_HARI if SISA_HARI > 0 else 0
+        st.info(f"📅 Limit besok: Rp {sisa_hari_setelah:,.0f}")
+    else:
+        st.error("🚫 Melebihi budget!")
+
+# Rekomendasi berdasarkan simulasi
+if simulasi_jajan > out_hari:
+    if sisa_setelah_jajan >= 0:
+        st.warning(f"⚠️ Kalau jajan Rp {simulasi_jajan:,.0f}, sisa budget jadi Rp {sisa_setelah_jajan:,.0f}")
+    else:
+        st.error(f"🚨 JANGAN! Defisit Rp {abs(sisa_setelah_jajan):,.0f}!")
+else:
+    if sisa_setelah_jajan > sisa_budget:
+        st.success(f"🎉 Hemat Rp {selisih:,.0f}! Sisa jadi Rp {sisa_setelah_jajan:,.0f}")
+
+# ===== TIPS BERDASARKAN SISA HARI =====
 st.markdown("---")
 st.subheader("💡 Tips Hari Ini")
 
-with st.expander("📈 Rata-rata Pengeluaran", expanded=False):
+with st.expander("📈 Rata-rata & Proyeksi", expanded=False):
     avg_per_hari = out_bulan / 30 if out_bulan > 0 else 0
     proyeksi_akhir = avg_per_hari * SISA_HARI
     
@@ -943,7 +1009,7 @@ with st.expander("📈 Rata-rata Pengeluaran", expanded=False):
     else:
         st.success(f"✅ Proyeksi surplus Rp {saldo_op - proyeksi_akhir:,.0f}")
 
-# Rekomendasi jajan
+# Rekomendasi jajan berdasarkan sisa budget
 st.subheader("🛒 Rekomendasi Jajan Hari Ini")
 
 if sisa_budget <= 0:
