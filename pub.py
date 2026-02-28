@@ -2196,6 +2196,11 @@ except Exception as e:
     st.error(f"Error: {e}")
     df_tampil = pd.DataFrame()
 
+# ===== AMBIL SEMUA KATEGORI UNIK UNTUK DROPDOWN =====
+semua_kategori = []
+if not df_tampil.empty:
+    semua_kategori = sorted(df_tampil["Kategori"].dropna().unique().tolist())
+
 # ===== TAMPILKAN DATA =====
 if not df_tampil.empty:
     # Filter
@@ -2224,14 +2229,18 @@ if not df_tampil.empty:
         if col in df_filter.columns:
             df_filter[col] = pd.to_datetime(df_filter[col], errors="coerce").dt.date
     
-    # ===== DATA EDITOR DENGAN FITUR HAPUS =====
+    # ===== DATA EDITOR DENGAN DROPDOWN KATEGORI =====
     st.caption(f"Total: {len(df_filter)} transaksi")
     
     # Konfigurasi kolom untuk data editor
     column_config = {
         "Tanggal": st.column_config.DateColumn("Tanggal", format="YYYY-MM-DD"),
         "Tipe": st.column_config.SelectboxColumn("Tipe", options=["Pengeluaran", "Pemasukan"], required=True),
-        "Kategori": st.column_config.TextColumn("Kategori"),
+        "Kategori": st.column_config.SelectboxColumn(  # <-- UBAH JADI SELECTBOX
+            "Kategori", 
+            options=semua_kategori + ["Lainnya (Ketik Manual...)"],  # Tambah opsi manual
+            required=True
+        ),
         "Nominal": st.column_config.NumberColumn("Nominal (Rp)", format="Rp %d", step=1000),
         "Catatan": st.column_config.TextColumn("Catatan"),
         "Sumber": st.column_config.SelectboxColumn("Sumber", options=["Bank", "Cash"], required=True),
@@ -2244,11 +2253,24 @@ if not df_tampil.empty:
     edited_df = st.data_editor(
         df_filter,
         use_container_width=True,
-        num_rows="dynamic",  # <-- INI MEMUNGKINKAN HAPUS/TAMBAH BARIS
+        num_rows="dynamic",  # Bisa hapus/tambah baris
         column_config=column_config,
         hide_index=True,
         key="log_data_editor"
     )
+    
+    # ===== HANDLE KATEGORI MANUAL =====
+    # Cek apakah ada baris dengan kategori "Lainnya (Ketik Manual...)"
+    if not edited_df.empty and "Lainnya (Ketik Manual...)" in edited_df["Kategori"].values:
+        st.warning("⚠️ Ada kategori 'Lainnya' yang perlu diisi manual")
+        
+        # Tampilkan form untuk input manual
+        with st.expander("✏️ Isi Kategori Manual", expanded=True):
+            for idx, row in edited_df[edited_df["Kategori"] == "Lainnya (Ketik Manual...)"].iterrows():
+                st.write(f"**Baris {idx}** - Nominal: Rp {row['Nominal']:,.0f}")
+                kategori_baru = st.text_input(f"Kategori baru untuk baris ini", key=f"kategori_manual_{idx}")
+                if kategori_baru:
+                    edited_df.at[idx, "Kategori"] = kategori_baru
     
     # ===== TOMBOL SIMPAN PERUBAHAN =====
     col_simpan1, col_simpan2, col_simpan3 = st.columns([1, 1, 2])
@@ -2257,47 +2279,51 @@ if not df_tampil.empty:
         if st.button("💾 Simpan Perubahan", use_container_width=True):
             with st.spinner("Menyimpan ke database..."):
                 try:
-                    # Konversi kembali ke format database
-                    data_to_save = edited_df.copy()
-                    
-                    # Format tanggal ke string
-                    for col in ["Tanggal", "Tenggat_Waktu", "Tanggal_Bayar"]:
-                        if col in data_to_save.columns:
-                            data_to_save[col] = data_to_save[col].apply(
-                                lambda x: x.strftime("%Y-%m-%d") if pd.notnull(x) and hasattr(x, 'strftime') else ""
-                            )
-                    
-                    # Rename ke lowercase untuk Supabase
-                    data_to_save = data_to_save.rename(columns={
-                        "Tanggal": "tanggal",
-                        "Tipe": "tipe",
-                        "Kategori": "kategori",
-                        "Nominal": "nominal",
-                        "Catatan": "catatan",
-                        "Status": "status",
-                        "Tenggat_Waktu": "tenggat_waktu",
-                        "Tanggal_Bayar": "tanggal_bayar",
-                        "Sumber": "sumber"
-                    })
-                    
-                    # Hapus kolom yang tidak ada di database
-                    cols_to_keep = ["tanggal", "tipe", "kategori", "nominal", 
-                                   "catatan", "status", "tenggat_waktu", "tanggal_bayar", "sumber"]
-                    data_to_save = data_to_save[[c for c in cols_to_keep if c in data_to_save.columns]]
-                    
-                    records = data_to_save.to_dict(orient="records")
-                    
-                    # Hapus semua data lama
-                    conn.table("transaksi").delete().neq("id", -1).execute()
-                    
-                    # Insert data baru
-                    if records:
-                        conn.table("transaksi").insert(records).execute()
-                    
-                    st.success(f"✅ {len(records)} transaksi berhasil disimpan!")
-                    st.cache_data.clear()
-                    st.rerun()
-                    
+                    # Validasi tidak ada kategori "Lainnya" yang belum diisi
+                    if "Lainnya (Ketik Manual...)" in edited_df["Kategori"].values:
+                        st.error("❌ Masih ada kategori 'Lainnya' yang belum diisi!")
+                    else:
+                        # Konversi kembali ke format database
+                        data_to_save = edited_df.copy()
+                        
+                        # Format tanggal ke string
+                        for col in ["Tanggal", "Tenggat_Waktu", "Tanggal_Bayar"]:
+                            if col in data_to_save.columns:
+                                data_to_save[col] = data_to_save[col].apply(
+                                    lambda x: x.strftime("%Y-%m-%d") if pd.notnull(x) and hasattr(x, 'strftime') else ""
+                                )
+                        
+                        # Rename ke lowercase untuk Supabase
+                        data_to_save = data_to_save.rename(columns={
+                            "Tanggal": "tanggal",
+                            "Tipe": "tipe",
+                            "Kategori": "kategori",
+                            "Nominal": "nominal",
+                            "Catatan": "catatan",
+                            "Status": "status",
+                            "Tenggat_Waktu": "tenggat_waktu",
+                            "Tanggal_Bayar": "tanggal_bayar",
+                            "Sumber": "sumber"
+                        })
+                        
+                        # Hapus kolom yang tidak ada di database
+                        cols_to_keep = ["tanggal", "tipe", "kategori", "nominal", 
+                                       "catatan", "status", "tenggat_waktu", "tanggal_bayar", "sumber"]
+                        data_to_save = data_to_save[[c for c in cols_to_keep if c in data_to_save.columns]]
+                        
+                        records = data_to_save.to_dict(orient="records")
+                        
+                        # Hapus semua data lama
+                        conn.table("transaksi").delete().neq("id", -1).execute()
+                        
+                        # Insert data baru
+                        if records:
+                            conn.table("transaksi").insert(records).execute()
+                        
+                        st.success(f"✅ {len(records)} transaksi berhasil disimpan!")
+                        st.cache_data.clear()
+                        st.rerun()
+                        
                 except Exception as e:
                     st.error(f"Error: {e}")
     
@@ -2367,7 +2393,6 @@ else:
             conn.table("transaksi").insert(data).execute()
         st.success("Contoh data ditambahkan!")
         st.rerun()
-        
 
 st.markdown("---")
 st.markdown("""<div style="text-align:center;color:#334155;font-size:.75rem;padding:10px 0;">
