@@ -1228,98 +1228,111 @@ tab_grafik, tab_budget_t, tab_piutang_t, tab_recurring_t, tab_laporan_t, tab_man
 with tab_grafik:
     g1, g2, g3 = st.tabs(["📈 Tren Harian", "🍩 Per Kategori", "⚖️ Arus Kas"])
 
+    
     with g1:
         st.subheader("📈 Tren Pengeluaran Harian (Bank + Cash)")
         
-        # Gabungkan data bank dan cash untuk grafik
-        df_bank = df_asli[mask_aktif].copy()
-        df_bank["Sumber"] = "Bank"
-        df_bank["Tanggal"] = df_bank["Tanggal_dt"].dt.date
-        df_bank = df_bank[["Tanggal", "Nominal", "Sumber"]]
+    df_bank = df_asli[
+        (df_asli["Tipe"] == "Pengeluaran") & 
+        (df_asli["Sumber"] == "Bank") &
+        ~((df_asli["Kategori"] == "Scheduled Settlement") & (df_asli["Status"] == "Pending"))
+    ].copy()
+    df_bank["Tanggal"] = pd.to_datetime(df_bank["Tanggal"]).dt.date
+    df_bank = df_bank.groupby("Tanggal")["Nominal"].sum().reset_index()
+    df_bank["Sumber"] = "Bank"
+    
+    # Data Cash
+    df_cash = df_asli[
+        (df_asli["Tipe"] == "Pengeluaran") & 
+        (df_asli["Sumber"] == "Cash") &
+        ~((df_asli["Kategori"] == "Scheduled Settlement") & (df_asli["Status"] == "Pending"))
+    ].copy()
+    df_cash["Tanggal"] = pd.to_datetime(df_cash["Tanggal"]).dt.date
+    df_cash = df_cash.groupby("Tanggal")["Nominal"].sum().reset_index()
+    df_cash["Sumber"] = "Cash"
+    
+    # Gabungkan
+    df_gabungan = pd.concat([df_bank, df_cash], ignore_index=True)
+    
+    if not df_gabungan.empty:
+        # Pivot untuk stacked bar
+        dt_pivot = df_gabungan.pivot_table(
+            index="Tanggal", 
+            columns="Sumber", 
+            values="Nominal", 
+            aggfunc="sum",
+            fill_value=0
+        ).reset_index()
         
-        # Load data cash
-        try:
-            res_cash = conn.table("penggunaan_cash").select("*").execute()
-            if res_cash.data and len(res_cash.data) > 0:
-                df_cash_g = pd.DataFrame(res_cash.data)
-                df_cash_g["Sumber"] = "Cash"
-                df_cash_g["Tanggal"] = pd.to_datetime(df_cash_g["tanggal"]).dt.date
-                df_cash_g["Nominal"] = df_cash_g["nominal"]
-                df_cash_g = df_cash_g[["Tanggal", "Nominal", "Sumber"]]
-                
-                # Gabungkan
-                df_gabungan = pd.concat([df_bank, df_cash_g], ignore_index=True)
-            else:
-                df_gabungan = df_bank
-        except:
-            df_gabungan = df_bank
+        dt_pivot["Total"] = dt_pivot[["Bank", "Cash"]].sum(axis=1)
+        dt_pivot = dt_pivot.sort_values("Tanggal")
         
-        if not df_gabungan.empty:
-            # Group by tanggal dan sumber
-            dt = df_gabungan.groupby(["Tanggal", "Sumber"])["Nominal"].sum().reset_index()
-            
-            # Pivot untuk stacked bar
-            dt_pivot = dt.pivot(index="Tanggal", columns="Sumber", values="Nominal").fillna(0)
-            dt_pivot["Total"] = dt_pivot.sum(axis=1)
-            dt_pivot = dt_pivot.reset_index().sort_values("Tanggal")
-            
-            # Buat figure
-            fig = go.Figure()
-            
-            if "Bank" in dt_pivot.columns:
-                fig.add_trace(go.Bar(
-                    x=dt_pivot["Tanggal"],
-                    y=dt_pivot["Bank"],
-                    name="Bank",
-                    marker_color="#3B82F6",
-                    hovertemplate="Bank: Rp %{y:,.0f}<extra></extra>"
-                ))
-            
-            if "Cash" in dt_pivot.columns:
-                fig.add_trace(go.Bar(
-                    x=dt_pivot["Tanggal"],
-                    y=dt_pivot["Cash"],
-                    name="Cash",
-                    marker_color="#10B981",
-                    hovertemplate="Cash: Rp %{y:,.0f}<extra></extra>"
-                ))
-            
-            # Tambah line total
-            fig.add_trace(go.Scatter(
+        # Buat figure
+        fig = go.Figure()
+        
+        if "Bank" in dt_pivot.columns:
+            fig.add_trace(go.Bar(
                 x=dt_pivot["Tanggal"],
-                y=dt_pivot["Total"],
-                mode="lines+markers",
-                name="Total",
-                line=dict(color="#F59E0B", width=2.5),
-                marker=dict(size=8),
-                hovertemplate="Total: Rp %{y:,.0f}<extra></extra>"
+                y=dt_pivot["Bank"],
+                name="Bank",
+                marker_color="#3B82F6",
+                hovertemplate="Bank: Rp %{y:,.0f}<extra></extra>"
             ))
-            
-            # Tambah limit line
-            fig.add_hline(
-                y=batas_hr,
-                line_dash="dot",
-                line_color="#EF4444",
-                annotation_text=f"Limit: Rp {batas_hr:,.0f}",
-                annotation_position="top right",
-                annotation_font_color="#EF4444"
-            )
-            
-            fig.update_layout(
-                title="Pengeluaran Harian (Bank vs Cash)",
-                xaxis_title="Tanggal",
-                yaxis_title="Nominal (Rp)",
-                barmode="stack",
-                hovermode="x unified",
-                **PLOT
-            )
-            
-            st.plotly_chart(fig, use_container_width=True)
-            
-            # Tampilkan statistik
+        
+        if "Cash" in dt_pivot.columns:
+            fig.add_trace(go.Bar(
+                x=dt_pivot["Tanggal"],
+                y=dt_pivot["Cash"],
+                name="Cash",
+                marker_color="#10B981",
+                hovertemplate="Cash: Rp %{y:,.0f}<extra></extra>"
+            ))
+        
+        # Tambah line total
+        fig.add_trace(go.Scatter(
+            x=dt_pivot["Tanggal"],
+            y=dt_pivot["Total"],
+            mode="lines+markers",
+            name="Total",
+            line=dict(color="#F59E0B", width=2.5),
+            marker=dict(size=8),
+            hovertemplate="Total: Rp %{y:,.0f}<extra></extra>"
+        ))
+        
+        # Tambah limit line
+        fig.add_hline(
+            y=batas_hr,
+            line_dash="dot",
+            line_color="#EF4444",
+            annotation_text=f"Limit: Rp {batas_hr:,.0f}",
+            annotation_position="top right",
+            annotation_font_color="#EF4444"
+        )
+        
+        fig.update_layout(
+            title="Pengeluaran Harian (Bank vs Cash)",
+            xaxis_title="Tanggal",
+            yaxis_title="Nominal (Rp)",
+            barmode="stack",
+            hovermode="x unified",
+            **PLOT
+        )
+        
+        st.plotly_chart(fig, use_container_width=True)
+        
+        # Tampilkan statistik
+        col_s1, col_s2, col_s3 = st.columns(3)
+        with col_s1:
+            st.metric("💰 Total Bank", f"Rp {df_bank['Nominal'].sum():,.0f}")
+        with col_s2:
+            st.metric("💵 Total Cash", f"Rp {df_cash['Nominal'].sum():,.0f}")
+        with col_s3:
+            st.metric("📊 Total", f"Rp {df_bank['Nominal'].sum() + df_cash['Nominal'].sum():,.0f}")
 
-        else:
-            st.info("Belum ada data pengeluaran.")
+    else:
+        st.info("Belum ada data pengeluaran.")
+        
+        
 
     with g2:
         st.subheader("🍩 Distribusi Pengeluaran per Kategori")
