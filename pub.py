@@ -951,7 +951,7 @@ elif persentase < 90:
 else:
     st.error(f"🔴 KRITIS! Budget hampir habis! Sisa Rp {sisa_budget:,.0f}")
 
-# ===== FITUR SIMULASI JAJAN =====
+
 # ===== FITUR SIMULASI JAJAN =====
 st.markdown("---")
 st.subheader("🔮 Simulasi Jajan")
@@ -1080,26 +1080,9 @@ else:
     st.info(f"⚖️ Sama seperti biasanya (Rp {out_hari:,.0f})")
     st.info(f"💰 Limit besok tetap Rp {batas_hr:,.0f}")
 
-# ===== TIPS BERDASARKAN SISA HARI =====
+
 st.markdown("---")
-st.subheader("💡 Tips Hari Ini")
 
-with st.expander("📈 Rata-rata & Proyeksi", expanded=False):
-    avg_per_hari = out_bulan / 30 if out_bulan > 0 else 0
-    proyeksi_akhir = avg_per_hari * SISA_HARI
-    
-    col_t1, col_t2 = st.columns(2)
-    with col_t1:
-        st.metric("Rata-rata per hari", f"Rp {avg_per_hari:,.0f}")
-    with col_t2:
-        st.metric("Proyeksi sampai gajian", f"Rp {proyeksi_akhir:,.0f}")
-    
-    if proyeksi_akhir > saldo_op:
-        st.error(f"⚠️ Proyeksi defisit Rp {proyeksi_akhir - saldo_op:,.0f} jika terus begini")
-    else:
-        st.success(f"✅ Proyeksi surplus Rp {saldo_op - proyeksi_akhir:,.0f}")
-
-# Rekomendasi jajan berdasarkan sisa budget
 st.subheader("🛒 Rekomendasi Jajan Hari Ini")
 
 if sisa_budget <= 0:
