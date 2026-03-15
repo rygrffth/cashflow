@@ -325,6 +325,27 @@ def update_cash_cloud(nominal_baru, catatan=""):
     except Exception as e:
         st.error(f"Gagal update cash: {e}")
         return False
+    
+    
+    
+def recalculate_cash_cloud():
+    """Hitung ulang saldo cash dari semua transaksi cash di database"""
+    try:
+        res = conn.table("transaksi").select("*").eq("sumber", "Cash").execute()
+        if res.data:
+            df = pd.DataFrame(res.data)
+            total_masuk = df[df["tipe"] == "Pemasukan"]["nominal"].sum()
+            total_keluar = df[df["tipe"] == "Pengeluaran"]["nominal"].sum()
+            saldo_baru = total_masuk - total_keluar
+        else:
+            saldo_baru = 0
+        
+        update_cash_cloud(saldo_baru, "Auto recalculate")
+        return saldo_baru
+    except Exception as e:
+        st.error(f"Gagal recalculate cash: {e}")
+        return None
+    
 
 def load_transaksi_cash_cloud(limit=50):
     """Load history transaksi cash"""
@@ -1855,6 +1876,7 @@ with tab_mandiri:
 
                 del st.session_state["mandiri_rows"]
                 st.success(f"✅ {imported} transaksi berhasil diimport ke Cloud & Lokal!")
+                recalculate_cash_cloud()
                 st.rerun()
 
         with col_imp2:
@@ -2583,6 +2605,7 @@ if not df_tampil.empty:
                             conn.table("transaksi").insert(records).execute()
                         
                         st.success(f"✅ {len(records)} transaksi berhasil disimpan!")
+                        recalculate_cash_cloud()
                         st.cache_data.clear()
                         st.rerun()
                         
@@ -2609,20 +2632,23 @@ if not df_tampil.empty:
         with col_hapus2:
             if st.button("Hapus Semua Data Cash", use_container_width=True):
                 conn.table("transaksi").delete().eq("sumber", "Cash").execute()
+                recalculate_cash_cloud()
                 st.success("Data cash dihapus!")
                 st.rerun()
         
         with col_hapus3:
             if st.button("Hapus SEMUA Data", use_container_width=True):
                 conn.table("transaksi").delete().neq("id", -1).execute()
+                recalculate_cash_cloud()
                 st.success("Semua data dihapus!")
                 st.rerun()
         
         with col_hapus4:
-            # Hapus berdasarkan ID
+         
             id_hapus = st.number_input("ID yang dihapus", min_value=1, step=1, key="id_hapus")
             if st.button("Hapus ID", use_container_width=True):
                 conn.table("transaksi").delete().eq("id", id_hapus).execute()
+                recalculate_cash_cloud()
                 st.success(f"ID {id_hapus} dihapus!")
                 st.rerun()
 
