@@ -1925,6 +1925,18 @@ with tab_cash:
     
     st.markdown("---")
     
+
+    st.subheader("🔧 Update Saldo Cash Manual")
+    with st.form("form_update_cash"):
+        saldo_baru = st.number_input("Saldo Cash Sekarang (Rp)", 
+                                    min_value=0, step=1000, 
+                                    value=int(UANG_CASH))
+        catatan_update = st.text_input("Catatan", placeholder="Misal: Koreksi saldo")
+        if st.form_submit_button("💾 Update Saldo Cash", use_container_width=True):
+            if update_cash_cloud(saldo_baru, catatan_update):
+                st.success(f"✅ Saldo cash diupdate ke Rp {saldo_baru:,.0f}")
+                st.rerun()
+    
     # ===== AMBIL TRANSAKSI CASH =====
     # Pastikan kolom Sumber ada
     if "Sumber" in df_asli.columns:
