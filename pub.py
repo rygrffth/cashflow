@@ -1537,38 +1537,41 @@ with g3:
     # ===== GAUGE CHART UNTUK SALDO OPERASIONAL (TETAP) =====
     col_g1, col_g2 = st.columns(2)
     
-   with col_g1:
-            gauge_max = max(total_real, saldo_op) * 1.2 if max(total_real, saldo_op) > 0 else 1000000
-            fig_gauge = go.Figure(go.Indicator(
-                mode="gauge+number+delta",
-                value=saldo_op,
-                delta={"reference": total_real, "valueformat": ",.0f"},
-                title={"text": "Saldo Operasional", "font": {"color": "#F1F5F9"}},
-                number={"prefix": "Rp ", "valueformat": ",.0f", "font": {"color": "#F1F5F9"}},
-                gauge={
-                    "axis": {"range": [0, gauge_max], "tickcolor": "#94A3B8"},
-                    "bar": {"color": "#10B981"},
-                    "bgcolor": "#0F172A",
-                    "bordercolor": "#334155",
-                    "steps": [
-                        {"range": [0, gauge_max * 0.3], "color": "rgba(239,68,68,0.2)"},
-                        {"range": [gauge_max * 0.3, gauge_max * 0.7], "color": "rgba(245,158,11,0.2)"},
-                        {"range": [gauge_max * 0.7, gauge_max], "color": "rgba(16,185,129,0.2)"}
-                    ],
-                    "threshold": {
-                        "line": {"color": "#F59E0B", "width": 4},
-                        "thickness": 0.75,
-                        "value": gauge_max * 0.3
-                    }
+    
+    with col_g1:
+        gauge_max = max(total_real, saldo_op) * 1.2 if max(total_real, saldo_op) > 0 else 1000000
+        fig_gauge = go.Figure(go.Indicator(
+            mode="gauge+number+delta",
+            value=saldo_op,
+            delta={"reference": total_real, "valueformat": ",.0f"},
+            title={"text": "Saldo Operasional", "font": {"color": "#F1F5F9"}},
+            number={"prefix": "Rp ", "valueformat": ",.0f", "font": {"color": "#F1F5F9"}},
+            gauge={
+                "axis": {"range": [0, gauge_max], "tickcolor": "#94A3B8"},
+                "bar": {"color": "#10B981"},
+                "bgcolor": "#0F172A",
+                "bordercolor": "#334155",
+                "steps": [
+                    {"range": [0, gauge_max * 0.3], "color": "rgba(239,68,68,0.2)"},
+                    {"range": [gauge_max * 0.3, gauge_max * 0.7], "color": "rgba(245,158,11,0.2)"},
+                    {"range": [gauge_max * 0.7, gauge_max], "color": "rgba(16,185,129,0.2)"}
+                ],
+                "threshold": {
+                    "line": {"color": "#F59E0B", "width": 4},
+                    "thickness": 0.75,
+                    "value": gauge_max * 0.3
                 }
-            ))
-            fig_gauge.update_layout(
-                paper_bgcolor="#1E293B",
-                font_color="#94A3B8",
-                height=300,
-                margin=dict(l=30, r=30, t=50, b=10)
-            )
-            st.plotly_chart(fig_gauge, use_container_width=True)
+            }
+        ))
+        fig_gauge.update_layout(
+            paper_bgcolor="#1E293B",
+            font_color="#94A3B8",
+            height=300,
+            margin=dict(l=30, r=30, t=50, b=10)
+        )
+        st.plotly_chart(fig_gauge, use_container_width=True)
+
+        
     
 
 with tab_budget_t:
