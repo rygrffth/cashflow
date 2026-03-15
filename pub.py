@@ -849,11 +849,9 @@ if not df_asli[mask_pend].empty:
     vd = pd.to_datetime(df_asli[mask_pend]["Tenggat_Waktu"], errors='coerce').dropna()
     if not vd.empty: due_text = f"Due: {vd.min().strftime('%d %b %y')}"
 
-
-
-
-
-
+is_real_mode = (secret_code == "naufal")
+mult         = 1 if is_real_mode else MULTIPLIER
+total_aset   = total_real if is_real_mode else (FIKTIF_BASE + total_real)
 
 
 if "show_aset" not in st.session_state:
