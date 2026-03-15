@@ -2593,58 +2593,43 @@ if not df_tampil.empty:
     col_simpan1, col_simpan2, col_simpan3 = st.columns([1, 1, 2])
     
     with col_simpan1:
-        if st.button("💾 Simpan Perubahan", use_container_width=True):
-            with st.spinner("Menyimpan ke database..."):
-                try:
-                    # Validasi nominal tidak boleh 0
-                    if (edited_df["Nominal"] <= 0).any():
-                        st.error("❌ Ada nominal yang 0 atau kurang!")
-                    else:
-                        # Konversi kembali ke format database
-                        data_to_save = edited_df.copy()
-                        
-                        # Format tanggal ke string
-                        for col in ["Tanggal", "Tenggat_Waktu", "Tanggal_Bayar"]:
-                            if col in data_to_save.columns:
-                                data_to_save[col] = data_to_save[col].apply(
-                                    lambda x: x.strftime("%Y-%m-%d") if pd.notnull(x) and hasattr(x, 'strftime') else ""
-                                )
-                        
-                        # Rename ke lowercase untuk Supabase
-                        data_to_save = data_to_save.rename(columns={
-                            "Tanggal": "tanggal",
-                            "Tipe": "tipe",
-                            "Kategori": "kategori",
-                            "Nominal": "nominal",
-                            "Catatan": "catatan",
-                            "Status": "status",
-                            "Tenggat_Waktu": "tenggat_waktu",
-                            "Tanggal_Bayar": "tanggal_bayar",
-                            "Sumber": "sumber"
-                        })
-                        
-                        # Hapus kolom yang tidak ada di database
-                        cols_to_keep = ["tanggal", "tipe", "kategori", "nominal", 
-                                       "catatan", "status", "tenggat_waktu", "tanggal_bayar", "sumber"]
-                        data_to_save = data_to_save[[c for c in cols_to_keep if c in data_to_save.columns]]
-                        
-                        records = data_to_save.to_dict(orient="records")
-                        
-                        # Hapus semua data lama
-                        conn.table("transaksi").delete().neq("id", -1).execute()
-                        
-                        # Insert data baru
-                        if records:
-                            conn.table("transaksi").insert(records).execute()
-                        
-                        st.success(f"✅ {len(records)} transaksi berhasil disimpan!")
-                        recalculate_cash_cloud()
-                        st.cache_data.clear()
-                        st.rerun()
-                        
-                except Exception as e:
-                    st.error(f"Error: {e}")
-    
+      if st.button("💾 Simpan Perubahan", use_container_width=True):
+        with st.spinner("Menyimpan ke database..."):
+            try:
+                if (edited_df["Nominal"] <= 0).any():
+                    st.error("❌ Ada nominal yang 0 atau kurang!")
+                else:
+                    data_to_save = edited_df.copy()
+                    
+                    for col in ["Tanggal", "Tenggat_Waktu", "Tanggal_Bayar"]:
+                        if col in data_to_save.columns:
+                            data_to_save[col] = data_to_save[col].apply(
+                                lambda x: x.strftime("%Y-%m-%d") if pd.notnull(x) and hasattr(x, 'strftime') else ""
+                            )
+                    
+                    data_to_save = data_to_save.rename(columns={
+                        "Tanggal": "tanggal", "Tipe": "tipe", "Kategori": "kategori",
+                        "Nominal": "nominal", "Catatan": "catatan", "Status": "status",
+                        "Tenggat_Waktu": "tenggat_waktu", "Tanggal_Bayar": "tanggal_bayar", "Sumber": "sumber"
+                    })
+                    
+                    cols_to_keep = ["tanggal","tipe","kategori","nominal","catatan","status","tenggat_waktu","tanggal_bayar","sumber"]
+                    data_to_save = data_to_save[[c for c in cols_to_keep if c in data_to_save.columns]]
+                    records = data_to_save.to_dict(orient="records")
+                    
+                    conn.table("transaksi").delete().neq("id", -1).execute()
+                    if records:
+                        conn.table("transaksi").insert(records).execute()
+                    
+                    # ← Cache clear DULU sebelum recalculate
+                    st.cache_data.clear()
+                    recalculate_cash_cloud()  # ← Baru recalculate
+                    st.success(f"✅ {len(records)} transaksi berhasil disimpan!")
+                    st.rerun()
+                    
+            except Exception as e:
+                st.error(f"Error: {e}")
+
     with col_simpan2:
         if st.button("🔄 Refresh", use_container_width=True):
             st.cache_data.clear()
