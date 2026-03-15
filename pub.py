@@ -637,13 +637,39 @@ else:
 
 UANG_CASH = load_cash_cloud()
 
-REAL_OPERASIONAL = 0
-FIKTIF_BASE = 140000000
-MULTIPLIER = 100
 
-hari_ini_tgl = hari_ini_wib
-settings = load_settings_cloud()
-tanggal_gajian = settings.get("tanggal_gajian", datetime.date(2026, 3, 17))
+FIKTIF_BASE = 140000000
+MULTIPLIER  = 100
+
+
+
+hari_ini_tgl   = hari_ini_wib
+settings        = load_settings_cloud()
+tanggal_gajian  = settings.get("tanggal_gajian", datetime.date(2026, 3, 17))
+if isinstance(tanggal_gajian, str):
+    try:    tanggal_gajian = datetime.datetime.strptime(tanggal_gajian, "%Y-%m-%d").date()
+    except: tanggal_gajian = datetime.date(2026, 3, 17)
+SISA_HARI = max((tanggal_gajian - hari_ini_tgl).days, 1)
+
+# Baru hitung saldo
+total_out_bank = df_asli[
+    (df_asli["Tipe"] == "Pengeluaran") & 
+    (df_asli["Sumber"] == "Bank") &
+    ~((df_asli["Kategori"] == "Scheduled Settlement") & (df_asli["Status"] == "Pending"))
+]["Nominal"].sum()
+
+total_in_bank = df_asli[
+    (df_asli["Tipe"] == "Pemasukan") & 
+    (df_asli["Sumber"] == "Bank")
+]["Nominal"].sum()
+
+SALDO_BANK = total_in_bank - total_out_bank
+UANG_CASH  = load_cash_cloud()   # ← pakai load, bukan recalculate
+TABUNGAN   = REAL_DARURAT
+saldo_op   = SALDO_BANK + UANG_CASH - TABUNGAN
+total_real = SALDO_BANK + UANG_CASH
+batas_hr   = saldo_op / SISA_HARI
+
 
 if isinstance(tanggal_gajian, str):
     try:
@@ -824,14 +850,7 @@ if not df_asli[mask_pend].empty:
     if not vd.empty: due_text = f"Due: {vd.min().strftime('%d %b %y')}"
 
 
-SALDO_BANK = REAL_OPERASIONAL - total_out + total_in  
-UANG_CASH = load_cash_cloud()                         
-TABUNGAN = REAL_DARURAT                              
-saldo_op = SALDO_BANK + UANG_CASH - TABUNGAN          
-total_real = SALDO_BANK + UANG_CASH                    
-batas_hr = saldo_op / SISA_HARI                        
-mult = 1 if is_real_mode else MULTIPLIER
-total_aset = total_real if is_real_mode else (FIKTIF_BASE + total_real)
+
 
 
 
@@ -1518,37 +1537,38 @@ with g3:
     # ===== GAUGE CHART UNTUK SALDO OPERASIONAL (TETAP) =====
     col_g1, col_g2 = st.columns(2)
     
-    with col_g1:
-        fig_gauge = go.Figure(go.Indicator(
-            mode="gauge+number+delta",
-            value=saldo_op,
-            delta={"reference": REAL_OPERASIONAL + UANG_CASH, "valueformat": ",.0f"},
-            title={"text": "Saldo Operasional", "font": {"color": "#F1F5F9"}},
-            number={"prefix": "Rp ", "valueformat": ",.0f", "font": {"color": "#F1F5F9"}},
-            gauge={
-                "axis": {"range": [0, REAL_OPERASIONAL + UANG_CASH], "tickcolor": "#94A3B8"},
-                "bar": {"color": "#10B981"},
-                "bgcolor": "#0F172A",
-                "bordercolor": "#334155",
-                "steps": [
-                    {"range": [0, (REAL_OPERASIONAL + UANG_CASH) * 0.3], "color": "rgba(239,68,68,0.2)"},
-                    {"range": [(REAL_OPERASIONAL + UANG_CASH) * 0.3, (REAL_OPERASIONAL + UANG_CASH) * 0.7], "color": "rgba(245,158,11,0.2)"},
-                    {"range": [(REAL_OPERASIONAL + UANG_CASH) * 0.7, REAL_OPERASIONAL + UANG_CASH], "color": "rgba(16,185,129,0.2)"}
-                ],
-                "threshold": {
-                    "line": {"color": "#F59E0B", "width": 4},
-                    "thickness": 0.75,
-                    "value": (REAL_OPERASIONAL + UANG_CASH) * 0.3
+   with col_g1:
+            gauge_max = max(total_real, saldo_op) * 1.2 if max(total_real, saldo_op) > 0 else 1000000
+            fig_gauge = go.Figure(go.Indicator(
+                mode="gauge+number+delta",
+                value=saldo_op,
+                delta={"reference": total_real, "valueformat": ",.0f"},
+                title={"text": "Saldo Operasional", "font": {"color": "#F1F5F9"}},
+                number={"prefix": "Rp ", "valueformat": ",.0f", "font": {"color": "#F1F5F9"}},
+                gauge={
+                    "axis": {"range": [0, gauge_max], "tickcolor": "#94A3B8"},
+                    "bar": {"color": "#10B981"},
+                    "bgcolor": "#0F172A",
+                    "bordercolor": "#334155",
+                    "steps": [
+                        {"range": [0, gauge_max * 0.3], "color": "rgba(239,68,68,0.2)"},
+                        {"range": [gauge_max * 0.3, gauge_max * 0.7], "color": "rgba(245,158,11,0.2)"},
+                        {"range": [gauge_max * 0.7, gauge_max], "color": "rgba(16,185,129,0.2)"}
+                    ],
+                    "threshold": {
+                        "line": {"color": "#F59E0B", "width": 4},
+                        "thickness": 0.75,
+                        "value": gauge_max * 0.3
+                    }
                 }
-            }
-        ))
-        fig_gauge.update_layout(
-            paper_bgcolor="#1E293B",
-            font_color="#94A3B8",
-            height=300,
-            margin=dict(l=30, r=30, t=50, b=10)
-        )
-        st.plotly_chart(fig_gauge, use_container_width=True)
+            ))
+            fig_gauge.update_layout(
+                paper_bgcolor="#1E293B",
+                font_color="#94A3B8",
+                height=300,
+                margin=dict(l=30, r=30, t=50, b=10)
+            )
+            st.plotly_chart(fig_gauge, use_container_width=True)
     
 
 with tab_budget_t:
