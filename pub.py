@@ -300,6 +300,14 @@ def save_to_cloud(row_dict):
     except Exception as e:
         st.error(f"Gagal simpan ke Cloud: {e}")
         return False
+    
+def get_saldo_cash(df):
+    """Hitung saldo cash langsung dari tabel transaksi."""
+    cash_in  = df[(df["Tipe"]=="Pemasukan")  & (df["Sumber"]=="Cash")]["Nominal"].sum()
+    cash_out = df[(df["Tipe"]=="Pengeluaran") & (df["Sumber"]=="Cash")]["Nominal"].sum()
+    return cash_in - cash_out
+
+
 
 def load_cash_cloud():
     """Load data cash dari Supabase"""
@@ -326,26 +334,8 @@ def update_cash_cloud(nominal_baru, catatan=""):
         st.error(f"Gagal update cash: {e}")
         return False
     
-    
-    
-def recalculate_cash_cloud():
-    """Hitung ulang saldo cash dari semua transaksi cash di database"""
-    try:
-        res = conn.table("transaksi").select("*").eq("sumber", "Cash").execute()
-        if res.data:
-            df = pd.DataFrame(res.data)
-            total_masuk = df[df["tipe"] == "Pemasukan"]["nominal"].sum()
-            total_keluar = df[df["tipe"] == "Pengeluaran"]["nominal"].sum()
-            saldo_baru = total_masuk - total_keluar
-        else:
-            saldo_baru = 0
-        
-        update_cash_cloud(saldo_baru, "Auto recalculate")
-        return saldo_baru
-    except Exception as e:
-        st.error(f"Gagal recalculate cash: {e}")
-        return None
-    
+
+
 
 def load_transaksi_cash_cloud(limit=50):
     """Load history transaksi cash"""
@@ -635,7 +625,7 @@ if not df_tabungan.empty:
 else:
     REAL_DARURAT = 0
 
-UANG_CASH = load_cash_cloud()
+UANG_CASH = get_saldo_cash(df_asli)
 
 
 FIKTIF_BASE = 140000000
@@ -664,7 +654,7 @@ total_in_bank = df_asli[
 ]["Nominal"].sum()
 
 SALDO_BANK = total_in_bank - total_out_bank
-UANG_CASH  = load_cash_cloud()   # ← pakai load, bukan recalculate
+UANG_CASH  = get_saldo_cash(df_asli)   # ← pakai load, bukan recalculate
 TABUNGAN   = REAL_DARURAT
 saldo_op   = SALDO_BANK + UANG_CASH - TABUNGAN
 total_real = SALDO_BANK + UANG_CASH
@@ -774,35 +764,7 @@ total_pend  = df_asli[mask_pend]["Nominal"].sum()
 piutang_blm = df_piutang[df_piutang["Status"]=="Belum Lunas"]["Nominal"].sum() if not df_piutang.empty else 0
 
 
-penggunaan_cash_hari_ini = 0
-penggunaan_cash_minggu = 0
-penggunaan_cash_bulan = 0
 
-try:
-    res = conn.table("penggunaan_cash").select("*").execute()
-    if res.data:
-        df_cash = pd.DataFrame(res.data)
-        df_cash["tanggal"] = pd.to_datetime(df_cash["tanggal"])
-        today = hari_ini_wib
-        df_hari = df_cash[df_cash["tanggal"].dt.date == today]
-        penggunaan_cash_hari_ini = df_hari["nominal"].sum() if not df_hari.empty else 0
-        
-    
-        df_minggu = df_cash[
-            (df_cash["tanggal"].dt.isocalendar().week == now.isocalendar()[1]) &
-            (df_cash["tanggal"].dt.year == now.year)
-        ]
-        penggunaan_cash_minggu = df_minggu["nominal"].sum() if not df_minggu.empty else 0
-        
-       
-        df_bulan = df_cash[
-            (df_cash["tanggal"].dt.month == now.month) &
-            (df_cash["tanggal"].dt.year == now.year)
-        ]
-        penggunaan_cash_bulan = df_bulan["nominal"].sum() if not df_bulan.empty else 0
-        
-except Exception as e:
-    st.sidebar.error(f"Gagal load penggunaan cash: {e}")
 
 
 
@@ -842,6 +804,21 @@ out_bulan_cash = df_asli[mask_aktif & mask_cash &
                          (df_asli["Tanggal_dt"].dt.month == now.month) & 
                          (df_asli["Tanggal_dt"].dt.year == now.year)]["Nominal"].sum()
 out_bulan = out_bulan_bank + out_bulan_cash
+
+
+
+penggunaan_cash_hari_ini = df_asli[
+    mask_cash & mask_aktif & (df_asli["Tanggal_dt"].dt.date == hari_ini_wib)]["Nominal"].sum()
+
+penggunaan_cash_minggu = df_asli[
+    mask_cash & mask_aktif &
+    (df_asli["Tanggal_dt"].dt.isocalendar().week == now.isocalendar()[1]) &
+    (df_asli["Tanggal_dt"].dt.year == now.year)]["Nominal"].sum()
+
+penggunaan_cash_bulan = df_asli[
+    mask_cash & mask_aktif &
+    (df_asli["Tanggal_dt"].dt.month == now.month) &
+    (df_asli["Tanggal_dt"].dt.year == now.year)]["Nominal"].sum()
 
 
 due_text = "No Pending"
@@ -1214,9 +1191,8 @@ with lc:
                 st.error(f"❌ Saldo bank tidak cukup! (Sisa: Rp {SALDO_BANK:,.0f})")
                 error = True
             elif sumber_i == "Cash" and tipe_i == "Pengeluaran":
-                cash_skrg = load_cash_cloud()
-                if nom_i > cash_skrg:
-                    st.error(f"❌ Saldo cash tidak cukup! (Sisa: Rp {cash_skrg:,.0f})")
+                if nom_i > UANG_CASH:
+                    st.error(f"❌ Saldo cash tidak cukup! (Sisa: Rp {UANG_CASH:,.0f})")
                     error = True
             
             if not error:
@@ -1233,14 +1209,7 @@ with lc:
                     "Sumber": sumber_i
                 }
                 
-                # Update cash
-                if sumber_i == "Cash":
-                    cash_skrg = load_cash_cloud()
-                    if tipe_i == "Pengeluaran":
-                        update_cash_cloud(cash_skrg - nom_i, f"Transaksi: {cat_i}")
-                    else:
-                        update_cash_cloud(cash_skrg + nom_i, f"Pemasukan cash: {cat_i}")
-                
+     
                 # Simpan
                 save_to_cloud(nr)
                 df_asli = pd.concat([df_asli, pd.DataFrame([nr])], ignore_index=True)
@@ -1897,7 +1866,7 @@ with tab_mandiri:
 
                 del st.session_state["mandiri_rows"]
                 st.success(f"✅ {imported} transaksi berhasil diimport ke Cloud & Lokal!")
-                recalculate_cash_cloud()
+             
                 st.rerun()
 
         with col_imp2:
@@ -1916,7 +1885,7 @@ with tab_cash:
         st.session_state.show_cash_amount = False
     
     # Load data cash
-    UANG_CASH = load_cash_cloud()
+    UANG_CASH = get_saldo_cash(df_asli)
     
     # ===== HEADER DENGAN HIDE/SHOW =====
     col_hide1, col_hide2 = st.columns([3, 1])
@@ -1945,19 +1914,7 @@ with tab_cash:
             st.rerun()
     
     st.markdown("---")
-    
-
-    st.subheader("🔧 Update Saldo Cash Manual")
-    with st.form("form_update_cash"):
-        saldo_baru = st.number_input("Saldo Cash Sekarang (Rp)", 
-                                    min_value=0, step=1000, 
-                                    value=int(UANG_CASH))
-        catatan_update = st.text_input("Catatan", placeholder="Misal: Koreksi saldo")
-        if st.form_submit_button("💾 Update Saldo Cash", use_container_width=True):
-            if update_cash_cloud(saldo_baru, catatan_update):
-                st.success(f"✅ Saldo cash diupdate ke Rp {saldo_baru:,.0f}")
-                st.rerun()
-    
+        
     # ===== AMBIL TRANSAKSI CASH =====
     # Pastikan kolom Sumber ada
     if "Sumber" in df_asli.columns:
@@ -2152,10 +2109,7 @@ with tab_cash:
                             "Sumber": "Cash"
                         }
                         save_to_cloud(transaksi_cash)
-                        
-                        # Update saldo cash
-                        baru_cash = UANG_CASH + nominal_quick
-                        update_cash_cloud(baru_cash, f"Tarik tunai: {catatan_quick}")
+
                         
                         st.success(f"✅ Berhasil tarik Rp {nominal_quick:,.0f}")
                         del st.session_state["quick_cash"]
@@ -2188,10 +2142,7 @@ with tab_cash:
                                 "Sumber": "Cash"
                             }
                             save_to_cloud(transaksi)
-                            
-                            # Update saldo cash
-                            baru_cash = UANG_CASH - nominal_quick
-                            update_cash_cloud(baru_cash, f"{st.session_state['quick_cash']}: {catatan_quick}")
+                                            
                             
                             st.success(f"✅ Berhasil mencatat pengeluaran Rp {nominal_quick:,.0f}")
                             del st.session_state["quick_cash"]
@@ -2623,7 +2574,6 @@ if not df_tampil.empty:
                     
                     # ← Cache clear DULU sebelum recalculate
                     st.cache_data.clear()
-                    recalculate_cash_cloud()  # ← Baru recalculate
                     st.success(f"✅ {len(records)} transaksi berhasil disimpan!")
                     st.rerun()
                     
@@ -2650,14 +2600,14 @@ if not df_tampil.empty:
         with col_hapus2:
             if st.button("Hapus Semua Data Cash", use_container_width=True):
                 conn.table("transaksi").delete().eq("sumber", "Cash").execute()
-                recalculate_cash_cloud()
+                
                 st.success("Data cash dihapus!")
                 st.rerun()
         
         with col_hapus3:
             if st.button("Hapus SEMUA Data", use_container_width=True):
                 conn.table("transaksi").delete().neq("id", -1).execute()
-                recalculate_cash_cloud()
+            
                 st.success("Semua data dihapus!")
                 st.rerun()
         
@@ -2666,7 +2616,6 @@ if not df_tampil.empty:
             id_hapus = st.number_input("ID yang dihapus", min_value=1, step=1, key="id_hapus")
             if st.button("Hapus ID", use_container_width=True):
                 conn.table("transaksi").delete().eq("id", id_hapus).execute()
-                recalculate_cash_cloud()
                 st.success(f"ID {id_hapus} dihapus!")
                 st.rerun()
 
