@@ -967,23 +967,51 @@ else:
     st.error(f"🔴 KRITIS! Budget hampir habis! Sisa Rp {sisa_budget:,.0f}")
 
 
-# ===== FITUR SIMULASI JAJAN =====
+# ===== FITUR SIMULASI JAJAN (AMAN) =====
 st.markdown("---")
 st.subheader("🔮 Simulasi Jajan")
+
+# Batasi max_value agar tidak negatif
+max_simulasi = max(0, int(saldo_op + out_hari))
+default_simulasi = min(int(out_hari), max_simulasi)
 
 col_sim1, col_sim2 = st.columns(2)
 
 with col_sim1:
-    # Input untuk simulasi
+    
     simulasi_jajan = st.number_input(
         "💰 Coba kalau jajan hari ini (Rp)",
         min_value=0,
-        max_value=int(saldo_op + out_hari),  # Max total saldo
-        value=int(out_hari),
+        max_value=max_simulasi,
+        value=default_simulasi,
         step=5000,
         key="simulasi_jajan"
     )
     
+    # Hitung dampak simulasi
+    if simulasi_jajan > out_hari:
+        selisih = simulasi_jajan - out_hari
+        sisa_setelah_jajan = sisa_budget - selisih
+        persentase_setelah = (simulasi_jajan / batas_hr * 100) if batas_hr > 0 else 0
+        dana_setelah_simulasi = saldo_op - selisih
+    else:
+        selisih = out_hari - simulasi_jajan
+        sisa_setelah_jajan = sisa_budget + selisih
+        persentase_setelah = (simulasi_jajan / batas_hr * 100) if batas_hr > 0 else 0
+        dana_setelah_simulasi = saldo_op + selisih
+        
+        
+
+with col_sim2:
+    st.markdown(f"""
+    <div class="card">
+        <p class="card-label">📊 HASIL SIMULASI</p>
+        <p class="card-value" style="color:#F59E0B;">Rp {simulasi_jajan:,.0f}</p>
+        <p class="card-sub">Kalau jajan segini</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+# Tampilkan dampak simulasi (lanjutkan seperti biasa)...
     # Hitung dampak simulasi
     if simulasi_jajan > out_hari:
         selisih = simulasi_jajan - out_hari
