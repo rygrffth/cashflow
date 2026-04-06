@@ -1826,23 +1826,30 @@ with tab_piutang_t:
                         st.markdown(f"<span style='color:{warna_due}; font-size:.8rem;'>📅 {row['Tenggat']}</span>", unsafe_allow_html=True)
                     
                     with c3:
+                        # Pilihan ke mana uang dikembalikan
+                        sumber_kembali = st.selectbox("Ke mana?", ["Bank", "Cash"], 
+                                                     index=0 if row.get("Sumber","Bank")=="Bank" else 1,
+                                                     key=f"dest_piutang_{idx}", 
+                                                     label_visibility="collapsed")
+                        
                         if st.button("✅ Lunas", key=f"lunas_piutang_{idx}", use_container_width=True):
                             # Mark as Lunas
                             df_piutang.at[idx, "Status"] = "Lunas"
                             df_piutang.at[idx, "Tanggal_Lunas"] = hari_ini_wib.strftime("%Y-%m-%d")
+                            # Simpan pilihan sumber yang baru
+                            df_piutang.at[idx, "Sumber_Kembali"] = sumber_kembali
                             save_piutang(df_piutang)
                             
                             # Catat Pemasukan kembalian piutang ke log
-                            sumber_p = row.get("Sumber", "Bank")
                             new_inc = {
                                 "Tanggal": hari_ini_wib.strftime("%Y-%m-%d"),
                                 "Tipe": "Pemasukan", "Kategori": "Piutang Kembali", "Nominal": row["Nominal"],
                                 "Catatan": f"Pelunasan Piutang: {row['Nama']}", "Status": "Cleared", "Tenggat_Waktu": "",
-                                "Tanggal_Bayar": hari_ini_wib.strftime("%Y-%m-%d"), "Sumber": sumber_p
+                                "Tanggal_Bayar": hari_ini_wib.strftime("%Y-%m-%d"), "Sumber": sumber_kembali
                             }
                             save_to_cloud(new_inc)
                             
-                            st.success(f"🎉 {row['Nama']} lunas! Saldo {sumber_p} bertambah.")
+                            st.success(f"🎉 {row['Nama']} lunas! Saldo {sumber_kembali} bertambah.")
                             st.rerun()
                             
                     with c4:
