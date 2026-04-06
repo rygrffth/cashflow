@@ -976,15 +976,15 @@ st.progress(min(persentase / 100, 1.0))
 
 # Status berdasarkan penggunaan
 if persentase < 30:
-    st.success(f"🟢 Aman Banget! Kamu masih bisa jajan Rp {sisa_budget:,.0f} hari ini")
+    st.success(f"🟢 Aman Banget! Kamu masih bisa jajan Rp {sisa_jatah_hari_ini:,.0f} hari ini")
 elif persentase < 50:
-    st.info(f"🔵 Hemat! Sisa budget Rp {sisa_budget:,.0f}")
+    st.info(f"🔵 Hemat! Sisa budget Rp {sisa_jatah_hari_ini:,.0f}")
 elif persentase < 70:
     st.warning(f"🟡 Perhatian! Budget sudah {persentase:.1f}% terpakai")
 elif persentase < 90:
-    st.warning(f"🟠 Hampir Habis! Sisa Rp {sisa_budget:,.0f}")
+    st.warning(f"🟠 Hampir Habis! Sisa Rp {sisa_jatah_hari_ini:,.0f}")
 else:
-    st.error(f"🔴 KRITIS! Budget hampir habis! Sisa Rp {sisa_budget:,.0f}")
+    st.error(f"🔴 KRITIS! Budget hampir habis! Sisa Rp {sisa_jatah_hari_ini:,.0f}")
 
 
 # ===== FITUR SIMULASI JAJAN (AMAN) =====
