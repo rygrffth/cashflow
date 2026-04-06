@@ -11,7 +11,6 @@ from email.header import decode_header
 import re
 import tomllib
 import datetime
-import pytz
 now_wib = datetime.datetime.utcnow() + datetime.timedelta(hours=7)
 hari_ini_wib = now_wib.date()
 
@@ -395,10 +394,8 @@ def load_piutang():
     if os.path.exists(PIUTANG_FILE):
         df = pd.read_csv(PIUTANG_FILE)
         df["Nominal"] = pd.to_numeric(df["Nominal"], errors="coerce").fillna(0)
-        if "Sumber" not in df.columns:
-            df["Sumber"] = "Bank"
         return df
-    return pd.DataFrame(columns=["Tanggal","Nama","Nominal","Catatan","Status","Tenggat","Tanggal_Lunas", "Sumber"])
+    return pd.DataFrame(columns=["Tanggal","Nama","Nominal","Catatan","Status","Tenggat","Tanggal_Lunas"])
 
 def save_piutang(df): df.to_csv(PIUTANG_FILE, index=False)
 
@@ -919,28 +916,20 @@ m4.metric("⏳ Scheduled Settlement", f"Rp {total_pend:,.0f}", delta=due_text, d
 st.markdown("---")
 st.subheader("💰 Limit Harian")
 
-# Hitung sisa budget dan prediksi besok
-# Sisa jatah hari ini (Literasi: agar tidak overbudget harian)
-sisa_jatah_hari_ini = batas_hr - out_hari
-warna_sisa = "#10B981" if sisa_jatah_hari_ini >= 0 else "#EF4444"
+# Hitung sisa budget
+sisa_budget = saldo_op - out_hari
+warna_sisa = "#10B981" if sisa_budget >= 0 else "#EF4444"
 persentase = (out_hari / batas_hr * 100) if batas_hr > 0 else 0
 
-# Prediksi Real Besok (berdasarkan jajan hari ini)
-sisa_hari_besok = max(SISA_HARI - 1, 1)
-# Jatah besok = (Total uang tersisa sekarang - sisa jatah hari ini yang direncanakan habis) / sisa hari
-# Jika jatah hari ini tersisa, maka besok akan naik.
-sisa_dana_setelah_hari_ini = saldo_op - out_hari
-prediksi_besok = max(0, sisa_dana_setelah_hari_ini / sisa_hari_besok)
-
 # Tampilan utama limit harian
-col_l1, col_l2, col_l3, col_l4 = st.columns(4)
+col_l1, col_l2, col_l3 = st.columns(3)
 
 with col_l1:
     st.markdown(f"""
     <div class="card card-green">
         <p class="card-label">📊 BUDGET HARI INI</p>
         <p class="card-value" style="color:#10B981;">Rp {batas_hr:,.0f}</p>
-        <p class="card-sub">Jatah belanja harian</p>
+        <p class="card-sub">Maksimal belanja hari ini</p>
     </div>
     """, unsafe_allow_html=True)
 
@@ -949,25 +938,16 @@ with col_l2:
     <div class="card">
         <p class="card-label">💰 TERPAKAI</p>
         <p class="card-value" style="color:#F59E0B;">Rp {out_hari:,.0f}</p>
-        <p class="card-sub">{persentase:.1f}% terpakai</p>
+        <p class="card-sub">{persentase:.1f}% dari budget</p>
     </div>
     """, unsafe_allow_html=True)
 
 with col_l3:
     st.markdown(f"""
     <div class="card">
-        <p class="card-label">⏳ SISA JATAH HARI INI</p>
-        <p class="card-value" style="color:{warna_sisa};">Rp {sisa_jatah_hari_ini:,.0f}</p>
+        <p class="card-label">⏳ SISA</p>
+        <p class="card-value" style="color:{warna_sisa};">Rp {sisa_budget:,.0f}</p>
         <p class="card-sub">Bisa belanja lagi</p>
-    </div>
-    """, unsafe_allow_html=True)
-
-with col_l4:
-    st.markdown(f"""
-    <div class="card card-warn">
-        <p class="card-label">🔮 PREDIKSI ESOK</p>
-        <p class="card-value" style="color:#60A5FA;">Rp {prediksi_besok:,.0f}</p>
-        <p class="card-sub">Target jatah besok</p>
     </div>
     """, unsafe_allow_html=True)
 
@@ -1008,11 +988,17 @@ with col_sim1:
         key="simulasi_jajan"
     )
     
-    # Hitung dampak simulasi yang akurat
-    # dana_setelah_simulasi = Total (Saldo Sekarang + Jajan Sekarang) - Simulasi Jajan
-    saldo_awal_hari = saldo_op + out_hari
-    dana_setelah_simulasi = saldo_awal_hari - simulasi_jajan
-    sisa_jatah_setelah_simulasi = batas_hr - simulasi_jajan
+    # Hitung dampak simulasi
+    if simulasi_jajan > out_hari:
+        selisih = simulasi_jajan - out_hari
+        sisa_setelah_jajan = sisa_budget - selisih
+        persentase_setelah = (simulasi_jajan / batas_hr * 100) if batas_hr > 0 else 0
+        dana_setelah_simulasi = saldo_op - selisih
+    else:
+        selisih = out_hari - simulasi_jajan
+        sisa_setelah_jajan = sisa_budget + selisih
+        persentase_setelah = (simulasi_jajan / batas_hr * 100) if batas_hr > 0 else 0
+        dana_setelah_simulasi = saldo_op + selisih
         
         
 
@@ -1026,11 +1012,26 @@ with col_sim2:
     """, unsafe_allow_html=True)
 
 # Tampilkan dampak simulasi (lanjutkan seperti biasa)...
-# Sinkronisasi variabel untuk tampilan bawah agar tidak error
-sisa_setelah_jajan = sisa_jatah_setelah_simulasi # Ini untuk card sisa budget harian
-persentase_setelah = (simulasi_jajan / batas_hr * 100) if batas_hr > 0 else 0
+    # Hitung dampak simulasi
+    if simulasi_jajan > out_hari:
+        selisih = simulasi_jajan - out_hari
+        sisa_setelah_jajan = sisa_budget - selisih
+        persentase_setelah = (simulasi_jajan / batas_hr * 100) if batas_hr > 0 else 0
+        dana_setelah_simulasi = saldo_op - selisih
+    else:
+        selisih = out_hari - simulasi_jajan
+        sisa_setelah_jajan = sisa_budget + selisih
+        persentase_setelah = (simulasi_jajan / batas_hr * 100) if batas_hr > 0 else 0
+        dana_setelah_simulasi = saldo_op + selisih
 
-
+with col_sim2:
+    st.markdown(f"""
+    <div class="card">
+        <p class="card-label">📊 HASIL SIMULASI</p>
+        <p class="card-value" style="color:#F59E0B;">Rp {simulasi_jajan:,.0f}</p>
+        <p class="card-sub">Kalau jajan segini</p>
+    </div>
+    """, unsafe_allow_html=True)
 
 # Tampilkan dampak simulasi
 col_dampak1, col_dampak2, col_dampak3 = st.columns(3)
@@ -1167,12 +1168,11 @@ with lc:
             sumber_i = st.selectbox("💰 Sumber Dana", ["Bank", "Cash"])
         with col4:
             kategori_options = [
-                "Makan", 
+                "Makan (Sahur/Buka)", 
                 "Bensin / Mobilitas", 
-                "Hiburan", 
+                "Bukber / Hiburan", 
                 "Kebutuhan Lab / Magang", 
                 "Scheduled Settlement",
-                "Penyesuaian",
                 "Lainnya (Ketik Manual...)"
             ]
             kat_pilih = st.selectbox("🏷️ Kategori", kategori_options)
@@ -1261,64 +1261,26 @@ tab_grafik, tab_budget_t, tab_piutang_t, tab_recurring_t, tab_laporan_t, tab_man
 ])
 
 with tab_grafik:
-    st.markdown("### 📅 Filter Rentang Waktu Grafik")
-    col_f1, col_f2 = st.columns([1, 2])
-    with col_f1:
-        range_opts = ["Hari Ini", "Minggu Ini", "Bulan Ini", "Tahun Ini", "Semua", "Custom"]
-        # Pilih default "Minggu Ini" biar kelihatan dinamis
-        selected_range = st.selectbox("Rentang Waktu", range_opts, index=1, key="graph_range_choice")
-    
-    with col_f2:
-        if selected_range == "Hari Ini":
-            start_f, end_f = hari_ini_wib, hari_ini_wib
-        elif selected_range == "Minggu Ini":
-            start_f = hari_ini_wib - datetime.timedelta(days=hari_ini_wib.weekday())
-            end_f = hari_ini_wib
-        elif selected_range == "Bulan Ini":
-            start_f = hari_ini_wib.replace(day=1)
-            end_f = hari_ini_wib
-        elif selected_range == "Tahun Ini":
-            start_f = hari_ini_wib.replace(month=1, day=1)
-            end_f = hari_ini_wib
-        elif selected_range == "Semua":
-            start_f = df_asli["Tanggal_dt"].min().date() if not df_asli.empty and not df_asli["Tanggal_dt"].isna().all() else hari_ini_wib
-            end_f = df_asli["Tanggal_dt"].max().date() if not df_asli.empty and not df_asli["Tanggal_dt"].isna().all() else hari_ini_wib
-        else: # Custom
-            default_start = hari_ini_wib - datetime.timedelta(days=30)
-            res_dates = st.date_input("Pilih Rentang Tanggal", [default_start, hari_ini_wib], key="graph_custom_range")
-            if isinstance(res_dates, list) and len(res_dates) == 2:
-                start_f, end_f = res_dates
-            else:
-                start_f = end_f = res_dates if not isinstance(res_dates, list) else res_dates[0]
-                
-    # Filter data khusus untuk grafik
-    df_grafik = df_asli[
-        (df_asli["Tanggal_dt"].dt.date >= start_f) & 
-        (df_asli["Tanggal_dt"].dt.date <= end_f)
-    ].copy()
-    
-    st.info(f"📊 Menampilkan data dari **{start_f}** sampai **{end_f}** ({len(df_grafik)} transaksi)")
-
-    g1, g2, g3, g4 = st.tabs(["📈 Tren Harian", "🍩 Per Kategori", "⚖️ Arus Kas", "📊 Perbandingan MoM"])
+    g1, g2, g3 = st.tabs(["📈 Tren Harian", "🍩 Per Kategori", "⚖️ Arus Kas"])
 
     
     with g1:
         st.subheader("📈 Tren Pengeluaran Harian (Bank + Cash)")
         
-    df_bank = df_grafik[
-        (df_grafik["Tipe"] == "Pengeluaran") & 
-        (df_grafik["Sumber"] == "Bank") &
-        ~((df_grafik["Kategori"] == "Scheduled Settlement") & (df_grafik["Status"] == "Pending"))
+    df_bank = df_asli[
+        (df_asli["Tipe"] == "Pengeluaran") & 
+        (df_asli["Sumber"] == "Bank") &
+        ~((df_asli["Kategori"] == "Scheduled Settlement") & (df_asli["Status"] == "Pending"))
     ].copy()
     df_bank["Tanggal"] = pd.to_datetime(df_bank["Tanggal"]).dt.date
     df_bank = df_bank.groupby("Tanggal")["Nominal"].sum().reset_index()
     df_bank["Sumber"] = "Bank"
     
     # Data Cash
-    df_cash = df_grafik[
-        (df_grafik["Tipe"] == "Pengeluaran") & 
-        (df_grafik["Sumber"] == "Cash") &
-        ~((df_grafik["Kategori"] == "Scheduled Settlement") & (df_grafik["Status"] == "Pending"))
+    df_cash = df_asli[
+        (df_asli["Tipe"] == "Pengeluaran") & 
+        (df_asli["Sumber"] == "Cash") &
+        ~((df_asli["Kategori"] == "Scheduled Settlement") & (df_asli["Status"] == "Pending"))
     ].copy()
     df_cash["Tanggal"] = pd.to_datetime(df_cash["Tanggal"]).dt.date
     df_cash = df_cash.groupby("Tanggal")["Nominal"].sum().reset_index()
@@ -1411,8 +1373,7 @@ with tab_grafik:
         st.subheader("🍩 Distribusi Pengeluaran per Kategori")
         
         # Gabungkan bank dan cash untuk pie chart
-        mask_grafik_aktif = (df_grafik["Tipe"] == "Pengeluaran") & ~((df_grafik["Kategori"] == "Scheduled Settlement") & (df_grafik["Status"] == "Pending"))
-        df_bank_kat = df_grafik[mask_grafik_aktif].copy()
+        df_bank_kat = df_asli[mask_aktif].copy()
         df_bank_kat = df_bank_kat[["Kategori", "Nominal"]]
         
         try:
@@ -1488,37 +1449,35 @@ with tab_grafik:
 with g3:
     st.subheader("⚖️ Ringkasan Arus Kas")
     
-    # ===== HITUNG DARI DATAFRAME TERFILTER (df_grafik) =====
+    # ===== HITUNG DARI SATU SUMBER (transaksi) =====
     # Pemasukan (semua)
-    total_pemasukan = df_grafik[df_grafik["Tipe"] == "Pemasukan"]["Nominal"].sum()
+    total_pemasukan = df_asli[df_asli["Tipe"] == "Pemasukan"]["Nominal"].sum()
     
     # Pengeluaran Bank (Sumber = Bank, bukan pending)
-    total_pengeluaran_bank = df_grafik[
-        (df_grafik["Tipe"] == "Pengeluaran") & 
-        (df_grafik["Sumber"] == "Bank") &
-        ~((df_grafik["Kategori"] == "Scheduled Settlement") & (df_grafik["Status"] == "Pending"))
-    ].copy() if not df_grafik.empty else pd.DataFrame()
-    total_pengeluaran_bank_sum = total_pengeluaran_bank["Nominal"].sum() if not total_pengeluaran_bank.empty else 0
+    total_pengeluaran_bank = df_asli[
+        (df_asli["Tipe"] == "Pengeluaran") & 
+        (df_asli["Sumber"] == "Bank") &
+        ~((df_asli["Kategori"] == "Scheduled Settlement") & (df_asli["Status"] == "Pending"))
+    ]["Nominal"].sum()
     
     # Pengeluaran Cash (Sumber = Cash, bukan pending)
-    total_pengeluaran_cash = df_grafik[
-        (df_grafik["Tipe"] == "Pengeluaran") & 
-        (df_grafik["Sumber"] == "Cash") &
-        ~((df_grafik["Kategori"] == "Scheduled Settlement") & (df_grafik["Status"] == "Pending"))
-    ].copy() if not df_grafik.empty else pd.DataFrame()
-    total_pengeluaran_cash_sum = total_pengeluaran_cash["Nominal"].sum() if not total_pengeluaran_cash.empty else 0
+    total_pengeluaran_cash = df_asli[
+        (df_asli["Tipe"] == "Pengeluaran") & 
+        (df_asli["Sumber"] == "Cash") &
+        ~((df_asli["Kategori"] == "Scheduled Settlement") & (df_asli["Status"] == "Pending"))
+    ]["Nominal"].sum()
     
     # Pending (Scheduled Settlement yang masih pending)
-    total_pending = df_grafik[
-        (df_grafik["Tipe"] == "Pengeluaran") & 
-        (df_grafik["Kategori"] == "Scheduled Settlement") & 
-        (df_grafik["Status"] == "Pending")
+    total_pending = df_asli[
+        (df_asli["Tipe"] == "Pengeluaran") & 
+        (df_asli["Kategori"] == "Scheduled Settlement") & 
+        (df_asli["Status"] == "Pending")
     ]["Nominal"].sum()
     
     # ===== BUAT DATAFRAME UNTUK CHART =====
     df_cf = pd.DataFrame({
         "Tipe": ["Pemasukan", "Pengeluaran Bank", "Pengeluaran Cash", "Pending"],
-        "Nominal": [total_pemasukan, total_pengeluaran_bank_sum, total_pengeluaran_cash_sum, total_pending],
+        "Nominal": [total_pemasukan, total_pengeluaran_bank, total_pengeluaran_cash, total_pending],
     })
     
     # ===== BUAT BAR CHART =====
@@ -1564,77 +1523,11 @@ with g3:
     with col_a1:
         st.metric("💰 Pemasukan", f"Rp {total_pemasukan:,.0f}")
     with col_a2:
-        st.metric("🏦 Pengeluaran Bank", f"Rp {total_pengeluaran_bank_sum:,.0f}")
+        st.metric("🏦 Pengeluaran Bank", f"Rp {total_pengeluaran_bank:,.0f}")
     with col_a3:
-        st.metric("💵 Pengeluaran Cash", f"Rp {total_pengeluaran_cash_sum:,.0f}")
+        st.metric("💵 Pengeluaran Cash", f"Rp {total_pengeluaran_cash:,.0f}")
     with col_a4:
         st.metric("⏳ Pending", f"Rp {total_pending:,.0f}")
-        
-    with g4:
-        st.subheader("📊 Perbandingan Pengeluaran: Bulan Ini vs Bulan Lalu")
-        
-        # 1. Tentukan Tanggal
-        now = datetime.datetime.now(pytz.timezone('Asia/Jakarta'))
-        current_month = now.month
-        current_year = now.year
-        
-        last_month = now.month - 1 if now.month > 1 else 12
-        last_year = now.year if now.month > 1 else now.year - 1
-        
-        # 2. Filter Data (Hanya Pengeluaran Aktif)
-        mask_exp = (df_asli["Tipe"] == "Pengeluaran") & ~((df_asli["Kategori"] == "Scheduled Settlement") & (df_asli["Status"] == "Pending"))
-        df_exp = df_asli[mask_exp].copy()
-        
-        # 3. Kelompokkan per Bulan
-        df_this_month = df_exp[(df_exp["Tanggal_dt"].dt.month == current_month) & (df_exp["Tanggal_dt"].dt.year == current_year)]
-        df_last_month = df_exp[(df_exp["Tanggal_dt"].dt.month == last_month) & (df_exp["Tanggal_dt"].dt.year == last_year)]
-        
-        if not df_last_month.empty or not df_this_month.empty:
-            # Aggregasi per Kategori
-            cat_this = df_this_month.groupby("Kategori")["Nominal"].sum().reset_index()
-            cat_last = df_last_month.groupby("Kategori")["Nominal"].sum().reset_index()
-            
-            # Merge
-            df_comp = pd.merge(cat_last, cat_this, on="Kategori", how="outer", suffixes=('_Lalu', '_Ini')).fillna(0)
-            df_comp = df_comp.sort_values("Nominal_Ini", ascending=False)
-            
-            # Bar Chart
-            fig_mom = go.Figure()
-            fig_mom.add_trace(go.Bar(name="Bulan Lalu", x=df_comp["Kategori"], y=df_comp["Nominal_Lalu"], marker_color="#334155"))
-            fig_mom.add_trace(go.Bar(name="Bulan Ini", x=df_comp["Kategori"], y=df_comp["Nominal_Ini"], marker_color="#3B82F6"))
-            fig_mom.update_layout(barmode='group', title=f"Comparison {last_month}/{last_year} vs {current_month}/{current_year}", **PLOT)
-            st.plotly_chart(fig_mom, use_container_width=True)
-            
-            # Insights
-            st.markdown("#### 💡 Insights Literasi Keuangan")
-            cols_ins = st.columns(3)
-            
-            # Hitung Total
-            total_ini = df_comp["Nominal_Ini"].sum()
-            total_lalu = df_comp["Nominal_Lalu"].sum()
-            diff_total = total_ini - total_lalu
-            pct_total = (diff_total / total_lalu * 100) if total_lalu > 0 else 100
-            
-            with cols_ins[0]:
-                st.metric("Total Pengeluaran", f"Rp {total_ini:,.0f}", f"{pct_total:+.1f}% vs Bln Lalu", delta_color="inverse")
-            
-            # Cari kenaikan tertinggi
-            df_comp["Delta"] = df_comp["Nominal_Ini"] - df_comp["Nominal_Lalu"]
-            top_inc = df_comp[df_comp["Delta"] > 0].sort_values("Delta", ascending=False).head(1)
-            
-            if not top_inc.empty:
-                with cols_ins[1]:
-                    row_inc = top_inc.iloc[0]
-                    st.warning(f"📈 Kenaikan Tertinggi: **{row_inc['Kategori']}** (+Rp {row_inc['Delta']:,.0f})")
-            
-            # Cari penurunan tertinggi
-            top_dec = df_comp[df_comp["Delta"] < 0].sort_values("Delta", ascending=True).head(1)
-            if not top_dec.empty:
-                with cols_ins[2]:
-                    row_dec = top_dec.iloc[0]
-                    st.success(f"📉 Penurunan Tertinggi: **{row_dec['Kategori']}** (-Rp {abs(row_dec['Delta']):,.0f})")
-        else:
-            st.info("Data bulan lalu atau bulan ini belum cukup untuk dibandingkan.")
     
     # ===== GAUGE CHART UNTUK SALDO OPERASIONAL (TETAP) =====
     col_g1, col_g2 = st.columns(2)
@@ -1682,7 +1575,7 @@ with tab_budget_t:
 
     with st.expander("➕ Tambah / Edit Target"):
         with st.form("form_budget", clear_on_submit=True):
-            kat_b = st.selectbox("Kategori", ["Makan","Bensin / Mobilitas","Hiburan","Kebutuhan Lab / Magang","Penyesuaian","Piutang","Lainnya"])
+            kat_b = st.selectbox("Kategori", ["Makan (Sahur/Buka)","Bensin / Mobilitas","Bukber / Hiburan","Kebutuhan Lab / Magang","Piutang","Lainnya"])
             tgt_b = st.number_input("Target Bulanan (Rp)", min_value=0, step=10000)
             if st.form_submit_button("💾 Simpan Target"):
                 if tgt_b > 0:
@@ -1726,8 +1619,8 @@ with tab_budget_t:
         st.info("Belum ada budget target. Tambahkan lewat form di atas.")
 
 with tab_piutang_t:
-    st.subheader("💸 Tracker Piutang (Pinjaman ke Orang)")
-    st.caption("Catat siapa yang pinjam uang ke kamu. Saldo akan otomatis terpotong saat dicatat dan bertambah saat pelunasan.")
+    st.subheader("💸 Tracker Piutang")
+    st.caption("Catat siapa yang pinjam uang ke kamu. Saldo otomatis kembali saat kamu klik ✅ Lunas.")
 
     pf1,pf2 = st.columns([1.2,1])
     with pf1:
@@ -1735,45 +1628,28 @@ with tab_piutang_t:
             st.markdown("**➕ Catat Piutang Baru**")
             nama_p    = st.text_input("Nama Peminjam")
             nominal_p = st.number_input("Nominal (Rp)", min_value=0, step=5000)
-            sumber_p  = st.selectbox("💰 Sumber Dana Piutang", ["Bank", "Cash"])
-            tenggat_p = st.date_input("📅 Tenggat Penagihan", hari_ini_wib+datetime.timedelta(days=7))
-            catatan_p = st.text_input("📝 Catatan (opsional)")
-            
+            tenggat_p = st.date_input("Tenggat Penagihan", hari_ini_wib+datetime.timedelta(days=7))
+            catatan_p = st.text_input("Catatan (opsional)")
             if st.form_submit_button("💾 Simpan Piutang", use_container_width=True):
                 if nama_p and nominal_p>0:
-                    # Validasi Saldo
-                    current_balance = SALDO_BANK if sumber_p == "Bank" else UANG_CASH
-                    if nominal_p > current_balance:
-                        st.error(f"❌ Saldo {sumber_p} tidak cukup! (Sisa: Rp {current_balance:,.0f})")
-                    else:
-                        # 1. Simpan ke daftar piutang local
-                        new_p = {
-                            "Tanggal": hari_ini_wib.strftime("%Y-%m-%d"),
-                            "Nama": nama_p, "Nominal": nominal_p, "Catatan": catatan_p,
-                            "Status": "Belum Lunas", "Tenggat": tenggat_p.strftime("%Y-%m-%d"),
-                            "Tanggal_Lunas": "", "Sumber": sumber_p
-                        }
-                        df_piutang = pd.concat([df_piutang, pd.DataFrame([new_p])], ignore_index=True)
-                        save_piutang(df_piutang)
-                        
-                        # 2. Simpan ke log transaksi (Cloud & local) as Pengeluaran
-                        new_t = {
-                            "Tanggal": hari_ini_wib.strftime("%Y-%m-%d"),
-                            "Tipe": "Pengeluaran", "Kategori": "Piutang", "Nominal": nominal_p,
-                            "Catatan": f"Pinjamkan ke: {nama_p}", "Status": "Cleared", "Tenggat_Waktu": "",
-                            "Tanggal_Bayar": hari_ini_wib.strftime("%Y-%m-%d"), "Sumber": sumber_p
-                        }
-                        save_to_cloud(new_t) # Ke Supabase
-                        
-                        st.success(f"✅ Piutang {nama_p} Rp {nominal_p:,.0f} dicatat! Saldo {sumber_p} berkurang.")
-                        st.rerun()
-                else: 
-                    st.warning("⚠️ Isi nama dan nominal.")
+                    new_p=pd.DataFrame([{"Tanggal":hari_ini_wib.strftime("%Y-%m-%d"),
+                        "Nama":nama_p,"Nominal":nominal_p,"Catatan":catatan_p,
+                        "Status":"Belum Lunas","Tenggat":tenggat_p.strftime("%Y-%m-%d"),"Tanggal_Lunas":""}])
+                    new_t=pd.DataFrame([{"Tanggal":hari_ini_wib.strftime("%Y-%m-%d"),
+                        "Tipe":"Pengeluaran","Kategori":"Piutang","Nominal":nominal_p,
+                        "Catatan":f"Piutang: {nama_p}","Status":"Cleared","Tenggat_Waktu":"",
+                        "Tanggal_Bayar":hari_ini_wib.strftime("%Y-%m-%d")}])
+                    df_piutang=pd.concat([df_piutang,new_p],ignore_index=True)
+                    df_asli=pd.concat([df_asli,new_t],ignore_index=True)
+                    save_piutang(df_piutang); save_data(df_asli)
+                    st.success(f"✅ Piutang {nama_p} Rp {nominal_p:,.0f} dicatat! Saldo berkurang.")
+                    st.rerun()
+                else: st.warning("Isi nama dan nominal.")
 
     with pf2:
         if not df_piutang.empty:
-            blm = df_piutang[df_piutang["Status"]=="Belum Lunas"]
-            lns = df_piutang[df_piutang["Status"]=="Lunas"]
+            blm=df_piutang[df_piutang["Status"]=="Belum Lunas"]
+            lns=df_piutang[df_piutang["Status"]=="Lunas"]
             st.markdown(f"""
             <div class="card card-warn">
                 <p class="card-label">💸 BELUM KEMBALI</p>
@@ -1785,80 +1661,42 @@ with tab_piutang_t:
                 <p class="card-value" style="color:#10B981;">Rp {lns['Nominal'].sum():,.0f}</p>
                 <p class="card-sub">{len(lns)} transaksi lunas</p>
             </div>""", unsafe_allow_html=True)
-            
-            today_s = hari_ini_wib
-            ov = blm[pd.to_datetime(blm["Tenggat"]).dt.date < today_s]
+            today_s=hari_ini_wib.strftime("%Y-%m-%d")
+            ov=blm[blm["Tenggat"]<today_s]
             if not ov.empty:
-                st.error(f"🚨 {len(ov)} Piutang Melewati Deadline!")
+                st.error(f"🚨 {len(ov)} piutang melewati tenggat!")
                 for _,od in ov.iterrows():
-                    st.markdown(f"🔴 **{od['Nama']}** (Rp {od['Nominal']:,.0f}) - Due {od['Tenggat']}")
+                    st.markdown(f"- **{od['Nama']}** — Rp {od['Nominal']:,.0f} (due: {od['Tenggat']})")
 
     if not df_piutang.empty:
         st.markdown("---")
-        st.subheader("📋 Daftar Piutang")
-        
-        # Pisahkan list agar mudah dilihat
-        blm_list = df_piutang[df_piutang["Status"]=="Belum Lunas"].sort_values("Tenggat")
-        lns_list = df_piutang[df_piutang["Status"]=="Lunas"].sort_values("Tanggal_Lunas", ascending=False)
-        
-        if not blm_list.empty:
-            st.write("### ⏳ Belum Lunas")
-            for idx, row in blm_list.iterrows():
-                is_overdue = pd.to_datetime(row["Tenggat"]).date() < hari_ini_wib
-                
-                with st.container():
-                    c1, c2, c3, c4 = st.columns([1.5, 1.5, 1, 1.2])
-                    
-                    with c1:
-                        st.markdown(f"**👤 {row['Nama']}**")
-                        st.caption(f"📍 Sumber: {row.get('Sumber','Bank')}")
-                    
-                    with c2:
-                        st.markdown(f"**Rp {row['Nominal']:,.0f}**")
-                        warna_due = "#EF4444" if is_overdue else "#94A3B8"
-                        st.markdown(f"<span style='color:{warna_due}; font-size:.8rem;'>📅 {row['Tenggat']}</span>", unsafe_allow_html=True)
-                    
-                    with c3:
-                        if st.button("✅ Lunas", key=f"lunas_piutang_{idx}", use_container_width=True):
-                            # Mark as Lunas
-                            df_piutang.at[idx, "Status"] = "Lunas"
-                            df_piutang.at[idx, "Tanggal_Lunas"] = hari_ini_wib.strftime("%Y-%m-%d")
-                            save_piutang(df_piutang)
-                            
-                            # Catat Pemasukan kembalian piutang ke log
-                            sumber_p = row.get("Sumber", "Bank")
-                            new_inc = {
-                                "Tanggal": hari_ini_wib.strftime("%Y-%m-%d"),
-                                "Tipe": "Pemasukan", "Kategori": "Piutang Kembali", "Nominal": row["Nominal"],
-                                "Catatan": f"Pelunasan Piutang: {row['Nama']}", "Status": "Cleared", "Tenggat_Waktu": "",
-                                "Tanggal_Bayar": hari_ini_wib.strftime("%Y-%m-%d"), "Sumber": sumber_p
-                            }
-                            save_to_cloud(new_inc)
-                            
-                            st.success(f"🎉 {row['Nama']} lunas! Saldo {sumber_p} bertambah.")
-                            st.rerun()
-                            
-                    with c4:
-                        if st.button("⏳ Perpanjang", key=f"ext_piutang_{idx}", use_container_width=True):
-                            # Extend 7 days
-                            current_due = pd.to_datetime(row["Tenggat"]).date()
-                            new_due = (current_due + datetime.timedelta(days=7)).strftime("%Y-%m-%d")
-                            df_piutang.at[idx, "Tenggat"] = new_due
-                            save_piutang(df_piutang)
-                            st.toast(f"Deadline {row['Nama']} diperpanjang ke {new_due}")
-                            st.rerun()
-                    
-                    if is_overdue:
-                        st.error(f"⚠️ Melewati deadline! Konfirmasi pelunasan atau perpanjang waktu.")
-                    
-                    st.divider()
-
-        if not lns_list.empty:
-            with st.expander("✅ Lihat Riwayat Pelunasan"):
-                for idx, row in lns_list.iterrows():
-                    st.markdown(f"**{row['Nama']}** — Rp {row['Nominal']:,.0f} (Lunas: {row['Tanggal_Lunas']})")
+        st.markdown("**📋 Daftar Piutang**")
+        for idx,row in df_piutang.iterrows():
+            if row["Status"]=="Belum Lunas":
+                ca,cb,cc,cd,ce = st.columns([2,2,2,2,1.5])
+                ca.markdown(f"**{row['Nama']}**")
+                cb.markdown(f"Rp {row['Nominal']:,.0f}")
+                cc.markdown(f"Due: {row['Tenggat']}")
+                cd.markdown("🟡 Belum Lunas")
+                if ce.button("✅ Lunas", key=f"lunas_{idx}"):
+                    df_piutang.at[idx,"Status"]="Lunas"
+                    df_piutang.at[idx,"Tanggal_Lunas"]=hari_ini_wib.strftime("%Y-%m-%d")
+                    new_inc=pd.DataFrame([{"Tanggal":hari_ini_wib.strftime("%Y-%m-%d"),
+                        "Tipe":"Pemasukan","Kategori":"Piutang Kembali","Nominal":row["Nominal"],
+                        "Catatan":f"Lunas: {row['Nama']}","Status":"Cleared","Tenggat_Waktu":"",
+                        "Tanggal_Bayar":hari_ini_wib.strftime("%Y-%m-%d")}])
+                    df_asli=pd.concat([df_asli,new_inc],ignore_index=True)
+                    save_piutang(df_piutang); save_data(df_asli)
+                    st.success(f"✅ {row['Nama']} lunas! Saldo +Rp {row['Nominal']:,.0f}")
+                    st.rerun()
+            else:
+                ca,cb,cc,cd = st.columns([2,2,2,3])
+                ca.markdown(f"~~{row['Nama']}~~")
+                cb.markdown(f"Rp {row['Nominal']:,.0f}")
+                cc.markdown(f"Lunas: {row.get('Tanggal_Lunas','')}")
+                cd.markdown("🟢 Lunas")
     else:
-        st.info("ℹ️ Belum ada piutang tercatat.")
+        st.info("Belum ada piutang tercatat.")
 
 with tab_recurring_t:
     st.subheader("🔄 Recurring Expense")
@@ -1868,7 +1706,7 @@ with tab_recurring_t:
         r1,r2 = st.columns(2)
         with r1:
             nama_r   = st.text_input("Nama (misal: Kos, Netflix, Spotify)")
-            kat_r    = st.selectbox("Kategori",["Makan","Bensin / Mobilitas","Hiburan","Kebutuhan Lab / Magang","Penyesuaian","Lainnya"])
+            kat_r    = st.selectbox("Kategori",["Makan (Sahur/Buka)","Bensin / Mobilitas","Kebutuhan Lab / Magang","Lainnya"])
             nominal_r= st.number_input("Nominal (Rp)",min_value=0,step=5000)
         with r2:
             frek_r   = st.selectbox("Frekuensi",["Bulanan","Mingguan"])
@@ -2201,8 +2039,8 @@ with tab_mandiri:
             column_config={
                 "Tipe":     st.column_config.SelectboxColumn("Tipe", options=["Pengeluaran","Pemasukan"]),
                 "Kategori": st.column_config.SelectboxColumn("Kategori", options=[
-                    "Makan","Bensin / Mobilitas","Hiburan",
-                    "Kebutuhan Lab / Magang","Scheduled Settlement","Penyesuaian","Lainnya"]),
+                    "Makan (Sahur/Buka)","Bensin / Mobilitas","Bukber / Hiburan",
+                    "Kebutuhan Lab / Magang","Scheduled Settlement","Lainnya"]),
                 "Nominal":  st.column_config.NumberColumn("Nominal (Rp)", format="Rp %d"),
             })
 
@@ -2683,42 +2521,27 @@ with tab_tabungan:
                             col_btn1, col_btn2 = st.columns(2)
                             with col_btn1:
                                 if st.form_submit_button("✅ Setor"):
-                                            # 1. Update nominal terkumpul di tabel tabungan
-                                            new_terkumpul = row["Terkumpul"] + nominal_setor
-                                            update_dict = {
-                                                "nominal_terkumpul": new_terkumpul,
-                                                "status": "Selesai" if new_terkumpul >= row["Target"] else "Aktif"
+                                    if nominal_setor > 0:
+                                        # Update nominal terkumpul
+                                        new_terkumpul = row["Terkumpul"] + nominal_setor
+                                        update_data = {
+                                            "nominal_terkumpul": new_terkumpul,
+                                            "status": "Selesai" if new_terkumpul >= row["Target"] else "Aktif"
+                                        }
+                                        if update_tabungan_cloud(row.get("id"), update_data):
+                                            # Catat transaksi
+                                            transaksi_data = {
+                                                "tabungan_id": row.get("id"),
+                                                "tanggal": hari_ini_wib.strftime("%Y-%m-%d"),
+                                                "nominal": nominal_setor,
+                                                "tipe": "Setor",
+                                                "catatan": catatan_setor
                                             }
-                                            if update_tabungan_cloud(row.get("id"), update_dict):
-                                                # 2. Catat di histori tabungan
-                                                transaksi_data = {
-                                                    "tabungan_id": row.get("id"),
-                                                    "tanggal": hari_ini_wib.strftime("%Y-%m-%d"),
-                                                    "nominal": nominal_setor,
-                                                    "tipe": "Setor",
-                                                    "catatan": catatan_setor
-                                                }
-                                                conn.table("transaksi_tabungan").insert(transaksi_data).execute()
-                                                
-                                                # 3. PENTING: Catat di log utama (transaksi) sebagai PENGELUARAN 
-                                                # agar saldo Bank/Cash berkurang (Literasi Keuangan: Uang dipindah ke pos tabungan)
-                                                sumber_t = st.selectbox("Ambil dari mana?", ["Bank", "Cash"], key=f"src_setor_{idx}")
-                                                main_t = {
-                                                    "Tanggal": hari_ini_wib.strftime("%Y-%m-%d"),
-                                                    "Tipe": "Pengeluaran",
-                                                    "Kategori": "Menabung",
-                                                    "Nominal": nominal_setor,
-                                                    "Catatan": f"Setor Tabungan: {row['Nama']} - {catatan_setor}",
-                                                    "Status": "Cleared",
-                                                    "Tenggat_Waktu": "",
-                                                    "Tanggal_Bayar": hari_ini_wib.strftime("%Y-%m-%d"),
-                                                    "Sumber": sumber_t
-                                                }
-                                                save_to_cloud(main_t)
-                                                
-                                                st.success(f"✅ Berhasil setor Rp {nominal_setor:,.0f} dari {sumber_t}!")
-                                                st.session_state[f"setor_tabungan_{idx}"] = False
-                                                st.rerun()
+                                            conn.table("transaksi_tabungan").insert(transaksi_data).execute()
+                                            
+                                            st.success(f"✅ Berhasil setor Rp {nominal_setor:,.0f}!")
+                                            st.session_state[f"setor_tabungan_{idx}"] = False
+                                            st.rerun()
                             
                             with col_btn2:
                                 if st.form_submit_button("❌ Batal"):
@@ -2742,7 +2565,7 @@ with tab_tabungan:
                                             "nominal_terkumpul": new_terkumpul
                                         }
                                         if update_tabungan_cloud(row.get("id"), update_data):
-                                            # 2. Histori tabungan inner
+                                            # Catat transaksi
                                             transaksi_data = {
                                                 "tabungan_id": row.get("id"),
                                                 "tanggal": hari_ini_wib.strftime("%Y-%m-%d"),
@@ -2752,23 +2575,7 @@ with tab_tabungan:
                                             }
                                             conn.table("transaksi_tabungan").insert(transaksi_data).execute()
                                             
-                                            # 3. PENTING: Catat di log utama (transaksi) sebagai PEMASUKAN
-                                            # agar saldo Bank/Cash bertambah kembali
-                                            sumber_t = st.selectbox("Masuk ke mana?", ["Bank", "Cash"], key=f"src_tarik_{idx}")
-                                            main_t = {
-                                                "Tanggal": hari_ini_wib.strftime("%Y-%m-%d"),
-                                                "Tipe": "Pemasukan",
-                                                "Kategori": "Tarik Tabungan",
-                                                "Nominal": nominal_tarik,
-                                                "Catatan": f"Tarik dari Tabungan: {row['Nama']} - {catatan_tarik}",
-                                                "Status": "Cleared",
-                                                "Tenggat_Waktu": "",
-                                                "Tanggal_Bayar": hari_ini_wib.strftime("%Y-%m-%d"),
-                                                "Sumber": sumber_t
-                                            }
-                                            save_to_cloud(main_t)
-
-                                            st.success(f"✅ Berhasil tarik Rp {nominal_tarik:,.0f} ke {sumber_t}!")
+                                            st.success(f"✅ Berhasil tarik Rp {nominal_tarik:,.0f}!")
                                             st.session_state[f"tarik_tabungan_{idx}"] = False
                                             st.rerun()
                             
