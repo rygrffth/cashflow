@@ -919,18 +919,17 @@ m4.metric("⏳ Scheduled Settlement", f"Rp {total_pend:,.0f}", delta=due_text, d
 st.markdown("---")
 st.subheader("💰 Limit Harian")
 
-# Hitung sisa budget dan prediksi besok
-# Sisa jatah hari ini (Literasi: agar tidak overbudget harian)
+# 2. Status Jatah & Transaksi
 sisa_jatah_hari_ini = batas_hr - out_hari
 warna_sisa = "#10B981" if sisa_jatah_hari_ini >= 0 else "#EF4444"
 persentase = (out_hari / batas_hr * 100) if batas_hr > 0 else 0
 
-# Prediksi Real Besok (berdasarkan jajan hari ini)
+# 3. Prediksi Real Besok (berdasarkan jajan hari ini)
 sisa_hari_besok = max(SISA_HARI - 1, 1)
-# Jatah besok = (Total uang tersisa sekarang - sisa jatah hari ini yang direncanakan habis) / sisa hari
-# Jika jatah hari ini tersisa, maka besok akan naik.
-sisa_dana_setelah_hari_ini = saldo_op - out_hari
-prediksi_besok = max(0, sisa_dana_setelah_hari_ini / sisa_hari_besok)
+# Logika: (Total Sisa Uang Real) / Sisa Hari Besok
+sisa_uang_real = saldo_op - out_hari 
+# Catatan: saldo_op di kodingan ini adalah Opening Balance harinya.
+prediksi_besok = max(0, sisa_uang_real / sisa_hari_besok)
 
 # Tampilan utama limit harian
 col_l1, col_l2, col_l3, col_l4 = st.columns(4)
@@ -1009,9 +1008,9 @@ with col_sim1:
     )
     
     # Hitung dampak simulasi yang akurat
-    # dana_setelah_simulasi = Total (Saldo Sekarang + Jajan Sekarang) - Simulasi Jajan
-    saldo_awal_hari = saldo_op + out_hari
-    dana_setelah_simulasi = saldo_awal_hari - simulasi_jajan
+    # dana_setelah_simulasi = Total (Saldo Awal Hari) - Simulasi Jajan
+    # Karena saldo_op di kodingan ini bertindak sebagai saldo pembuka hari.
+    dana_setelah_simulasi = saldo_op - simulasi_jajan
     sisa_jatah_setelah_simulasi = batas_hr - simulasi_jajan
         
         
@@ -1291,13 +1290,21 @@ with tab_grafik:
             else:
                 start_f = end_f = res_dates if not isinstance(res_dates, list) else res_dates[0]
                 
-    # Filter data khusus untuk grafik
-    df_grafik = df_asli[
-        (df_asli["Tanggal_dt"].dt.date >= start_f) & 
-        (df_asli["Tanggal_dt"].dt.date <= end_f)
-    ].copy()
+    # Filter data khusus untuk grafik (Fix TypeError)
+    try:
+        # Konversi filter ke datetime.date agar aman saat dibandingkan
+        f_start = pd.to_datetime(start_f).date() if start_f else pd.Timestamp.min.date()
+        f_end = pd.to_datetime(end_f).date() if end_f else pd.Timestamp.max.date()
+        
+        mask_g = (pd.to_datetime(df_asli["Tanggal_dt"]).dt.date >= f_start) & \
+                 (pd.to_datetime(df_asli["Tanggal_dt"]).dt.date <= f_end)
+        df_grafik = df_asli[mask_g].copy()
+    except:
+        df_grafik = df_asli.copy()
+        f_start = start_f
+        f_end = end_f
     
-    st.info(f"📊 Menampilkan data dari **{start_f}** sampai **{end_f}** ({len(df_grafik)} transaksi)")
+    st.info(f"📊 Menampilkan data dari **{f_start}** sampai **{f_end}** ({len(df_grafik)} transaksi)")
 
     g1, g2, g3, g4 = st.tabs(["📈 Tren Harian", "🍩 Per Kategori", "⚖️ Arus Kas", "📊 Perbandingan MoM"])
 
@@ -1807,7 +1814,7 @@ with tab_piutang_t:
                 is_overdue = pd.to_datetime(row["Tenggat"]).date() < hari_ini_wib
                 
                 with st.container():
-                    c1, c2, c3, c4 = st.columns([1.5, 1.5, 1, 1.2])
+                    c1, c2, c3, c4, c5 = st.columns([1.4, 1.4, 0.9, 0.9, 0.6])
                     
                     with c1:
                         st.markdown(f"**👤 {row['Nama']}**")
@@ -1839,13 +1846,21 @@ with tab_piutang_t:
                             st.rerun()
                             
                     with c4:
-                        if st.button("⏳ Perpanjang", key=f"ext_piutang_{idx}", use_container_width=True):
+                        if st.button("⏳+", key=f"ext_piutang_{idx}", use_container_width=True, help="Perpanjang 7 hari"):
                             # Extend 7 days
                             current_due = pd.to_datetime(row["Tenggat"]).date()
                             new_due = (current_due + datetime.timedelta(days=7)).strftime("%Y-%m-%d")
                             df_piutang.at[idx, "Tenggat"] = new_due
                             save_piutang(df_piutang)
                             st.toast(f"Deadline {row['Nama']} diperpanjang ke {new_due}")
+                            st.rerun()
+
+                    with c5:
+                        if st.button("🗑️", key=f"del_piutang_{idx}", use_container_width=True, help="Hapus Piutang (Tanpa log transaksi)"):
+                            # Filter out manually
+                            df_piutang = df_piutang.drop(idx)
+                            save_piutang(df_piutang)
+                            st.warning(f"🗑️ Piutang {row['Nama']} dihapus.")
                             st.rerun()
                     
                     if is_overdue:
