@@ -1078,7 +1078,7 @@ if 'selisih' not in locals():
 if 'selisih_limit' not in locals():
     selisih_limit = 0
 if 'sisa_setelah_jajan' not in locals():
-    sisa_setelah_jajan = sisa_budget
+    sisa_setelah_jajan = sisa_jatah_hari_ini
 
 # ===== LOGIKA SIMULASI YANG FOKUS KE DAMPAK ESOK =====
 if simulasi_jajan > out_hari:
@@ -1127,16 +1127,16 @@ st.markdown("---")
 
 st.subheader("🛒 Rekomendasi Jajan Hari Ini")
 
-if sisa_budget <= 0:
+if sisa_jatah_hari_ini <= 0:
     st.error("🚫 STOP! Kamu sudah melebihi budget hari ini!")
-elif sisa_budget < 10000:
-    st.warning(f"💔 Budget sisa Rp {sisa_budget:,.0f} - Cukup untuk jajan kecil")
-elif sisa_budget < 30000:
-    st.info(f"🍜 Bisa buat makan siang + minum (Rp {sisa_budget:,.0f})")
-elif sisa_budget < 50000:
-    st.success(f"🍱 Bisa buat makan enak! (Rp {sisa_budget:,.0f})")
-elif sisa_budget < 100000:
-    st.success(f"🎉 Bisa buat nonton atau hangout! (Rp {sisa_budget:,.0f})")
+elif sisa_jatah_hari_ini < 10000:
+    st.warning(f"💔 Budget sisa Rp {sisa_jatah_hari_ini:,.0f} - Cukup untuk jajan kecil")
+elif sisa_jatah_hari_ini < 30000:
+    st.info(f"🍜 Bisa buat makan siang + minum (Rp {sisa_jatah_hari_ini:,.0f})")
+elif sisa_jatah_hari_ini < 50000:
+    st.success(f"🍱 Bisa buat makan enak! (Rp {sisa_jatah_hari_ini:,.0f})")
+elif sisa_jatah_hari_ini < 100000:
+    st.success(f"🎉 Bisa buat nonton atau hangout! (Rp {sisa_jatah_hari_ini:,.0f})")
 else:
     st.success(f"💰 Sisa banyak! Bisa ditabung atau investasi")
 
