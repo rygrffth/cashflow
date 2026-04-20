@@ -679,8 +679,7 @@ SISA_HARI = max((tanggal_gajian - hari_ini_tgl).days, 1)
 # Baru hitung saldo
 total_out_bank = df_asli[
     (df_asli["Tipe"] == "Pengeluaran") & 
-    (df_asli["Sumber"] == "Bank") &
-    ~(df_asli["Kategori"].isin(EXCLUDE_FROM_LIMIT))
+    (df_asli["Sumber"] == "Bank")
 ]["Nominal"].sum()
 
 total_in_bank = df_asli[
