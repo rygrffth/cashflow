@@ -1339,7 +1339,7 @@ with tab_grafik:
     df_bank = df_grafik[
         (df_grafik["Tipe"] == "Pengeluaran") & 
         (df_grafik["Sumber"] == "Bank") &
-        ~((df_grafik["Kategori"] == "Scheduled Settlement") & (df_grafik["Status"] == "Pending"))
+        ~(df_grafik["Kategori"].isin(EXCLUDE_FROM_LIMIT))
     ].copy()
     df_bank["Tanggal"] = pd.to_datetime(df_bank["Tanggal"]).dt.date
     df_bank = df_bank.groupby("Tanggal")["Nominal"].sum().reset_index()
@@ -1349,7 +1349,7 @@ with tab_grafik:
     df_cash = df_grafik[
         (df_grafik["Tipe"] == "Pengeluaran") & 
         (df_grafik["Sumber"] == "Cash") &
-        ~((df_grafik["Kategori"] == "Scheduled Settlement") & (df_grafik["Status"] == "Pending"))
+        ~(df_grafik["Kategori"].isin(EXCLUDE_FROM_LIMIT))
     ].copy()
     df_cash["Tanggal"] = pd.to_datetime(df_cash["Tanggal"]).dt.date
     df_cash = df_cash.groupby("Tanggal")["Nominal"].sum().reset_index()
@@ -1368,7 +1368,9 @@ with tab_grafik:
             fill_value=0
         ).reset_index()
         
-        dt_pivot["Total"] = dt_pivot[["Bank", "Cash"]].sum(axis=1)
+        # Hitung Total (Hanya dari kolom yang tersedia)
+        cols_to_sum = [c for c in ["Bank", "Cash"] if c in dt_pivot.columns]
+        dt_pivot["Total"] = dt_pivot[cols_to_sum].sum(axis=1) if cols_to_sum else 0
         dt_pivot = dt_pivot.sort_values("Tanggal")
         
         # Buat figure
