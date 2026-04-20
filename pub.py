@@ -2767,15 +2767,32 @@ with tab_tabungan:
                             st.session_state[f"tarik_tabungan_{idx}"] = True
                         
                         if st.button("🗑️ Hapus", key=f"hapus_{idx}"):
-                            if delete_tabungan_cloud(row.get("id")):
-                                st.success(f"✅ Tabungan '{row['Nama']}' dihapus!")
-                                st.rerun()
+                            # Linked Deletion: Hapus target, histori tabungan, dan "un-save" dari transaksi utama
+                            t_id = row.get("id")
+                            if t_id:
+                                try:
+                                    # 1. Hapus pengeluaran "Menabung" di log utama agar saldo kembali
+                                    conn.table("transaksi").delete().eq("tabungan_id", t_id).execute()
+                                    # 2. Hapus histori internal tabungan
+                                    conn.table("transaksi_tabungan").delete().eq("tabungan_id", t_id).execute()
+                                    # 3. Hapus target tabungan itu sendiri
+                                    if delete_tabungan_cloud(t_id):
+                                        st.success(f"✅ Tabungan '{row['Nama']}' dihapus & saldo dikembalikan!")
+                                        st.rerun()
+                                except Exception as e:
+                                    st.error(f"Gagal menghapus riwayat lengkap: {e}")
+                            else:
+                                if delete_tabungan_cloud(row.get("id")):
+                                    st.success(f"✅ Tabungan '{row['Nama']}' dihapus!")
+                                    st.rerun()
                     
                     # Form setor/tarik
                     if st.session_state.get(f"setor_tabungan_{idx}", False):
                         with st.form(key=f"form_setor_{idx}"):
                             nominal_setor = st.number_input("Nominal Setor (Rp)", min_value=0, step=10000)
                             catatan_setor = st.text_input("Catatan")
+                            # FIX UI: Selectbox harus di luar tombol submit agar terbaca oleh Streamlit
+                            sumber_t = st.selectbox("Ambil dari mana?", ["Bank", "Cash"], key=f"src_setor_{idx}")
                             
                             col_btn1, col_btn2 = st.columns(2)
                             with col_btn1:
@@ -2799,7 +2816,6 @@ with tab_tabungan:
                                                 
                                                 # 3. PENTING: Catat di log utama (transaksi) sebagai PENGELUARAN 
                                                 # agar saldo Bank/Cash berkurang (Literasi Keuangan: Uang dipindah ke pos tabungan)
-                                                sumber_t = st.selectbox("Ambil dari mana?", ["Bank", "Cash"], key=f"src_setor_{idx}")
                                                 main_t = {
                                                     "Tanggal": hari_ini_wib.strftime("%Y-%m-%d"),
                                                     "Tipe": "Pengeluaran",
@@ -2809,9 +2825,14 @@ with tab_tabungan:
                                                     "Status": "Cleared",
                                                     "Tenggat_Waktu": "",
                                                     "Tanggal_Bayar": hari_ini_wib.strftime("%Y-%m-%d"),
-                                                    "Sumber": sumber_t
+                                                    "Sumber": sumber_t,
+                                                    "tabungan_id": row.get("id") # <-- LINK ID UNTUK PENGHAPUSAN NANTI
                                                 }
                                                 save_to_cloud(main_t)
+                                                
+                                                st.success(f"✅ Berhasil setor Rp {nominal_setor:,.0f} dari {sumber_t}!")
+                                                st.session_state[f"setor_tabungan_{idx}"] = False
+                                                st.rerun()
                                                 
                                                 st.success(f"✅ Berhasil setor Rp {nominal_setor:,.0f} dari {sumber_t}!")
                                                 st.session_state[f"setor_tabungan_{idx}"] = False
