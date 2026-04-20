@@ -324,7 +324,7 @@ def get_all_categories(df):
     ]
     
     # Kategori yang tidak ingin dimunculkan lagi di dropdown (Filter agar rapi)
-    blacklist = ["Piutang", "Admin Shopee", "Dari Bapak", "Beras", "Jatip", "Tarik Tunai", "Bensin"]
+    blacklist = ["Piutang", "Admin Shopee", "Dari Bapak", "Beras", "Jatip", "Tarik Tunai", "Bensin", "Penyesuaiian"]
     
     if df is None or df.empty:
         return sorted([c for c in default_cats if c not in blacklist]) + ["Lainnya (Ketik Manual...)"]
