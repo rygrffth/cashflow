@@ -21,6 +21,9 @@ PIUTANG_FILE   = "piutang.csv"
 BUDGET_FILE    = "budget_target.csv"
 RECURRING_FILE = "recurring.csv"
 
+# Kategori yang diabaikan dari perhitungan limit harian (Jastip, Transfer Aset, dll)
+EXCLUDE_FROM_LIMIT = ["Titipan / Jastip", "Tarik Tunai", "Top Up E-Wallet", "Transfer Aset"]
+
 st.set_page_config(page_title="Financial Dashboard", page_icon="💼", layout="wide")
 
 st.markdown("""
@@ -307,6 +310,31 @@ def get_saldo_cash(df):
     cash_in  = df[(df["Tipe"]=="Pemasukan")  & (df["Sumber"]=="Cash")]["Nominal"].sum()
     cash_out = df[(df["Tipe"]=="Pengeluaran") & (df["Sumber"]=="Cash")]["Nominal"].sum()
     return cash_in - cash_out
+
+def get_all_categories(df):
+    """
+    Mengambil semua kategori unik dari dataframe, membersihkannya (Title Case),
+    dan menggabungkannya dengan daftar default.
+    """
+    default_cats = [
+        "Makan", "Bensin / Mobilitas", "Kos", "Hiburan", 
+        "Kebutuhan Lab / Magang", "Bulanan", "SPay", 
+        "Belanja Dapur", "Penyesuaian", "Scheduled Settlement",
+        "Titipan / Jastip", "Tarik Tunai", "Top Up E-Wallet", "Admin Shopee"
+    ]
+    
+    if df is None or df.empty:
+        return sorted(default_cats) + ["Lainnya (Ketik Manual...)"]
+    
+    # Ambil kategori unik dari data, bersihkan whitespace, dan Title Case
+    # Kita filter "Lainnya" agar tidak masuk ke list sebagai opsi ganda
+    existing_cats = [str(c).strip().title() for c in df["Kategori"].dropna().unique() 
+                     if str(c).strip() and "Lainnya" not in str(c)]
+    
+    # Gabungkan dengan default, hilangkan duplikat
+    all_cats = list(set(default_cats + existing_cats))
+    
+    return sorted(all_cats) + ["Lainnya (Ketik Manual...)"]
 
 
 
@@ -648,7 +676,8 @@ SISA_HARI = max((tanggal_gajian - hari_ini_tgl).days, 1)
 total_out_bank = df_asli[
     (df_asli["Tipe"] == "Pengeluaran") & 
     (df_asli["Sumber"] == "Bank") &
-    ~((df_asli["Kategori"] == "Scheduled Settlement") & (df_asli["Status"] == "Pending"))
+    ~((df_asli["Kategori"] == "Scheduled Settlement") & (df_asli["Status"] == "Pending")) &
+    ~(df_asli["Kategori"].isin(EXCLUDE_FROM_LIMIT))
 ]["Nominal"].sum()
 
 total_in_bank = df_asli[
@@ -757,7 +786,7 @@ df_asli["Tanggal_dt"]    = pd.to_datetime(df_asli["Cashflow_Date"], errors='coer
 
 now = datetime.datetime.now()
 
-mask_aktif  = (df_asli["Tipe"]=="Pengeluaran") & ~((df_asli["Kategori"]=="Scheduled Settlement")&(df_asli["Status"]=="Pending"))
+mask_aktif  = (df_asli["Tipe"]=="Pengeluaran") & ~((df_asli["Kategori"]=="Scheduled Settlement")&(df_asli["Status"]=="Pending")) & ~(df_asli["Kategori"].isin(EXCLUDE_FROM_LIMIT))
 mask_income = (df_asli["Tipe"]=="Pemasukan")
 mask_pend   = (df_asli["Tipe"]=="Pengeluaran")&(df_asli["Kategori"]=="Scheduled Settlement")&(df_asli["Status"]=="Pending")
 
@@ -772,7 +801,7 @@ piutang_blm = df_piutang[df_piutang["Status"]=="Belum Lunas"]["Nominal"].sum() i
 
 
 # ===== FILTER UNTUK TRANSAKSI =====
-mask_aktif = (df_asli["Tipe"] == "Pengeluaran") & ~((df_asli["Kategori"] == "Scheduled Settlement") & (df_asli["Status"] == "Pending"))
+mask_aktif = (df_asli["Tipe"] == "Pengeluaran") & ~((df_asli["Kategori"] == "Scheduled Settlement") & (df_asli["Status"] == "Pending")) & ~(df_asli["Kategori"].isin(EXCLUDE_FROM_LIMIT))
 
 # ===== FILTER BERDASARKAN SUMBER (AMAN) =====
 if "Sumber" in df_asli.columns:
@@ -1165,15 +1194,7 @@ with lc:
         with col3:
             sumber_i = st.selectbox("💰 Sumber Dana", ["Bank", "Cash"])
         with col4:
-            kategori_options = [
-                "Makan", 
-                "Bensin / Mobilitas", 
-                "Hiburan", 
-                "Kebutuhan Lab / Magang", 
-                "Scheduled Settlement",
-                "Penyesuaian",
-                "Lainnya (Ketik Manual...)"
-            ]
+            kategori_options = get_all_categories(df_asli)
             kat_pilih = st.selectbox("🏷️ Kategori", kategori_options)
         
         # Kategori Manual
@@ -1227,7 +1248,7 @@ with lc:
                 nr = {
                     "Tanggal": tgl_i.strftime("%Y-%m-%d"),
                     "Tipe": tipe_i,
-                    "Kategori": kat_f,
+                    "Kategori": kat_f.strip().title() if kat_f else "Lainnya",
                     "Nominal": nom_i,
                     "Catatan": cat_i,
                     "Status": st_i,
@@ -1418,7 +1439,7 @@ with tab_grafik:
         st.subheader("🍩 Distribusi Pengeluaran per Kategori")
         
         # Gabungkan bank dan cash untuk pie chart
-        mask_grafik_aktif = (df_grafik["Tipe"] == "Pengeluaran") & ~((df_grafik["Kategori"] == "Scheduled Settlement") & (df_grafik["Status"] == "Pending"))
+        mask_grafik_aktif = (df_grafik["Tipe"] == "Pengeluaran") & ~((df_grafik["Kategori"] == "Scheduled Settlement") & (df_grafik["Status"] == "Pending")) & ~(df_grafik["Kategori"].isin(EXCLUDE_FROM_LIMIT))
         df_bank_kat = df_grafik[mask_grafik_aktif].copy()
         df_bank_kat = df_bank_kat[["Kategori", "Nominal"]]
         
@@ -1589,7 +1610,7 @@ with g3:
         last_year = now.year if now.month > 1 else now.year - 1
         
         # 2. Filter Data (Hanya Pengeluaran Aktif)
-        mask_exp = (df_asli["Tipe"] == "Pengeluaran") & ~((df_asli["Kategori"] == "Scheduled Settlement") & (df_asli["Status"] == "Pending"))
+        mask_exp = (df_asli["Tipe"] == "Pengeluaran") & ~((df_asli["Kategori"] == "Scheduled Settlement") & (df_asli["Status"] == "Pending")) & ~(df_asli["Kategori"].isin(EXCLUDE_FROM_LIMIT))
         df_exp = df_asli[mask_exp].copy()
         
         # 3. Kelompokkan per Bulan
@@ -1689,7 +1710,8 @@ with tab_budget_t:
 
     with st.expander("➕ Tambah / Edit Target"):
         with st.form("form_budget", clear_on_submit=True):
-            kat_b = st.selectbox("Kategori", ["Makan","Bensin / Mobilitas","Hiburan","Kebutuhan Lab / Magang","Penyesuaian","Piutang","Lainnya"])
+            kat_b_options = [c for c in get_all_categories(df_asli) if "Lainnya" not in c]
+            kat_b = st.selectbox("Kategori", kat_b_options)
             tgt_b = st.number_input("Target Bulanan (Rp)", min_value=0, step=10000)
             if st.form_submit_button("💾 Simpan Target"):
                 if tgt_b > 0:
@@ -1890,7 +1912,8 @@ with tab_recurring_t:
         r1,r2 = st.columns(2)
         with r1:
             nama_r   = st.text_input("Nama (misal: Kos, Netflix, Spotify)")
-            kat_r    = st.selectbox("Kategori",["Makan","Bensin / Mobilitas","Hiburan","Kebutuhan Lab / Magang","Penyesuaian","Lainnya"])
+            kat_r_options = [c for c in get_all_categories(df_asli) if "Lainnya" not in c]
+            kat_r    = st.selectbox("Kategori", kat_r_options)
             nominal_r= st.number_input("Nominal (Rp)",min_value=0,step=5000)
         with r2:
             frek_r   = st.selectbox("Frekuensi",["Bulanan","Mingguan"])
@@ -1985,7 +2008,8 @@ with tab_laporan_t:
     # Pisahkan pemasukan & pengeluaran (tanpa pending settlement)
     mask_aktif_periode = (
         (df_periode["Tipe"] == "Pengeluaran") &
-        ~((df_periode["Kategori"] == "Scheduled Settlement") & (df_periode["Status"] == "Pending"))
+        ~((df_periode["Kategori"] == "Scheduled Settlement") & (df_periode["Status"] == "Pending")) &
+        ~(df_periode["Kategori"].isin(EXCLUDE_FROM_LIMIT))
     )
     df_out_periode = df_periode[mask_aktif_periode]
     df_in_periode  = df_periode[df_periode["Tipe"] == "Pemasukan"]
@@ -2082,7 +2106,8 @@ with tab_laporan_t:
     mask_bulan_ini = (
         (df_asli["Tanggal_dt"].dt.date >= bulan_ini_start) &
         (df_asli["Tanggal_dt"].dt.date <= bulan_ini_end) &
-        ~((df_asli["Kategori"] == "Scheduled Settlement") & (df_asli["Status"] == "Pending"))
+        ~((df_asli["Kategori"] == "Scheduled Settlement") & (df_asli["Status"] == "Pending")) &
+        ~(df_asli["Kategori"].isin(EXCLUDE_FROM_LIMIT))
     )
     df_bulan_ini = df_asli[mask_bulan_ini]
     out_bulan_ini = df_bulan_ini[df_bulan_ini["Tipe"]=="Pengeluaran"]["Nominal"].sum()
@@ -2092,7 +2117,8 @@ with tab_laporan_t:
     mask_bulan_lalu = (
         (df_asli["Tanggal_dt"].dt.date >= bulan_lalu_start) &
         (df_asli["Tanggal_dt"].dt.date <= bulan_lalu_end) &
-        ~((df_asli["Kategori"] == "Scheduled Settlement") & (df_asli["Status"] == "Pending"))
+        ~((df_asli["Kategori"] == "Scheduled Settlement") & (df_asli["Status"] == "Pending")) &
+        ~(df_asli["Kategori"].isin(EXCLUDE_FROM_LIMIT))
     )
     df_bulan_lalu = df_asli[mask_bulan_lalu]
     out_bulan_lalu = df_bulan_lalu[df_bulan_lalu["Tipe"]=="Pengeluaran"]["Nominal"].sum()
@@ -2135,7 +2161,8 @@ with tab_laporan_t:
         (df_asli["Tanggal_dt"].dt.date >= tujuh_hari_lalu) &
         (df_asli["Tanggal_dt"].dt.date <= hari_ini_tgl) &
         (df_asli["Tipe"] == "Pengeluaran") &
-        ~((df_asli["Kategori"] == "Scheduled Settlement") & (df_asli["Status"] == "Pending"))
+        ~((df_asli["Kategori"] == "Scheduled Settlement") & (df_asli["Status"] == "Pending")) &
+        ~(df_asli["Kategori"].isin(EXCLUDE_FROM_LIMIT))
     )
     df_7hari = df_asli[mask_7hari]
     total_7hari = df_7hari["Nominal"].sum()
@@ -2222,9 +2249,7 @@ with tab_mandiri:
         edited = st.data_editor(df_prev, use_container_width=True,
             column_config={
                 "Tipe":     st.column_config.SelectboxColumn("Tipe", options=["Pengeluaran","Pemasukan"]),
-                "Kategori": st.column_config.SelectboxColumn("Kategori", options=[
-                    "Makan","Bensin / Mobilitas","Hiburan",
-                    "Kebutuhan Lab / Magang","Scheduled Settlement","Penyesuaian","Lainnya"]),
+                "Kategori": st.column_config.SelectboxColumn("Kategori", options=get_all_categories(df_asli)),
                 "Nominal":  st.column_config.NumberColumn("Nominal (Rp)", format="Rp %d"),
             })
 
@@ -2245,7 +2270,7 @@ with tab_mandiri:
                         new_entry = {
                             "Tanggal": str(row["Tanggal"]),
                             "Tipe": row["Tipe"], 
-                            "Kategori": row["Kategori"],
+                            "Kategori": str(row["Kategori"]).strip().title() if row["Kategori"] else "Lainnya",
                             "Nominal": row["Nominal"], 
                             "Catatan": row["Catatan"],
                             "Status": "Cleared", 
