@@ -1233,18 +1233,18 @@ with lc:
         with st.expander("💸 Ada Titipan / Talangan Orang?"):
             tit_i = st.number_input("Nominal Titipan (Rp)", min_value=0, step=5000, key="tit_input")
             if tit_i > 0:
-                # Opsi 1: Hanya info (metadata)
-                cara_tit = st.radio("Penitip nanti bayar pakai:", ["Bank", "Cash"], horizontal=True, key="tit_cara")
-                cat_final = f"{cat_i} (Titipan: Rp {tit_i:,.0f} via {cara_tit})"
-                
                 st.markdown("---")
-                # Opsi 2: Catat Pemasukan Langsung jika sudah bayar
+                # Gabungkan opsi rencana bayar dan penerimaan langsung agar tidak tumpuk
                 tit_lunas = st.checkbox("💰 Uang Talangan SUDAH DITERIMA?", key="tit_lunas")
-                tit_sumber_p = "Cash" # Default
+                
+                label_sumber = "Terima uangnya di mana?" if tit_lunas else "Rencana penitip bayar pakai (Catatan):"
+                tit_sumber_p = st.radio(label_sumber, ["Bank", "Cash"], horizontal=True, key="tit_sumber_p")
+                
                 if tit_lunas:
-                    tit_sumber_p = st.radio("Terima uangnya di mana?", ["Bank", "Cash"], horizontal=True, key="tit_sumber_p")
                     st.info(f"💡 Web akan otomatis mencatat Pemasukan Rp {tit_i:,.0f} ke {tit_sumber_p}")
                 
+                # Update catatan berdasarkan pilihan yang digabung
+                cat_final = f"{cat_i} (Titipan: Rp {tit_i:,.0f} via {tit_sumber_p}{' - LUNAS' if tit_lunas else ''})"
                 st.caption(f"Hasil Akhir: Limit terpotong Rp {nom_i - tit_i:,.0f}")
         # -------------------------------
         
