@@ -1750,8 +1750,8 @@ with g3:
         fig_gauge.update_layout(
             paper_bgcolor="#1E293B",
             font_color="#94A3B8",
-            height=350,
-            margin=dict(l=30, r=30, t=80, b=10)
+            height=400,
+            margin=dict(l=50, r=50, t=50, b=50)
         )
         st.plotly_chart(fig_gauge, use_container_width=True)
 
