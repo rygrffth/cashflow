@@ -1323,8 +1323,8 @@ PLOT = dict(
     legend=dict(bgcolor="#1E293B",bordercolor="#334155",borderwidth=1)
 )
 
-tab_grafik, tab_budget_t, tab_piutang_t, tab_recurring_t, tab_laporan_t, tab_mandiri, tab_tabungan,tab_cash = st.tabs([
-    "📊 Grafik", "🎯 Budget Target", "💸 Piutang", "🔄 Recurring", "📋 Laporan", "📧 Mandiri", "🏦 Tabungan", "💵 Uang Cash"
+tab_grafik, tab_budget_t, tab_piutang_t, tab_settlement, tab_recurring_t, tab_laporan_t, tab_mandiri, tab_tabungan,tab_cash = st.tabs([
+    "📊 Grafik", "🎯 Budget Target", "💸 Piutang", "🗓️ Settlement", "🔄 Recurring", "📋 Laporan", "📧 Mandiri", "🏦 Tabungan", "💵 Uang Cash"
 ])
 
 with tab_grafik:
@@ -1956,7 +1956,62 @@ with tab_piutang_t:
                 for idx, row in lns_list.iterrows():
                     st.markdown(f"**{row['Nama']}** — Rp {row['Nominal']:,.0f} (Lunas: {row['Tanggal_Lunas']})")
     else:
-        st.info("ℹ️ Belum ada piutang tercatat.")
+        st.info("💡 Belum ada piutang tercatat.")
+        
+with tab_settlement:
+    st.subheader("🗓️ Scheduled Settlement")
+    st.caption("Kelola pembayaran masa depan (Cicilan, Tagihan, CC) yang sudah Anda jadwalkan.")
+    
+    # Filter data khusus Scheduled Settlement yang masih Pending
+    df_settle = df_asli[(df_asli["Kategori"] == "Scheduled Settlement") & (df_asli["Status"] == "Pending")].copy()
+    
+    if not df_settle.empty:
+        total_p = df_settle["Nominal"].sum()
+        st.markdown(f"""
+        <div class="card card-warn">
+            <p class="card-label">⏳ TOTAL TAGIHAN PENDING</p>
+            <p class="card-value" style="color:#F59E0B;">Rp {total_p:,.0f}</p>
+            <p class="card-sub">{len(df_settle)} transaksi perlu dilunasi</p>
+        </div>""", unsafe_allow_html=True)
+        
+        st.markdown("---")
+        st.write("### 📋 Daftar Tunggu Pembayaran")
+        
+        # Sort berdasarkan tenggat waktu terdekat
+        if "Tenggat_Waktu" in df_settle.columns:
+            df_settle = df_settle.sort_values("Tenggat_Waktu")
+            
+        for idx, row in df_settle.iterrows():
+            with st.container():
+                c1, c2, c3 = st.columns([2, 2, 1])
+                with c1:
+                    st.markdown(f"**📝 {row['Catatan']}**")
+                    st.caption(f"📅 Tanggal Input: {row['Tanggal']}")
+                with c2:
+                    st.markdown(f"**Rp {row['Nominal']:,.0f}**")
+                    due_val = row['Tenggat_Waktu'] if row['Tenggat_Waktu'] else "-"
+                    st.markdown(f"<span style='color:#EF4444; font-size:.8rem;'>📅 Due: {due_val}</span>", unsafe_allow_html=True)
+                with c3:
+                    # Gunakan ID asli dari database untuk update yang akurat
+                    raw_id = row.get("id")
+                    if st.button("✅ Lunas", key=f"pay_set_{raw_id if raw_id else idx}", use_container_width=True):
+                        try:
+                            if raw_id:
+                                conn.table("transaksi").update({
+                                    "status": "Cleared",
+                                    "tanggal_bayar": hari_ini_wib.strftime("%Y-%m-%d")
+                                }).eq("id", raw_id).execute()
+                                
+                                st.cache_data.clear()
+                                st.success(f"🎉 Tagihan '{row['Catatan']}' berhasil dilunasi!")
+                                st.rerun()
+                            else:
+                                st.error("ID Transaksi tidak ditemukan. Tidak dapat mengupdate di Cloud.")
+                        except Exception as e:
+                            st.error(f"Gagal memproses pembayaran: {e}")
+            st.markdown("---")
+    else:
+        st.success("✅ Semua tagihan Scheduled Settlement sudah lunas!")
 
 with tab_recurring_t:
     st.subheader("🔄 Recurring Expense")
