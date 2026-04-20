@@ -308,9 +308,9 @@ def save_to_cloud(row_dict):
         return False
     
 def get_saldo_cash(df):
-    """Hitung saldo cash langsung dari tabel transaksi."""
-    cash_in  = df[(df["Tipe"]=="Pemasukan")  & (df["Sumber"]=="Cash")]["Nominal"].sum()
-    cash_out = df[(df["Tipe"]=="Pengeluaran") & (df["Sumber"]=="Cash")]["Nominal"].sum()
+    """Hitung saldo cash langsung dari tabel transaksi (hanya yang Cleared)."""
+    cash_in  = df[(df["Tipe"]=="Pemasukan")  & (df["Sumber"]=="Cash") & (df["Status"]=="Cleared")]["Nominal"].sum()
+    cash_out = df[(df["Tipe"]=="Pengeluaran") & (df["Sumber"]=="Cash") & (df["Status"]=="Cleared")]["Nominal"].sum()
     return cash_in - cash_out
 
 def get_all_categories(df):
@@ -683,15 +683,17 @@ if isinstance(tanggal_gajian, str):
     except: tanggal_gajian = datetime.date(2026, 3, 17)
 SISA_HARI = max((tanggal_gajian - hari_ini_tgl).days, 1)
 
-# Baru hitung saldo
+# Baru hitung saldo (HANYA YANG STATUSNYA CLEARED)
 total_out_bank = df_asli[
     (df_asli["Tipe"] == "Pengeluaran") & 
-    (df_asli["Sumber"] == "Bank")
+    (df_asli["Sumber"] == "Bank") &
+    (df_asli["Status"] == "Cleared")
 ]["Nominal"].sum()
 
 total_in_bank = df_asli[
     (df_asli["Tipe"] == "Pemasukan") & 
-    (df_asli["Sumber"] == "Bank")
+    (df_asli["Sumber"] == "Bank") &
+    (df_asli["Status"] == "Cleared")
 ]["Nominal"].sum()
 
 SALDO_BANK = total_in_bank - total_out_bank
