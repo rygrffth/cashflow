@@ -22,7 +22,7 @@ BUDGET_FILE    = "budget_target.csv"
 RECURRING_FILE = "recurring.csv"
 
 # Kategori yang diabaikan dari perhitungan limit harian (Jastip, Transfer Aset, dll)
-EXCLUDE_FROM_LIMIT = ["Titipan / Jastip", "Transfer Aset", "Scheduled Settlement", "Penyesuaian"]
+EXCLUDE_FROM_LIMIT = ["Transfer Aset", "Scheduled Settlement", "Penyesuaian"]
 
 st.set_page_config(page_title="Financial Dashboard", page_icon="💼", layout="wide")
 
