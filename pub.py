@@ -640,7 +640,7 @@ if not df_cloud.empty:
 else:
     df_asli = load_data()  # Ini mungkin tidak perlu karena sudah cloud-only
     # Tapi kalau tetap dipakai, pastikan:
-        df_asli["Sumber"] = "Bank"
+    df_asli["Sumber"] = "Bank"
         
 # Final column setup
 if "Titipan" not in df_asli.columns:
@@ -1233,9 +1233,19 @@ with lc:
         with st.expander("💸 Ada Titipan / Talangan Orang?"):
             tit_i = st.number_input("Nominal Titipan (Rp)", min_value=0, step=5000, key="tit_input")
             if tit_i > 0:
-                cara_tit = st.radio("Penitip bayar pakai:", ["Bank", "Cash"], horizontal=True, key="tit_cara")
+                # Opsi 1: Hanya info (metadata)
+                cara_tit = st.radio("Penitip nanti bayar pakai:", ["Bank", "Cash"], horizontal=True, key="tit_cara")
                 cat_final = f"{cat_i} (Titipan: Rp {tit_i:,.0f} via {cara_tit})"
-                st.caption(f"Hasil: Limit terpotong Rp {nom_i - tit_i:,.0f}")
+                
+                st.markdown("---")
+                # Opsi 2: Catat Pemasukan Langsung jika sudah bayar
+                tit_lunas = st.checkbox("💰 Uang Talangan SUDAH DITERIMA?", key="tit_lunas")
+                tit_sumber_p = "Cash" # Default
+                if tit_lunas:
+                    tit_sumber_p = st.radio("Terima uangnya di mana?", ["Bank", "Cash"], horizontal=True, key="tit_sumber_p")
+                    st.info(f"💡 Web akan otomatis mencatat Pemasukan Rp {tit_i:,.0f} ke {tit_sumber_p}")
+                
+                st.caption(f"Hasil Akhir: Limit terpotong Rp {nom_i - tit_i:,.0f}")
         # -------------------------------
         
         # Tombol Submit
@@ -1278,11 +1288,28 @@ with lc:
                 }
                 
      
-                # Simpan
+                # Simpan Transaksi Utama (Pengeluaran)
                 save_to_cloud(nr)
                 df_asli = pd.concat([df_asli, pd.DataFrame([nr])], ignore_index=True)
-                save_data(df_asli)
                 
+                # Simpan Transaksi Kedua (Pemasukan Titipan) jika lunas
+                if tit_i > 0 and tit_lunas:
+                    nr_p = {
+                        "Tanggal": tgl_i.strftime("%Y-%m-%d"),
+                        "Tipe": "Pemasukan",
+                        "Kategori": "Titipan / Jastip",
+                        "Nominal": tit_i,
+                        "Catatan": f"Penerimaan Talangan: {cat_i}",
+                        "Status": "Cleared",
+                        "Tenggat_Waktu": "",
+                        "Tanggal_Bayar": tgl_i.strftime("%Y-%m-%d"),
+                        "Sumber": tit_sumber_p,
+                        "Titipan": 0
+                    }
+                    save_to_cloud(nr_p)
+                    df_asli = pd.concat([df_asli, pd.DataFrame([nr_p])], ignore_index=True)
+                
+                save_data(df_asli)
                 st.success("✅ Transaksi berhasil disimpan!")
                 st.rerun()
 
