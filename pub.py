@@ -124,12 +124,14 @@ def load_data_cloud():
                 "status": "Status",
                 "tenggat_waktu": "Tenggat_Waktu",
                 "tanggal_bayar": "Tanggal_Bayar",
-                "sumber": "Sumber"
+                "sumber": "Sumber",
+                "titipan": "Titipan"
             }
             
             df = df.rename(columns=nama_kolom_baru)
             
             df["Nominal"] = pd.to_numeric(df["Nominal"], errors="coerce").fillna(0)
+            df["Titipan"] = pd.to_numeric(df.get("Titipan", 0), errors="coerce").fillna(0)
             
             # Debug: cek apakah kolom Sumber ada
             if "Sumber" not in df.columns:
@@ -145,7 +147,7 @@ def load_data_cloud():
     return pd.DataFrame(columns=[
         "Tanggal","Tipe","Kategori","Nominal",
         "Catatan","Status","Tenggat_Waktu",
-        "Tanggal_Bayar","Sumber"
+        "Tanggal_Bayar","Sumber","Titipan"
     ])
 
 def load_settings_cloud():
@@ -638,8 +640,13 @@ if not df_cloud.empty:
 else:
     df_asli = load_data()  # Ini mungkin tidak perlu karena sudah cloud-only
     # Tapi kalau tetap dipakai, pastikan:
-    if "Sumber" not in df_asli.columns:
         df_asli["Sumber"] = "Bank"
+        
+# Final column setup
+if "Titipan" not in df_asli.columns:
+    df_asli["Titipan"] = 0
+df_asli["Titipan"] = pd.to_numeric(df_asli["Titipan"], errors="coerce").fillna(0)
+df_asli["Net_Nominal"] = df_asli["Nominal"] - df_asli["Titipan"]
         
 
 
@@ -792,9 +799,9 @@ mask_aktif  = (df_asli["Tipe"]=="Pengeluaran") & ~(df_asli["Kategori"].isin(EXCL
 mask_income = (df_asli["Tipe"]=="Pemasukan")
 mask_pend   = (df_asli["Tipe"]=="Pengeluaran")&(df_asli["Kategori"]=="Scheduled Settlement")&(df_asli["Status"]=="Pending")
 
-total_out   = df_asli[mask_aktif]["Nominal"].sum()
+total_out   = df_asli[mask_aktif]["Net_Nominal"].sum()
 total_in    = df_asli[mask_income]["Nominal"].sum()
-total_pend  = df_asli[mask_pend]["Nominal"].sum()
+total_pend  = df_asli[mask_pend]["Net_Nominal"].sum()
 piutang_blm = df_piutang[df_piutang["Status"]=="Belum Lunas"]["Nominal"].sum() if not df_piutang.empty else 0
 
 
@@ -817,37 +824,37 @@ else:
 
 
 # Hari ini
-out_hari_bank = df_asli[mask_aktif & mask_bank & (df_asli["Tanggal_dt"].dt.date == hari_ini_wib)]["Nominal"].sum()
-out_hari_cash = df_asli[mask_aktif & mask_cash & (df_asli["Tanggal_dt"].dt.date == hari_ini_wib)]["Nominal"].sum()
+out_hari_bank = df_asli[mask_aktif & mask_bank & (df_asli["Tanggal_dt"].dt.date == hari_ini_wib)]["Net_Nominal"].sum()
+out_hari_cash = df_asli[mask_aktif & mask_cash & (df_asli["Tanggal_dt"].dt.date == hari_ini_wib)]["Net_Nominal"].sum()
 out_hari = out_hari_bank + out_hari_cash
 
 # Minggu ini
 out_minggu_bank = df_asli[mask_aktif & mask_bank & 
                           (df_asli["Tanggal_dt"].dt.isocalendar().week == now.isocalendar()[1]) & 
-                          (df_asli["Tanggal_dt"].dt.year == now.year)]["Nominal"].sum()
+                          (df_asli["Tanggal_dt"].dt.year == now.year)]["Net_Nominal"].sum()
 out_minggu_cash = df_asli[mask_aktif & mask_cash & 
                           (df_asli["Tanggal_dt"].dt.isocalendar().week == now.isocalendar()[1]) & 
-                          (df_asli["Tanggal_dt"].dt.year == now.year)]["Nominal"].sum()
+                          (df_asli["Tanggal_dt"].dt.year == now.year)]["Net_Nominal"].sum()
 out_minggu = out_minggu_bank + out_minggu_cash
 
 # Bulan ini
 out_bulan_bank = df_asli[mask_aktif & mask_bank & 
                          (df_asli["Tanggal_dt"].dt.month == now.month) & 
-                         (df_asli["Tanggal_dt"].dt.year == now.year)]["Nominal"].sum()
+                         (df_asli["Tanggal_dt"].dt.year == now.year)]["Net_Nominal"].sum()
 out_bulan_cash = df_asli[mask_aktif & mask_cash & 
                          (df_asli["Tanggal_dt"].dt.month == now.month) & 
-                         (df_asli["Tanggal_dt"].dt.year == now.year)]["Nominal"].sum()
+                         (df_asli["Tanggal_dt"].dt.year == now.year)]["Net_Nominal"].sum()
 out_bulan = out_bulan_bank + out_bulan_cash
 
 
 
 penggunaan_cash_hari_ini = df_asli[
-    mask_cash & mask_aktif & (df_asli["Tanggal_dt"].dt.date == hari_ini_wib)]["Nominal"].sum()
+    mask_cash & mask_aktif & (df_asli["Tanggal_dt"].dt.date == hari_ini_wib)]["Net_Nominal"].sum()
 
 penggunaan_cash_minggu = df_asli[
     mask_cash & mask_aktif &
     (df_asli["Tanggal_dt"].dt.isocalendar().week == now.isocalendar()[1]) &
-    (df_asli["Tanggal_dt"].dt.year == now.year)]["Nominal"].sum()
+    (df_asli["Tanggal_dt"].dt.year == now.year)]["Net_Nominal"].sum()
 
 penggunaan_cash_bulan = df_asli[
     mask_cash & mask_aktif &
@@ -1217,9 +1224,19 @@ with lc:
             if st_i == "Cleared":
                 tb_i = tgl_i.strftime("%Y-%m-%d")
         
-        # Nominal dan Catatan
         nom_i = st.number_input("💰 Nominal (Rp)", min_value=0, step=5000, format="%d")
-        cat_i = st.text_input("📝 Catatan", placeholder="Contoh: Beli makan siang")
+        
+        # --- Fitur Titipan / Talangan ---
+        tit_i = 0
+        cat_final = cat_i = st.text_input("📝 Catatan", placeholder="Contoh: Beli makan siang")
+        
+        with st.expander("💸 Ada Titipan / Talangan Orang?"):
+            tit_i = st.number_input("Nominal Titipan (Rp)", min_value=0, step=5000, key="tit_input")
+            if tit_i > 0:
+                cara_tit = st.radio("Penitip bayar pakai:", ["Bank", "Cash"], horizontal=True, key="tit_cara")
+                cat_final = f"{cat_i} (Titipan: Rp {tit_i:,.0f} via {cara_tit})"
+                st.caption(f"Hasil: Limit terpotong Rp {nom_i - tit_i:,.0f}")
+        # -------------------------------
         
         # Tombol Submit
         submitted = st.form_submit_button("💾 Simpan Transaksi", use_container_width=True)
@@ -1252,11 +1269,12 @@ with lc:
                     "Tipe": tipe_i,
                     "Kategori": kat_f.strip().title() if kat_f else "Lainnya",
                     "Nominal": nom_i,
-                    "Catatan": cat_i,
+                    "Catatan": cat_final,
                     "Status": st_i,
                     "Tenggat_Waktu": tg_i if tg_i else "",
                     "Tanggal_Bayar": tb_i if tb_i else "",
-                    "Sumber": sumber_i
+                    "Sumber": sumber_i,
+                    "Titipan": tit_i
                 }
                 
      
@@ -1341,7 +1359,8 @@ with tab_grafik:
         ~(df_grafik["Kategori"].isin(EXCLUDE_FROM_LIMIT))
     ].copy()
     df_bank["Tanggal"] = pd.to_datetime(df_bank["Tanggal"]).dt.date
-    df_bank = df_bank.groupby("Tanggal")["Nominal"].sum().reset_index()
+    df_bank = df_bank.groupby("Tanggal")["Net_Nominal"].sum().reset_index()
+    df_bank = df_bank.rename(columns={"Net_Nominal": "Nominal"})
     df_bank["Sumber"] = "Bank"
     
     # Data Cash
@@ -1351,7 +1370,8 @@ with tab_grafik:
         ~(df_grafik["Kategori"].isin(EXCLUDE_FROM_LIMIT))
     ].copy()
     df_cash["Tanggal"] = pd.to_datetime(df_cash["Tanggal"]).dt.date
-    df_cash = df_cash.groupby("Tanggal")["Nominal"].sum().reset_index()
+    df_cash = df_cash.groupby("Tanggal")["Net_Nominal"].sum().reset_index()
+    df_cash = df_cash.rename(columns={"Net_Nominal": "Nominal"})
     df_cash["Sumber"] = "Cash"
     
     # Gabungkan
@@ -1445,7 +1465,8 @@ with tab_grafik:
         # Gabungkan bank dan cash untuk pie chart
         mask_grafik_aktif = (df_grafik["Tipe"] == "Pengeluaran") & ~(df_grafik["Kategori"].isin(EXCLUDE_FROM_LIMIT))
         df_bank_kat = df_grafik[mask_grafik_aktif].copy()
-        df_bank_kat = df_bank_kat[["Kategori", "Nominal"]]
+        df_bank_kat = df_bank_kat[["Kategori", "Net_Nominal"]]
+        df_bank_kat = df_bank_kat.rename(columns={"Net_Nominal": "Nominal"})
         
         try:
             res_cash = conn.table("penggunaan_cash").select("*").execute()
@@ -1623,8 +1644,10 @@ with g3:
         
         if not df_last_month.empty or not df_this_month.empty:
             # Aggregasi per Kategori
-            cat_this = df_this_month.groupby("Kategori")["Nominal"].sum().reset_index()
-            cat_last = df_last_month.groupby("Kategori")["Nominal"].sum().reset_index()
+            cat_this = df_this_month.groupby("Kategori")["Net_Nominal"].sum().reset_index()
+            cat_this = cat_this.rename(columns={"Net_Nominal": "Nominal"})
+            cat_last = df_last_month.groupby("Kategori")["Net_Nominal"].sum().reset_index()
+            cat_last = cat_last.rename(columns={"Net_Nominal": "Nominal"})
             
             # Merge
             df_comp = pd.merge(cat_last, cat_this, on="Kategori", how="outer", suffixes=('_Lalu', '_Ini')).fillna(0)
@@ -2017,7 +2040,7 @@ with tab_laporan_t:
     df_out_periode = df_periode[mask_aktif_periode]
     df_in_periode  = df_periode[df_periode["Tipe"] == "Pemasukan"]
 
-    total_out = df_out_periode["Nominal"].sum()
+    total_out = df_out_periode["Net_Nominal"].sum()
     total_in  = df_in_periode["Nominal"].sum()
     net_cash  = total_in - total_out
     avg_harian = total_out / jumlah_hari if jumlah_hari > 0 else 0
@@ -2112,7 +2135,7 @@ with tab_laporan_t:
         ~(df_asli["Kategori"].isin(EXCLUDE_FROM_LIMIT))
     )
     df_bulan_ini = df_asli[mask_bulan_ini]
-    out_bulan_ini = df_bulan_ini[df_bulan_ini["Tipe"]=="Pengeluaran"]["Nominal"].sum()
+    out_bulan_ini = df_bulan_ini[df_bulan_ini["Tipe"]=="Pengeluaran"]["Net_Nominal"].sum()
     in_bulan_ini  = df_bulan_ini[df_bulan_ini["Tipe"]=="Pemasukan"]["Nominal"].sum()
 
     # Filter data bulan lalu
@@ -2122,7 +2145,7 @@ with tab_laporan_t:
         ~(df_asli["Kategori"].isin(EXCLUDE_FROM_LIMIT))
     )
     df_bulan_lalu = df_asli[mask_bulan_lalu]
-    out_bulan_lalu = df_bulan_lalu[df_bulan_lalu["Tipe"]=="Pengeluaran"]["Nominal"].sum()
+    out_bulan_lalu = df_bulan_lalu[df_bulan_lalu["Tipe"]=="Pengeluaran"]["Net_Nominal"].sum()
     in_bulan_lalu  = df_bulan_lalu[df_bulan_lalu["Tipe"]=="Pemasukan"]["Nominal"].sum()
 
     # Hitung perubahan persen
@@ -2165,7 +2188,7 @@ with tab_laporan_t:
         ~(df_asli["Kategori"].isin(EXCLUDE_FROM_LIMIT))
     )
     df_7hari = df_asli[mask_7hari]
-    total_7hari = df_7hari["Nominal"].sum()
+    total_7hari = df_7hari["Net_Nominal"].sum()
     rata_7hari = total_7hari / 7
 
     # Proyeksi total pengeluaran sampai gajian
@@ -2401,7 +2424,7 @@ with tab_cash:
             df_cash_daily = df_cash_daily[df_cash_daily["Tipe"] == "Pengeluaran"]
             
             if not df_cash_daily.empty:
-                daily_sum = df_cash_daily.groupby(df_cash_daily["Tanggal"].dt.date)["Nominal"].sum().reset_index()
+                daily_sum = df_cash_daily.groupby(df_cash_daily["Tanggal"].dt.date)["Net_Nominal"].sum().reset_index()
                 daily_sum.columns = ["Tanggal", "Total"]
                 daily_sum = daily_sum.sort_values("Tanggal")
                 
@@ -2891,7 +2914,8 @@ try:
             "status": "Status",
             "tenggat_waktu": "Tenggat_Waktu",
             "tanggal_bayar": "Tanggal_Bayar",
-            "sumber": "Sumber"
+            "sumber": "Sumber",
+            "titipan": "Titipan"
         })
         df_tampil["Nominal"] = pd.to_numeric(df_tampil["Nominal"], errors="coerce").fillna(0)
         
@@ -2991,6 +3015,11 @@ if not df_tampil.empty:
             format="YYYY-MM-DD",
             help="Klik untuk memilih tanggal bayar"
         ),
+        "Titipan": st.column_config.NumberColumn(
+            "Titipan (Rp)", 
+            format="Rp %d",
+            help="Nominal talangan orang lain"
+        ),
     }
     
     st.info("💡 **Tips:** Untuk menghapus/mengedit transaksi, ubah data di tabel lalu klik tombol **'Simpan Perubahan'** di bawah.")
@@ -3026,10 +3055,11 @@ if not df_tampil.empty:
                     data_to_save = data_to_save.rename(columns={
                         "Tanggal": "tanggal", "Tipe": "tipe", "Kategori": "kategori",
                         "Nominal": "nominal", "Catatan": "catatan", "Status": "status",
-                        "Tenggat_Waktu": "tenggat_waktu", "Tanggal_Bayar": "tanggal_bayar", "Sumber": "sumber"
+                        "Tenggat_Waktu": "tenggat_waktu", "Tanggal_Bayar": "tanggal_bayar", 
+                        "Sumber": "sumber", "Titipan": "titipan"
                     })
                     
-                    cols_to_keep = ["tanggal","tipe","kategori","nominal","catatan","status","tenggat_waktu","tanggal_bayar","sumber"]
+                    cols_to_keep = ["tanggal","tipe","kategori","nominal","catatan","status","tenggat_waktu","tanggal_bayar","sumber", "titipan"]
                     data_to_save = data_to_save[[c for c in cols_to_keep if c in data_to_save.columns]]
                     records = data_to_save.to_dict(orient="records")
                     
