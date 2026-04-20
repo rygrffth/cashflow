@@ -2993,6 +2993,8 @@ if not df_tampil.empty:
         ),
     }
     
+    st.info("💡 **Tips:** Untuk menghapus/mengedit transaksi, ubah data di tabel lalu klik tombol **'Simpan Perubahan'** di bawah.")
+    
     # Tampilkan data editor
     edited_df = st.data_editor(
         df_filter,
@@ -3057,20 +3059,21 @@ if not df_tampil.empty:
         with col_hapus1:
             if st.button("Hapus Semua Data Bank", use_container_width=True):
                 conn.table("transaksi").delete().eq("sumber", "Bank").execute()
+                st.cache_data.clear()
                 st.success("Data bank dihapus!")
                 st.rerun()
         
         with col_hapus2:
             if st.button("Hapus Semua Data Cash", use_container_width=True):
                 conn.table("transaksi").delete().eq("sumber", "Cash").execute()
-                
+                st.cache_data.clear()
                 st.success("Data cash dihapus!")
                 st.rerun()
         
         with col_hapus3:
             if st.button("Hapus SEMUA Data", use_container_width=True):
                 conn.table("transaksi").delete().neq("id", -1).execute()
-            
+                st.cache_data.clear()
                 st.success("Semua data dihapus!")
                 st.rerun()
         
@@ -3079,6 +3082,7 @@ if not df_tampil.empty:
             id_hapus = st.number_input("ID yang dihapus", min_value=1, step=1, key="id_hapus")
             if st.button("Hapus ID", use_container_width=True):
                 conn.table("transaksi").delete().eq("id", id_hapus).execute()
+                st.cache_data.clear()
                 st.success(f"ID {id_hapus} dihapus!")
                 st.rerun()
 
