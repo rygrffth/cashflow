@@ -1232,7 +1232,7 @@ with lc:
         tit_i = 0
         cat_final = cat_i = st.text_input("📝 Catatan", placeholder="Contoh: Beli makan siang")
         
-        with st.expander("💸 Ada Titipan / Talangan Orang?"):
+        with st.expander("💸 Ada Titipan / Talangan Orang? (v2)"):
             col_tit1, col_tit2 = st.columns(2)
             with col_tit1:
                 tit_bank = st.number_input("Nominal Titipan Bank (Rp)", min_value=0, step=5000, key="tit_bank")
