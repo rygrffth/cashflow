@@ -1,15 +1,18 @@
-# Folder library (berat banget kalau diupload)
+# Folder library
 .venv/
 __pycache__/
 
-# File rahasia (biar Supabase kamu ga di-hack orang)
+# File rahasia
 secrets.toml
 .streamlit/secrets.toml
 
 app.py
 
-# File data lokal (kalau mau privat)
+# File data lokal
 keuangan_ramadan.csv
 piutang.csv
 budget_target.csv
 recurring.csv
+
+# Session Recap (History Chat) - Blocked from GitHub
+session_recap.md

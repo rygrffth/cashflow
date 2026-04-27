@@ -1233,20 +1233,32 @@ with lc:
         cat_final = cat_i = st.text_input("📝 Catatan", placeholder="Contoh: Beli makan siang")
         
         with st.expander("💸 Ada Titipan / Talangan Orang?"):
-            tit_i = st.number_input("Nominal Titipan (Rp)", min_value=0, step=5000, key="tit_input")
+            col_tit1, col_tit2 = st.columns(2)
+            with col_tit1:
+                tit_bank = st.number_input("Nominal Titipan Bank (Rp)", min_value=0, step=5000, key="tit_bank")
+            with col_tit2:
+                tit_cash = st.number_input("Nominal Titipan Cash (Rp)", min_value=0, step=5000, key="tit_cash")
+            
+            tit_i = tit_bank + tit_cash
+            
             if tit_i > 0:
                 st.markdown("---")
                 # Gabungkan opsi rencana bayar dan penerimaan langsung agar tidak tumpuk
                 tit_lunas = st.checkbox("💰 Uang Talangan SUDAH DITERIMA?", key="tit_lunas")
                 
-                label_sumber = "Terima uangnya di mana?" if tit_lunas else "Rencana penitip bayar pakai (Catatan):"
-                tit_sumber_p = st.radio(label_sumber, ["Bank", "Cash"], horizontal=True, key="tit_sumber_p")
-                
                 if tit_lunas:
-                    st.info(f"💡 Web akan otomatis mencatat Pemasukan Rp {tit_i:,.0f} ke {tit_sumber_p}")
+                    msg_lunas = "💡 Web akan otomatis mencatat Pemasukan:"
+                    if tit_bank > 0: msg_lunas += f"\n- Rp {tit_bank:,.0f} ke Bank"
+                    if tit_cash > 0: msg_lunas += f"\n- Rp {tit_cash:,.0f} ke Cash"
+                    st.info(msg_lunas)
                 
-                # Update catatan berdasarkan pilihan yang digabung
-                cat_final = f"{cat_i} (Titipan: Rp {tit_i:,.0f} via {tit_sumber_p}{' - LUNAS' if tit_lunas else ''})"
+                # Update catatan
+                parts = []
+                if tit_bank > 0: parts.append(f"Bank: Rp {tit_bank:,.0f}")
+                if tit_cash > 0: parts.append(f"Cash: Rp {tit_cash:,.0f}")
+                tit_detail = ", ".join(parts)
+                
+                cat_final = f"{cat_i} (Titipan: {tit_detail}{' - LUNAS' if tit_lunas else ''})"
                 st.caption(f"Hasil Akhir: Limit terpotong Rp {nom_i - tit_i:,.0f}")
         # -------------------------------
         
@@ -1296,20 +1308,37 @@ with lc:
                 
                 # Simpan Transaksi Kedua (Pemasukan Titipan) jika lunas
                 if tit_i > 0 and tit_lunas:
-                    nr_p = {
-                        "Tanggal": tgl_i.strftime("%Y-%m-%d"),
-                        "Tipe": "Pemasukan",
-                        "Kategori": "Titipan / Jastip",
-                        "Nominal": tit_i,
-                        "Catatan": f"Penerimaan Talangan: {cat_i}",
-                        "Status": "Cleared",
-                        "Tenggat_Waktu": "",
-                        "Tanggal_Bayar": tgl_i.strftime("%Y-%m-%d"),
-                        "Sumber": tit_sumber_p,
-                        "Titipan": 0
-                    }
-                    save_to_cloud(nr_p)
-                    df_asli = pd.concat([df_asli, pd.DataFrame([nr_p])], ignore_index=True)
+                    if tit_bank > 0:
+                        nr_p_bank = {
+                            "Tanggal": tgl_i.strftime("%Y-%m-%d"),
+                            "Tipe": "Pemasukan",
+                            "Kategori": "Titipan / Jastip",
+                            "Nominal": tit_bank,
+                            "Catatan": f"Penerimaan Talangan (Bank): {cat_i}",
+                            "Status": "Cleared",
+                            "Tenggat_Waktu": "",
+                            "Tanggal_Bayar": tgl_i.strftime("%Y-%m-%d"),
+                            "Sumber": "Bank",
+                            "Titipan": 0
+                        }
+                        save_to_cloud(nr_p_bank)
+                        df_asli = pd.concat([df_asli, pd.DataFrame([nr_p_bank])], ignore_index=True)
+                    
+                    if tit_cash > 0:
+                        nr_p_cash = {
+                            "Tanggal": tgl_i.strftime("%Y-%m-%d"),
+                            "Tipe": "Pemasukan",
+                            "Kategori": "Titipan / Jastip",
+                            "Nominal": tit_cash,
+                            "Catatan": f"Penerimaan Talangan (Cash): {cat_i}",
+                            "Status": "Cleared",
+                            "Tenggat_Waktu": "",
+                            "Tanggal_Bayar": tgl_i.strftime("%Y-%m-%d"),
+                            "Sumber": "Cash",
+                            "Titipan": 0
+                        }
+                        save_to_cloud(nr_p_cash)
+                        df_asli = pd.concat([df_asli, pd.DataFrame([nr_p_cash])], ignore_index=True)
                 
                 save_data(df_asli)
                 st.success("✅ Transaksi berhasil disimpan!")
