@@ -1244,7 +1244,7 @@ with lc:
             if tit_i > 0:
                 st.markdown("---")
                 # Gabungkan opsi rencana bayar dan penerimaan langsung agar tidak tumpuk
-                tit_lunas = st.checkbox("💰 Uang Talangan SUDAH DITERIMA?", key="tit_lunas")
+                tit_lunas = st.checkbox("💰 Uang Talangan SUDAH DITERIMA?", value=True, key="tit_lunas")
                 
                 if tit_lunas:
                     msg_lunas = "💡 Web akan otomatis mencatat Pemasukan:"
@@ -1298,7 +1298,8 @@ with lc:
                     "Tenggat_Waktu": tg_i if tg_i else "",
                     "Tanggal_Bayar": tb_i if tb_i else "",
                     "Sumber": sumber_i,
-                    "Titipan": tit_i
+                    "Titipan": tit_i,
+                    "Net_Nominal": nom_i - tit_i
                 }
                 
      
@@ -1319,7 +1320,8 @@ with lc:
                             "Tenggat_Waktu": "",
                             "Tanggal_Bayar": tgl_i.strftime("%Y-%m-%d"),
                             "Sumber": "Bank",
-                            "Titipan": 0
+                            "Titipan": 0,
+                            "Net_Nominal": tit_bank
                         }
                         save_to_cloud(nr_p_bank)
                         df_asli = pd.concat([df_asli, pd.DataFrame([nr_p_bank])], ignore_index=True)
@@ -1335,7 +1337,8 @@ with lc:
                             "Tenggat_Waktu": "",
                             "Tanggal_Bayar": tgl_i.strftime("%Y-%m-%d"),
                             "Sumber": "Cash",
-                            "Titipan": 0
+                            "Titipan": 0,
+                            "Net_Nominal": tit_cash
                         }
                         save_to_cloud(nr_p_cash)
                         df_asli = pd.concat([df_asli, pd.DataFrame([nr_p_cash])], ignore_index=True)
