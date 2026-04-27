@@ -299,7 +299,8 @@ def load_transaksi_tabungan_cloud(tabungan_id=None):
 def save_to_cloud(row_dict): 
     """Fungsi khusus untuk insert ke tabel transaksi"""
     try:
-        clean_dict = {k.lower(): v for k, v in row_dict.items()}
+        # Exclude net_nominal agar tidak error jika kolomnya tidak ada di database
+        clean_dict = {k.lower(): v for k, v in row_dict.items() if k.lower() != 'net_nominal'}
         conn.table("transaksi").insert(clean_dict).execute()
         st.cache_data.clear()
         return True
