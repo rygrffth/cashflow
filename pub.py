@@ -1388,21 +1388,29 @@ with tab_grafik:
         else: # Custom
             default_start = hari_ini_wib - datetime.timedelta(days=30)
             res_dates = st.date_input("Pilih Rentang Tanggal", [default_start, hari_ini_wib], key="graph_custom_range")
-            if isinstance(res_dates, list) and len(res_dates) == 2:
+            if isinstance(res_dates, (list, tuple)) and len(res_dates) == 2:
                 start_f, end_f = res_dates
+            elif isinstance(res_dates, (list, tuple)) and len(res_dates) == 1:
+                start_f = end_f = res_dates[0]
             else:
-                start_f = end_f = res_dates if not isinstance(res_dates, list) else res_dates[0]
+                start_f = end_f = res_dates
                 
-    # Filter data khusus untuk grafik (Fix TypeError)
+    # Filter data khusus untuk grafik
     try:
-        # Konversi filter ke datetime.date agar aman saat dibandingkan
-        f_start = pd.to_datetime(start_f).date() if start_f else pd.Timestamp.min.date()
-        f_end = pd.to_datetime(end_f).date() if end_f else pd.Timestamp.max.date()
+        # Pastikan f_start dan f_end adalah date object tunggal
+        if isinstance(start_f, (list, tuple, pd.Series, pd.Index)):
+            start_f = start_f[0] if len(start_f) > 0 else hari_ini_wib
+        if isinstance(end_f, (list, tuple, pd.Series, pd.Index)):
+            end_f = end_f[-1] if len(end_f) > 0 else hari_ini_wib
+
+        f_start = pd.to_datetime(start_f).date()
+        f_end = pd.to_datetime(end_f).date()
         
-        mask_g = (pd.to_datetime(df_asli["Tanggal_dt"]).dt.date >= f_start) & \
-                 (pd.to_datetime(df_asli["Tanggal_dt"]).dt.date <= f_end)
+        mask_g = (df_asli["Tanggal_dt"].dt.date >= f_start) & \
+                 (df_asli["Tanggal_dt"].dt.date <= f_end)
         df_grafik = df_asli[mask_g].copy()
-    except:
+    except Exception as e:
+        # Fallback yang lebih aman
         df_grafik = df_asli.copy()
         f_start = start_f
         f_end = end_f
