@@ -1033,7 +1033,7 @@ st.subheader("🔮 Simulasi Jajan")
 
 # Batasi max_value agar tidak negatif
 max_simulasi = max(0, int(saldo_op + out_hari))
-default_simulasi = min(int(out_hari), max_simulasi)
+default_simulasi = max(0, min(int(out_hari), max_simulasi))
 
 col_sim1, col_sim2 = st.columns(2)
 
