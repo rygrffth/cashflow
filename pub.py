@@ -1012,7 +1012,7 @@ with col_l4:
     """, unsafe_allow_html=True)
 
 # Progress bar
-st.progress(min(persentase / 100, 1.0))
+st.progress(max(0.0, min(persentase / 100, 1.0)))
 
 # Status berdasarkan penggunaan
 if persentase < 30:
@@ -1832,7 +1832,7 @@ with tab_budget_t:
                     <span style="color:{clr};font-size:.85rem;">{sisa_txt}</span>
                 </div>
             </div>""", unsafe_allow_html=True)
-            st.progress(pct_b)
+            st.progress(max(0.0, min(pct_b, 1.0)))
 
         bc=df_budget.copy(); bc["Terpakai"]=bc["Kategori"].map(lambda k: out_bln_kat.get(k,0))
         fb2=go.Figure()
@@ -2795,7 +2795,7 @@ with tab_tabungan:
             </div>
             """, unsafe_allow_html=True)
 
-            st.progress(progress_total / 100)
+            st.progress(max(0.0, min(progress_total / 100, 1.0)))
             st.caption(f"Progress target aktif: {progress_total:.1f}%")
             
             # Statistik cepat
@@ -2827,7 +2827,7 @@ with tab_tabungan:
                     
                     with col_a:
                         progress = (row["Terkumpul"] / row["Target"] * 100) if row["Target"] > 0 else 0
-                        st.progress(progress / 100)
+                        st.progress(max(0.0, min(progress / 100, 1.0)))
                         st.caption(f"Progress: {progress:.1f}%")
                         
                         # Hitung sisa hari
