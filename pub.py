@@ -1117,55 +1117,37 @@ with col_dampak3:
 st.markdown("---")
 st.subheader("💡 Rekomendasi")
 
-# Pastikan variabel ada sebelum dipakai
-if 'selisih' not in locals():
-    selisih = 0
-if 'selisih_limit' not in locals():
-    selisih_limit = 0
-if 'sisa_setelah_jajan' not in locals():
-    sisa_setelah_jajan = sisa_jatah_hari_ini
+# Hitung selisih dan limit masa depan
+selisih = abs(simulasi_jajan - out_hari)
+limit_besok_sim = (saldo_op - simulasi_jajan) / (SISA_HARI - 1) if SISA_HARI > 1 else (saldo_op - simulasi_jajan)
+selisih_limit_sim = limit_besok_sim - batas_hr
 
 # ===== LOGIKA SIMULASI YANG FOKUS KE DAMPAK ESOK =====
 if simulasi_jajan > out_hari:
-    # LEBIH BOROS DARI BIASA
-    tambahan_pengeluaran = selisih
-    st.warning(f"⚠️ Hari ini kamu **boros Rp {tambahan_pengeluaran:,.0f}** dari biasanya (Rp {out_hari:,.0f} → Rp {simulasi_jajan:,.0f})")
+    # LEBIH BOROS DARI SEKARANG
+    st.warning(f"⚠️ Jika jajan bertambah **Rp {selisih:,.0f}** hari ini (Total: Rp {simulasi_jajan:,.0f})")
     
     if sisa_setelah_jajan >= 0:
-        st.info(f"💰 Sisa budget hari ini: Rp {sisa_setelah_jajan:,.0f}")
-        
-        # Dampak ke limit besok
-        if SISA_HARI > 1:
-            limit_besok_baru = (saldo_op - simulasi_jajan) / (SISA_HARI - 1)
-            selisih_limit = limit_besok_baru - batas_hr
-            
-            if selisih_limit < 0:
-                st.info(f"📉 Limit besok **turun Rp {abs(selisih_limit):,.0f}** (Rp {batas_hr:,.0f} → Rp {limit_besok_baru:,.0f})")
-            else:
-                st.info(f"📈 Limit besok **naik Rp {selisih_limit:,.0f}** (Rp {batas_hr:,.0f} → Rp {limit_besok_baru:,.0f})")
+        st.info(f"💰 Sisa budget hari ini tinggal: Rp {sisa_setelah_jajan:,.0f}")
+        if selisih_limit_sim < 0:
+            st.info(f"📉 Dampak: Limit besok **turun Rp {abs(selisih_limit_sim):,.0f}** menjadi Rp {limit_besok_sim:,.0f}")
+        else:
+            st.info(f"📈 Dampak: Limit besok tetap **naik Rp {selisih_limit_sim:,.0f}** menjadi Rp {limit_besok_sim:,.0f}")
     else:
-        st.error(f"🚨 DEFISIT Rp {abs(sisa_setelah_jajan):,.0f}! Ambil dari tabungan?")
+        st.error(f"🚨 DEFISIT Rp {abs(sisa_setelah_jajan):,.0f}! Kamu harus ambil dari tabungan atau jatah besok.")
         
 elif simulasi_jajan < out_hari:
-    # LEBIH HEMAT DARI BIASA
-    hemat = selisih
-    st.success(f"🎉 Hari ini kamu **hemat Rp {hemat:,.0f}** dari biasanya (Rp {out_hari:,.0f} → Rp {simulasi_jajan:,.0f})")
-    
-    st.info(f"💰 Sisa budget hari ini: Rp {sisa_setelah_jajan:,.0f}")
-    
-    # Dampak ke limit besok
-    if SISA_HARI > 1:
-        limit_besok_baru = (saldo_op - simulasi_jajan) / (SISA_HARI - 1)
-        selisih_limit = limit_besok_baru - batas_hr
-        
-        if selisih_limit > 0:
-            st.success(f"📈 Limit besok **naik Rp {selisih_limit:,.0f}** (Rp {batas_hr:,.0f} → Rp {limit_besok_baru:,.0f})")
-        else:
-            st.info(f"📉 Limit besok **turun Rp {abs(selisih_limit):,.0f}** (Rp {batas_hr:,.0f} → Rp {limit_besok_baru:,.0f})")
+    # LEBIH HEMAT DARI SEKARANG (Simulasi mengurangi jajan yang sudah tercatat - biasanya untuk planning)
+    st.success(f"🎉 Jika jajan dikurangi **Rp {selisih:,.0f}** (Total: Rp {simulasi_jajan:,.0f})")
+    st.info(f"📈 Dampak: Limit besok akan **naik Rp {selisih_limit_sim:,.0f}** menjadi Rp {limit_besok_sim:,.0f}")
+
 else:
-    # SAMA
-    st.info(f"⚖️ Sama seperti biasanya (Rp {out_hari:,.0f})")
-    st.info(f"💰 Limit besok tetap Rp {batas_hr:,.0f}")
+    # SAMA DENGAN PENGELUARAN SAAT INI
+    st.info(f"⚖️ Jika tidak ada jajan lagi hari ini (Tetap Rp {out_hari:,.0f})")
+    if selisih_limit_sim > 0:
+        st.success(f"📈 Dampak: Limit besok akan **naik Rp {selisih_limit_sim:,.0f}** menjadi Rp {limit_besok_sim:,.0f}")
+    else:
+        st.info(f"💰 Dampak: Limit besok akan menjadi Rp {limit_besok_sim:,.0f}")
 
 
 st.markdown("---")
