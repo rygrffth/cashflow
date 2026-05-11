@@ -24,6 +24,9 @@ RECURRING_FILE = "recurring.csv"
 # Kategori yang diabaikan dari perhitungan limit harian (Jastip, Transfer Aset, dll)
 EXCLUDE_FROM_LIMIT = ["Transfer Aset", "Scheduled Settlement", "Penyesuaian", "Menabung"]
 
+# Kategori yang dihitung dalam pengeluaran harian aktif
+KATEGORI_HARIAN = ["Makan", "Bensin / Mobilitas", "Makan (Sahur/Buka)"]
+
 st.set_page_config(page_title="Financial Dashboard", page_icon="💼", layout="wide")
 
 st.markdown("""
@@ -826,25 +829,27 @@ else:
 
 
 
-# Hari ini
-out_hari_bank = df_asli[mask_aktif & mask_bank & (df_asli["Tanggal_dt"].dt.date == hari_ini_wib)]["Net_Nominal"].sum()
-out_hari_cash = df_asli[mask_aktif & mask_cash & (df_asli["Tanggal_dt"].dt.date == hari_ini_wib)]["Net_Nominal"].sum()
+# Hari ini (Hanya kategori harian: Makan & Bensin)
+mask_harian = df_asli["Kategori"].isin(KATEGORI_HARIAN)
+
+out_hari_bank = df_asli[mask_aktif & mask_harian & mask_bank & (df_asli["Tanggal_dt"].dt.date == hari_ini_wib)]["Net_Nominal"].sum()
+out_hari_cash = df_asli[mask_aktif & mask_harian & mask_cash & (df_asli["Tanggal_dt"].dt.date == hari_ini_wib)]["Net_Nominal"].sum()
 out_hari = out_hari_bank + out_hari_cash
 
-# Minggu ini
-out_minggu_bank = df_asli[mask_aktif & mask_bank & 
+# Minggu ini (Hanya kategori harian: Makan & Bensin)
+out_minggu_bank = df_asli[mask_aktif & mask_harian & mask_bank & 
                           (df_asli["Tanggal_dt"].dt.isocalendar().week == now.isocalendar()[1]) & 
                           (df_asli["Tanggal_dt"].dt.year == now.year)]["Net_Nominal"].sum()
-out_minggu_cash = df_asli[mask_aktif & mask_cash & 
+out_minggu_cash = df_asli[mask_aktif & mask_harian & mask_cash & 
                           (df_asli["Tanggal_dt"].dt.isocalendar().week == now.isocalendar()[1]) & 
                           (df_asli["Tanggal_dt"].dt.year == now.year)]["Net_Nominal"].sum()
 out_minggu = out_minggu_bank + out_minggu_cash
 
-# Bulan ini
-out_bulan_bank = df_asli[mask_aktif & mask_bank & 
+# Bulan ini (Hanya kategori harian: Makan & Bensin)
+out_bulan_bank = df_asli[mask_aktif & mask_harian & mask_bank & 
                          (df_asli["Tanggal_dt"].dt.month == now.month) & 
                          (df_asli["Tanggal_dt"].dt.year == now.year)]["Net_Nominal"].sum()
-out_bulan_cash = df_asli[mask_aktif & mask_cash & 
+out_bulan_cash = df_asli[mask_aktif & mask_harian & mask_cash & 
                          (df_asli["Tanggal_dt"].dt.month == now.month) & 
                          (df_asli["Tanggal_dt"].dt.year == now.year)]["Net_Nominal"].sum()
 out_bulan = out_bulan_bank + out_bulan_cash
@@ -852,15 +857,15 @@ out_bulan = out_bulan_bank + out_bulan_cash
 
 
 penggunaan_cash_hari_ini = df_asli[
-    mask_cash & mask_aktif & (df_asli["Tanggal_dt"].dt.date == hari_ini_wib)]["Net_Nominal"].sum()
+    mask_cash & mask_aktif & mask_harian & (df_asli["Tanggal_dt"].dt.date == hari_ini_wib)]["Net_Nominal"].sum()
 
 penggunaan_cash_minggu = df_asli[
-    mask_cash & mask_aktif &
+    mask_cash & mask_aktif & mask_harian &
     (df_asli["Tanggal_dt"].dt.isocalendar().week == now.isocalendar()[1]) &
     (df_asli["Tanggal_dt"].dt.year == now.year)]["Net_Nominal"].sum()
 
 penggunaan_cash_bulan = df_asli[
-    mask_cash & mask_aktif &
+    mask_cash & mask_aktif & mask_harian &
     (df_asli["Tanggal_dt"].dt.month == now.month) &
     (df_asli["Tanggal_dt"].dt.year == now.year)]["Nominal"].sum()
 
@@ -2310,6 +2315,7 @@ with tab_laporan_t:
         (df_asli["Tanggal_dt"].dt.date >= tujuh_hari_lalu) &
         (df_asli["Tanggal_dt"].dt.date <= hari_ini_tgl) &
         (df_asli["Tipe"] == "Pengeluaran") &
+        (df_asli["Kategori"].isin(KATEGORI_HARIAN)) &
         ~(df_asli["Kategori"].isin(EXCLUDE_FROM_LIMIT))
     )
     df_7hari = df_asli[mask_7hari]
