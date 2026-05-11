@@ -829,43 +829,43 @@ else:
 
 
 
-# Hari ini (Hanya kategori harian: Makan & Bensin)
-mask_harian = df_asli["Kategori"].isin(KATEGORI_HARIAN)
-
-out_hari_bank = df_asli[mask_aktif & mask_harian & mask_bank & (df_asli["Tanggal_dt"].dt.date == hari_ini_wib)]["Net_Nominal"].sum()
-out_hari_cash = df_asli[mask_aktif & mask_harian & mask_cash & (df_asli["Tanggal_dt"].dt.date == hari_ini_wib)]["Net_Nominal"].sum()
+# --- PERHITUNGAN METRIK GLOBAL (Semua Pengeluaran Aktif) ---
+out_hari_bank = df_asli[mask_aktif & mask_bank & (df_asli["Tanggal_dt"].dt.date == hari_ini_wib)]["Net_Nominal"].sum()
+out_hari_cash = df_asli[mask_aktif & mask_cash & (df_asli["Tanggal_dt"].dt.date == hari_ini_wib)]["Net_Nominal"].sum()
 out_hari = out_hari_bank + out_hari_cash
 
-# Minggu ini (Hanya kategori harian: Makan & Bensin)
-out_minggu_bank = df_asli[mask_aktif & mask_harian & mask_bank & 
+out_minggu_bank = df_asli[mask_aktif & mask_bank & 
                           (df_asli["Tanggal_dt"].dt.isocalendar().week == now.isocalendar()[1]) & 
                           (df_asli["Tanggal_dt"].dt.year == now.year)]["Net_Nominal"].sum()
-out_minggu_cash = df_asli[mask_aktif & mask_harian & mask_cash & 
+out_minggu_cash = df_asli[mask_aktif & mask_cash & 
                           (df_asli["Tanggal_dt"].dt.isocalendar().week == now.isocalendar()[1]) & 
                           (df_asli["Tanggal_dt"].dt.year == now.year)]["Net_Nominal"].sum()
 out_minggu = out_minggu_bank + out_minggu_cash
 
-# Bulan ini (Hanya kategori harian: Makan & Bensin)
-out_bulan_bank = df_asli[mask_aktif & mask_harian & mask_bank & 
+out_bulan_bank = df_asli[mask_aktif & mask_bank & 
                          (df_asli["Tanggal_dt"].dt.month == now.month) & 
                          (df_asli["Tanggal_dt"].dt.year == now.year)]["Net_Nominal"].sum()
-out_bulan_cash = df_asli[mask_aktif & mask_harian & mask_cash & 
+out_bulan_cash = df_asli[mask_aktif & mask_cash & 
                          (df_asli["Tanggal_dt"].dt.month == now.month) & 
                          (df_asli["Tanggal_dt"].dt.year == now.year)]["Net_Nominal"].sum()
 out_bulan = out_bulan_bank + out_bulan_cash
 
+# --- PERHITUNGAN KHUSUS UNTUK DISPLAY LIMIT HARIAN (Hanya Makan & Bensin) ---
+mask_harian = df_asli["Kategori"].isin(KATEGORI_HARIAN)
+out_hari_harian = df_asli[mask_aktif & mask_harian & (df_asli["Tanggal_dt"].dt.date == hari_ini_wib)]["Net_Nominal"].sum()
+
 
 
 penggunaan_cash_hari_ini = df_asli[
-    mask_cash & mask_aktif & mask_harian & (df_asli["Tanggal_dt"].dt.date == hari_ini_wib)]["Net_Nominal"].sum()
+    mask_cash & mask_aktif & (df_asli["Tanggal_dt"].dt.date == hari_ini_wib)]["Net_Nominal"].sum()
 
 penggunaan_cash_minggu = df_asli[
-    mask_cash & mask_aktif & mask_harian &
+    mask_cash & mask_aktif &
     (df_asli["Tanggal_dt"].dt.isocalendar().week == now.isocalendar()[1]) &
     (df_asli["Tanggal_dt"].dt.year == now.year)]["Net_Nominal"].sum()
 
 penggunaan_cash_bulan = df_asli[
-    mask_cash & mask_aktif & mask_harian &
+    mask_cash & mask_aktif &
     (df_asli["Tanggal_dt"].dt.month == now.month) &
     (df_asli["Tanggal_dt"].dt.year == now.year)]["Nominal"].sum()
 
@@ -965,10 +965,10 @@ m4.metric("⏳ Scheduled Settlement", f"Rp {total_pend:,.0f}", delta=due_text, d
 st.markdown("---")
 st.subheader("💰 Limit Harian")
 
-# 2. Status Jatah & Transaksi
-sisa_jatah_hari_ini = batas_hr - out_hari
+# 2. Status Jatah & Transaksi (Gunakan out_hari_harian untuk display section ini)
+sisa_jatah_hari_ini = batas_hr - out_hari_harian
 warna_sisa = "#10B981" if sisa_jatah_hari_ini >= 0 else "#EF4444"
-persentase = (out_hari / batas_hr * 100) if batas_hr > 0 else 0
+persentase = (out_hari_harian / batas_hr * 100) if batas_hr > 0 else 0
 
 # 3. Prediksi Real Besok (berdasarkan jajan hari ini)
 sisa_hari_besok = max(SISA_HARI - 1, 1)
@@ -993,7 +993,7 @@ with col_l2:
     st.markdown(f"""
     <div class="card">
         <p class="card-label">💰 TERPAKAI</p>
-        <p class="card-value" style="color:#F59E0B;">Rp {out_hari:,.0f}</p>
+        <p class="card-value" style="color:#F59E0B;">Rp {out_hari_harian:,.0f}</p>
         <p class="card-sub">{persentase:.1f}% terpakai</p>
     </div>
     """, unsafe_allow_html=True)
@@ -2315,7 +2315,6 @@ with tab_laporan_t:
         (df_asli["Tanggal_dt"].dt.date >= tujuh_hari_lalu) &
         (df_asli["Tanggal_dt"].dt.date <= hari_ini_tgl) &
         (df_asli["Tipe"] == "Pengeluaran") &
-        (df_asli["Kategori"].isin(KATEGORI_HARIAN)) &
         ~(df_asli["Kategori"].isin(EXCLUDE_FROM_LIMIT))
     )
     df_7hari = df_asli[mask_7hari]
