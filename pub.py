@@ -701,7 +701,7 @@ total_in_bank = df_asli[
 ]["Nominal"].sum()
 
 SALDO_BANK = total_in_bank - total_out_bank
-UANG_CASH  = get_saldo_cash(df_asli)   # ← pakai load, bukan recalculate
+UANG_CASH  = get_saldo_cash(df_asli)   # Hitung dari log transaksi
 TABUNGAN   = REAL_DARURAT
 saldo_op   = SALDO_BANK + UANG_CASH - TABUNGAN
 total_real = SALDO_BANK + UANG_CASH
@@ -970,12 +970,15 @@ sisa_jatah_hari_ini = batas_hr - out_hari_harian
 warna_sisa = "#10B981" if sisa_jatah_hari_ini >= 0 else "#EF4444"
 persentase = (out_hari_harian / batas_hr * 100) if batas_hr > 0 else 0
 
-# 3. Prediksi Real Besok (berdasarkan jajan hari ini)
+# 3. Prediksi Real Besok (berdasarkan sisa uang nyata)
 sisa_hari_besok = max(SISA_HARI - 1, 1)
-# Logika: (Total Sisa Uang Real) / Sisa Hari Besok
-sisa_uang_real = saldo_op - out_hari 
-# Catatan: saldo_op di kodingan ini adalah Opening Balance harinya.
-prediksi_besok = max(0, sisa_uang_real / sisa_hari_besok)
+# Logika: (Saldo Saat Ini - Sisa Jatah Hari Ini yang belum terpakai)
+# Jika out_hari sudah dipotong dari saldo_op, maka sisa uang untuk besok adalah saldo_op itu sendiri 
+# ditambah sisa jatah hari ini yang tidak jadi dipakai.
+sisa_uang_real = saldo_op - (max(0, batas_hr - out_hari) if out_hari < batas_hr else 0) # Ini salah logika lama
+# Koreksi: Jika hari ini stop belanja sekarang, maka uang untuk besok adalah saldo_op.
+# Namun agar tetap konservatif dan sesuai target "Budget Hari Ini", kita gunakan saldo_op.
+prediksi_besok = max(0, saldo_op / sisa_hari_besok)
 
 # Tampilan utama limit harian
 col_l1, col_l2, col_l3, col_l4 = st.columns(4)
@@ -1118,9 +1121,11 @@ st.markdown("---")
 st.subheader("💡 Rekomendasi")
 
 # Hitung selisih dan limit masa depan
-selisih = abs(simulasi_jajan - out_hari)
-limit_besok_sim = (saldo_op - simulasi_jajan) / (SISA_HARI - 1) if SISA_HARI > 1 else (saldo_op - simulasi_jajan)
+# selisih jajan tambahan dari yang sudah tercatat
+selisih_tambah = simulasi_jajan - out_hari
+limit_besok_sim = (saldo_op - selisih_tambah) / (SISA_HARI - 1) if SISA_HARI > 1 else (saldo_op - selisih_tambah)
 selisih_limit_sim = limit_besok_sim - batas_hr
+selisih = abs(selisih_tambah)
 
 # ===== LOGIKA SIMULASI YANG FOKUS KE DAMPAK ESOK =====
 if simulasi_jajan > out_hari:
@@ -2918,10 +2923,6 @@ with tab_tabungan:
                                                 st.success(f"✅ Berhasil setor Rp {nominal_setor:,.0f} dari {sumber_t}!")
                                                 st.session_state[f"setor_tabungan_{idx}"] = False
                                                 st.rerun()
-                                                
-                                                st.success(f"✅ Berhasil setor Rp {nominal_setor:,.0f} dari {sumber_t}!")
-                                                st.session_state[f"setor_tabungan_{idx}"] = False
-                                                st.rerun()
                             
                             with col_btn2:
                                 if st.form_submit_button("❌ Batal"):
@@ -2938,42 +2939,43 @@ with tab_tabungan:
                             
                             col_btn1, col_btn2 = st.columns(2)
                             with col_btn1:
-                                if st.form_submit_button("✅ Tarik"):
-                                    if nominal_tarik > 0:
-                                        new_terkumpul = row["Terkumpul"] - nominal_tarik
-                                        update_data = {
-                                            "nominal_terkumpul": new_terkumpul
-                                        }
-                                        if update_tabungan_cloud(row.get("id"), update_data):
-                                            # 2. Histori tabungan inner
-                                            transaksi_data = {
-                                                "tabungan_id": row.get("id"),
-                                                "tanggal": hari_ini_wib.strftime("%Y-%m-%d"),
-                                                "nominal": nominal_tarik,
-                                                "tipe": "Tarik",
-                                                "catatan": catatan_tarik
-                                            }
-                                            conn.table("transaksi_tabungan").insert(transaksi_data).execute()
+                                            # FIX: Pindahkan widget ke luar submit agar terbaca
+                                            sumber_t_tarik = st.selectbox("Masuk ke mana?", ["Bank", "Cash"], key=f"src_tarik_{idx}")
                                             
-                                            # 3. PENTING: Catat di log utama (transaksi) sebagai PEMASUKAN
-                                            # agar saldo Bank/Cash bertambah kembali
-                                            sumber_t = st.selectbox("Masuk ke mana?", ["Bank", "Cash"], key=f"src_tarik_{idx}")
-                                            main_t = {
-                                                "Tanggal": hari_ini_wib.strftime("%Y-%m-%d"),
-                                                "Tipe": "Pemasukan",
-                                                "Kategori": "Tarik Tabungan",
-                                                "Nominal": nominal_tarik,
-                                                "Catatan": f"Tarik dari Tabungan: {row['Nama']} - {catatan_tarik}",
-                                                "Status": "Cleared",
-                                                "Tenggat_Waktu": "",
-                                                "Tanggal_Bayar": hari_ini_wib.strftime("%Y-%m-%d"),
-                                                "Sumber": sumber_t
-                                            }
-                                            save_to_cloud(main_t)
+                                            if st.form_submit_button("✅ Tarik"):
+                                                if nominal_tarik > 0:
+                                                    new_terkumpul = row["Terkumpul"] - nominal_tarik
+                                                    update_data = {
+                                                        "nominal_terkumpul": new_terkumpul
+                                                    }
+                                                    if update_tabungan_cloud(row.get("id"), update_data):
+                                                        # 2. Histori tabungan inner
+                                                        transaksi_data = {
+                                                            "tabungan_id": row.get("id"),
+                                                            "tanggal": hari_ini_wib.strftime("%Y-%m-%d"),
+                                                            "nominal": nominal_tarik,
+                                                            "tipe": "Tarik",
+                                                            "catatan": catatan_tarik
+                                                        }
+                                                        conn.table("transaksi_tabungan").insert(transaksi_data).execute()
+                                                        
+                                                        # 3. PENTING: Catat di log utama (transaksi) sebagai PEMASUKAN
+                                                        main_t = {
+                                                            "Tanggal": hari_ini_wib.strftime("%Y-%m-%d"),
+                                                            "Tipe": "Pemasukan",
+                                                            "Kategori": "Tarik Tabungan",
+                                                            "Nominal": nominal_tarik,
+                                                            "Catatan": f"Tarik dari Tabungan: {row['Nama']} - {catatan_tarik}",
+                                                            "Status": "Cleared",
+                                                            "Tenggat_Waktu": "",
+                                                            "Tanggal_Bayar": hari_ini_wib.strftime("%Y-%m-%d"),
+                                                            "Sumber": sumber_t_tarik
+                                                        }
+                                                        save_to_cloud(main_t)
 
-                                            st.success(f"✅ Berhasil tarik Rp {nominal_tarik:,.0f} ke {sumber_t}!")
-                                            st.session_state[f"tarik_tabungan_{idx}"] = False
-                                            st.rerun()
+                                                        st.success(f"✅ Berhasil tarik Rp {nominal_tarik:,.0f} ke {sumber_t_tarik}!")
+                                                        st.session_state[f"tarik_tabungan_{idx}"] = False
+                                                        st.rerun()
                             
                             with col_btn2:
                                 if st.form_submit_button("❌ Batal"):
