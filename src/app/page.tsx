@@ -60,9 +60,9 @@ export default function Dashboard() {
     try {
       const todayWIB = getWIBDateString();
 
-      // 1. Fetch Transactions (from table 'keuangan')
+      // 1. Fetch Transactions (from table 'transaksi')
       const { data: txns, error: txError } = await supabase
-        .from('keuangan')
+        .from('transaksi')
         .select('*');
       
       if (txError) throw txError;

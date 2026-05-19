@@ -97,9 +97,9 @@ export default function TransactionForm({ saldoBank, uangCash, onSuccess }: Form
         Sumber: sumber
       };
 
-      // Insert directly into Supabase 'keuangan' table
+      // Insert directly into Supabase 'transaksi' table
       const { error } = await supabase
-        .from('keuangan')
+        .from('transaksi')
         .insert([transObj]);
 
       if (error) throw error;
