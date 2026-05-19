@@ -27,6 +27,10 @@ export default function Dashboard() {
   // Lists State
   const [todayTransactions, setTodayTransactions] = useState<any[]>([]);
 
+  // Secret Mode State
+  const [secretCode, setSecretCode] = useState('');
+  const isRealMode = secretCode === 'naufal';
+
   // Clock Update Effect (Runs in browser only)
   useEffect(() => {
     const tick = () => {
@@ -84,38 +88,38 @@ export default function Dashboard() {
       // --- CALCULATIONS (Mirroring pub.py Python logic exactly) ---
 
       // Tabungan / Real Darurat
-      const tabunganSum = (savingData || []).reduce((acc, curr) => acc + (Number(curr.Terkumpul) || 0), 0);
+      const tabunganSum = (savingData || []).reduce((acc, curr) => acc + (Number(curr.nominal_terkumpul) || 0), 0);
       setTabungan(tabunganSum);
 
       // Saldo Bank (Incomes - active Expenses)
       const allTxns = txns || [];
       
       const totalInBank = allTxns
-        .filter(t => t.Tipe === 'Pemasukan' && t.Sumber === 'Bank')
-        .reduce((acc, curr) => acc + (Number(curr.Nominal) || 0), 0);
+        .filter(t => t.tipe === 'Pemasukan' && t.sumber === 'Bank')
+        .reduce((acc, curr) => acc + (Number(curr.nominal) || 0), 0);
       
       const totalOutBank = allTxns
-        .filter(t => t.Tipe === 'Pengeluaran' && t.Sumber === 'Bank' && !(t.Kategori === 'Scheduled Settlement' && t.Status === 'Pending'))
-        .reduce((acc, curr) => acc + (Number(curr.Nominal) || 0), 0);
+        .filter(t => t.tipe === 'Pengeluaran' && t.sumber === 'Bank' && !(t.kategori === 'Scheduled Settlement' && t.status === 'Pending'))
+        .reduce((acc, curr) => acc + (Number(curr.nominal) || 0), 0);
 
       const computedBank = totalInBank - totalOutBank;
       setSaldoBank(computedBank);
 
       // Saldo Cash (Incomes - active Expenses)
       const totalInCash = allTxns
-        .filter(t => t.Tipe === 'Pemasukan' && t.Sumber === 'Cash')
-        .reduce((acc, curr) => acc + (Number(curr.Nominal) || 0), 0);
+        .filter(t => t.tipe === 'Pemasukan' && t.sumber === 'Cash')
+        .reduce((acc, curr) => acc + (Number(curr.nominal) || 0), 0);
       
       const totalOutCash = allTxns
-        .filter(t => t.Tipe === 'Pengeluaran' && t.Sumber === 'Cash' && !(t.Kategori === 'Scheduled Settlement' && t.Status === 'Pending'))
-        .reduce((acc, curr) => acc + (Number(curr.Nominal) || 0), 0);
+        .filter(t => t.tipe === 'Pengeluaran' && t.sumber === 'Cash' && !(t.kategori === 'Scheduled Settlement' && t.status === 'Pending'))
+        .reduce((acc, curr) => acc + (Number(curr.nominal) || 0), 0);
 
       const computedCash = totalInCash - totalOutCash;
       setUangCash(computedCash);
 
       // Total Aset
       const computedTotalReal = computedBank + computedCash;
-      setTotalAset(140000000 + computedTotalReal); // Default fiktif base dari pub.py jika tidak dalam secret mode real
+      setTotalAset(computedTotalReal);
 
       // Dana Operasional
       const computedOp = computedBank + computedCash - tabunganSum;
@@ -148,18 +152,18 @@ export default function Dashboard() {
       
       const todayJajanSum = allTxns
         .filter(t => 
-          t.Tipe === 'Pengeluaran' &&
-          !(t.Kategori === 'Scheduled Settlement' && t.Status === 'Pending') &&
-          jajanCategories.includes(t.Kategori) &&
-          t.Tanggal === todayWIB
+          t.tipe === 'Pengeluaran' &&
+          !(t.kategori === 'Scheduled Settlement' && t.status === 'Pending') &&
+          jajanCategories.includes(t.kategori) &&
+          t.tanggal === todayWIB
         )
-        .reduce((acc, curr) => acc + (Number(curr.Nominal) || 0), 0);
+        .reduce((acc, curr) => acc + (Number(curr.nominal) || 0), 0);
       
       setOutHariHarian(todayJajanSum);
 
       // Today's transaction log (filter current date, sort newest)
       const filteredTodayLogs = allTxns
-        .filter(t => t.Tanggal === todayWIB)
+        .filter(t => t.tanggal === todayWIB)
         .sort((a, b) => b.id - a.id); // Assuming serial incrementing IDs
       
       setTodayTransactions(filteredTodayLogs);
@@ -198,9 +202,17 @@ export default function Dashboard() {
         <div>
           <div className="flex items-center gap-2">
             <h1 className="text-3xl font-extrabold tracking-tight text-white">💼 Financial Dashboard</h1>
-            <span className="h-2 w-2 rounded-full bg-emerald-500 animate-ping mt-1"></span>
+            <span className={`h-2 w-2 rounded-full ${isRealMode ? 'bg-rose-500 animate-pulse shadow-[0_0_8px_rgba(244,63,94,0.8)]' : 'bg-emerald-500 animate-ping'} mt-1`}></span>
           </div>
-          <p className="text-xs text-slate-400 mt-1">Lightweight, modern dashboard terintegrasi langsung dengan Supabase</p>
+          <div className="text-xs text-slate-400 mt-1 flex items-center">
+            Lightweight, modern dashboard terintegrasi langsung dengan Supabase
+            <input 
+              type="password" 
+              value={secretCode}
+              onChange={e => setSecretCode(e.target.value)}
+              className="bg-transparent border-none w-10 text-transparent focus:text-slate-600 focus:outline-none focus:ring-0 ml-2 cursor-default"
+            />
+          </div>
         </div>
 
         <div className="flex flex-col sm:flex-row items-end sm:items-center gap-4 w-full md:w-auto">
@@ -229,7 +241,7 @@ export default function Dashboard() {
             saldoBank={saldoBank}
             uangCash={uangCash}
             tabungan={tabungan}
-            totalAset={totalAset}
+            totalAset={isRealMode ? totalAset : 140000000 + totalAset}
             saldoOp={saldoOp}
             batasHr={batasHr}
             sisaHari={sisaHari}
@@ -271,26 +283,26 @@ export default function Dashboard() {
                     className="p-3 bg-slate-950/40 border border-slate-900 rounded-xl flex justify-between items-center text-xs tracking-wide"
                   >
                     <div>
-                      <p className="font-bold text-slate-200">{t.Catatan || t.Kategori}</p>
+                      <p className="font-bold text-slate-200">{t.catatan || t.kategori}</p>
                       <div className="flex gap-2 items-center mt-1 text-[10px] text-slate-400">
                         <span className="px-1.5 py-0.5 bg-slate-800 rounded font-semibold text-slate-300">
-                          {t.Kategori}
+                          {t.kategori}
                         </span>
                         <span>•</span>
                         <span className="flex items-center gap-0.5">
-                          {t.Sumber === 'Bank' ? <Landmark className="w-2.5 h-2.5" /> : <Wallet className="w-2.5 h-2.5" />}
-                          {t.Sumber}
+                          {t.sumber === 'Bank' ? <Landmark className="w-2.5 h-2.5" /> : <Wallet className="w-2.5 h-2.5" />}
+                          {t.sumber}
                         </span>
                       </div>
                     </div>
 
                     <div className="text-right">
-                      <p className={`font-black ${t.Tipe === 'Pengeluaran' ? 'text-rose-400' : 'text-emerald-400'}`}>
-                        {t.Tipe === 'Pengeluaran' ? '-' : '+'}Rp {t.Nominal.toLocaleString('id-ID')}
+                      <p className={`font-black ${t.tipe === 'Pengeluaran' ? 'text-rose-400' : 'text-emerald-400'}`}>
+                        {t.tipe === 'Pengeluaran' ? '-' : '+'}Rp {t.nominal.toLocaleString('id-ID')}
                       </p>
-                      {t.Kategori === 'Scheduled Settlement' && (
-                        <span className={`text-[9px] px-1 rounded font-bold ${t.Status === 'Pending' ? 'bg-amber-500/10 text-amber-400' : 'bg-emerald-500/10 text-emerald-400'}`}>
-                          {t.Status}
+                      {t.kategori === 'Scheduled Settlement' && (
+                        <span className={`text-[9px] px-1 rounded font-bold ${t.status === 'Pending' ? 'bg-amber-500/10 text-amber-400' : 'bg-emerald-500/10 text-emerald-400'}`}>
+                          {t.status}
                         </span>
                       )}
                     </div>

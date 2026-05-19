@@ -86,15 +86,15 @@ export default function TransactionForm({ saldoBank, uangCash, onSuccess }: Form
       // Build transaction object mirroring Python `save_to_cloud` format exactly
       const tglBayar = finalKategori === "Scheduled Settlement" && status === "Pending" ? "" : tanggal;
       const transObj = {
-        Tanggal: tanggal,
-        Tipe: tipe,
-        Kategori: finalKategori,
-        Nominal: parsedNominal,
-        Catatan: catatan,
-        Status: status,
-        Tenggat_Waktu: finalKategori === "Scheduled Settlement" ? tenggatWaktu : "",
-        Tanggal_Bayar: tglBayar,
-        Sumber: sumber
+        tanggal: tanggal,
+        tipe: tipe,
+        kategori: finalKategori,
+        nominal: parsedNominal,
+        catatan: catatan,
+        status: status,
+        tenggat_waktu: finalKategori === "Scheduled Settlement" ? tenggatWaktu : "",
+        tanggal_bayar: tglBayar,
+        sumber: sumber
       };
 
       // Insert directly into Supabase 'transaksi' table

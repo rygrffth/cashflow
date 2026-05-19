@@ -53,14 +53,14 @@ export default function HistoryPage() {
 
   // Derived filtered data
   const filteredData = transactions.filter(t => {
-    const matchType = filterType === 'Semua' || t.Tipe === filterType;
-    const matchMonth = t.Tanggal.startsWith(filterMonth);
+    const matchType = filterType === 'Semua' || t.tipe === filterType;
+    const matchMonth = t.tanggal ? t.tanggal.startsWith(filterMonth) : false;
     return matchType && matchMonth;
   });
 
   // Calculate summaries
-  const totalIn = filteredData.filter(t => t.Tipe === 'Pemasukan').reduce((sum, t) => sum + Number(t.Nominal), 0);
-  const totalOut = filteredData.filter(t => t.Tipe === 'Pengeluaran').reduce((sum, t) => sum + Number(t.Nominal), 0);
+  const totalIn = filteredData.filter(t => t.tipe === 'Pemasukan').reduce((sum, t) => sum + Number(t.nominal), 0);
+  const totalOut = filteredData.filter(t => t.tipe === 'Pengeluaran').reduce((sum, t) => sum + Number(t.nominal), 0);
 
   if (loading) {
     return <div className="text-center text-emerald-400 py-20 animate-pulse">Memuat riwayat...</div>;
@@ -151,16 +151,16 @@ export default function HistoryPage() {
               {filteredData.length > 0 ? (
                 filteredData.map(t => (
                   <tr key={t.id} className="border-b border-slate-800 hover:bg-slate-800/30">
-                    <td className="px-4 py-3 whitespace-nowrap">{t.Tanggal}</td>
+                    <td className="px-4 py-3 whitespace-nowrap">{t.tanggal}</td>
                     <td className="px-4 py-3">
                       <span className="px-2 py-1 bg-slate-800 rounded-md text-[10px] font-semibold">
-                        {t.Kategori}
+                        {t.kategori}
                       </span>
                     </td>
-                    <td className="px-4 py-3 max-w-[200px] truncate" title={t.Catatan}>{t.Catatan}</td>
-                    <td className="px-4 py-3 text-xs">{t.Sumber}</td>
-                    <td className={`px-4 py-3 text-right font-bold ${t.Tipe === 'Pengeluaran' ? 'text-rose-400' : 'text-emerald-400'}`}>
-                      {t.Tipe === 'Pengeluaran' ? '-' : '+'}Rp {Number(t.Nominal).toLocaleString('id-ID')}
+                    <td className="px-4 py-3 max-w-[200px] truncate" title={t.catatan}>{t.catatan}</td>
+                    <td className="px-4 py-3 text-xs">{t.sumber}</td>
+                    <td className={`px-4 py-3 text-right font-bold ${t.tipe === 'Pengeluaran' ? 'text-rose-400' : 'text-emerald-400'}`}>
+                      {t.tipe === 'Pengeluaran' ? '-' : '+'}Rp {Number(t.nominal).toLocaleString('id-ID')}
                     </td>
                     <td className="px-4 py-3 text-center">
                       <button 
