@@ -6,7 +6,7 @@ import PortfolioGrid from '@/components/PortfolioGrid';
 import DailyLimitCard from '@/components/DailyLimitCard';
 import JajanSimulator from '@/components/JajanSimulator';
 import TransactionForm from '@/components/TransactionForm';
-import { RefreshCw, Clock, Landmark, Wallet, ListTodo } from 'lucide-react';
+import { RefreshCw, Clock, Landmark, Wallet, ListTodo, Lock, Unlock } from 'lucide-react';
 
 export default function Dashboard() {
   // Loading & Data States
@@ -30,6 +30,14 @@ export default function Dashboard() {
   // Secret Mode State
   const [secretCode, setSecretCode] = useState('');
   const isRealMode = secretCode === 'naufal';
+
+  // Load secret code on mount to synchronize with Settings
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('secretCode') || '';
+      setSecretCode(saved);
+    }
+  }, []);
 
   // Clock Update Effect (Runs in browser only)
   useEffect(() => {
@@ -203,7 +211,11 @@ export default function Dashboard() {
         <div>
           <div className="flex items-center gap-2">
             <h1 className="text-3xl font-extrabold tracking-tight text-white">💼 Financial Dashboard</h1>
-            <span className={`h-2 w-2 rounded-full ${isRealMode ? 'bg-rose-500 animate-pulse shadow-[0_0_8px_rgba(244,63,94,0.8)]' : 'bg-emerald-500 animate-ping'} mt-1`}></span>
+            {isRealMode ? (
+              <Unlock className="w-5 h-5 text-rose-500 animate-pulse ml-2" title="Real Mode Aktif" />
+            ) : (
+              <Lock className="w-5 h-5 text-emerald-500 ml-2" title="Fiktif Mode Aktif" />
+            )}
           </div>
           <p className="text-xs text-slate-400 mt-1">Lightweight, modern dashboard terintegrasi langsung dengan Supabase</p>
         </div>

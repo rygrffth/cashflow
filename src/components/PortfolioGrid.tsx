@@ -73,20 +73,6 @@ export default function PortfolioGrid({
         <h2 className="text-xl font-bold tracking-tight text-emerald-400 flex items-center gap-2">
           <span>💵</span> Portofolio Aset
         </h2>
-        
-        {/* Hidden password input */}
-        <div className="flex items-center gap-2 bg-slate-900/60 border border-slate-800/80 rounded-xl px-3 py-1.5 text-xs text-slate-300 w-full sm:w-auto shadow-inner">
-          <span className="flex items-center gap-1 font-bold text-[10px] text-slate-400 uppercase tracking-wider">
-            {isRealMode ? '🔓 Real Mode' : '🔒 Fiktif Mode'}
-          </span>
-          <input
-            type="password"
-            placeholder="Secret code..."
-            value={secretCode}
-            onChange={(e) => setSecretCode(e.target.value)}
-            className="bg-slate-950/60 border border-slate-800 rounded px-2 py-0.5 text-[11px] text-white focus:outline-none focus:border-emerald-500 w-full sm:w-28 pl-1"
-          />
-        </div>
       </div>
 
       {/* Row 1: The 4 Primary Portfolio Cards */}

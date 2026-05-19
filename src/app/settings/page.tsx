@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Settings, Save, Loader2, CalendarClock } from 'lucide-react';
+import { Settings, Save, Loader2, CalendarClock, Lock, Unlock } from 'lucide-react';
 
 export default function SettingsPage() {
   const [loading, setLoading] = useState(true);
@@ -10,6 +10,23 @@ export default function SettingsPage() {
   const [tanggalGajian, setTanggalGajian] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
+  const [localCode, setLocalCode] = useState('');
+
+  // Load secretCode on mount
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('secretCode') || '';
+      setLocalCode(saved);
+    }
+  }, []);
+
+  const handleCodeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    setLocalCode(val);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('secretCode', val);
+    }
+  };
 
   useEffect(() => {
     async function fetchSettings() {
@@ -106,6 +123,45 @@ export default function SettingsPage() {
               Simpan Pengaturan
             </button>
           </form>
+        </div>
+
+        {/* Mode Aset / Fiktif Mode settings card */}
+        <div className="glass-card p-6 border-slate-700/50 flex flex-col justify-between">
+          <div>
+            <h2 className="text-lg font-bold text-slate-100 flex items-center gap-2 mb-4">
+              <Lock className="w-5 h-5 text-emerald-400" /> Mode Tampilan Aset
+            </h2>
+            <p className="text-xs text-slate-400 mb-6 leading-relaxed">
+              Masukkan kode rahasia untuk menampilkan nominal aset sebenarnya (Real Mode) di halaman dashboard. Jika dikosongkan atau salah, aset asli Anda akan disamarkan dalam Fiktif Mode.
+            </p>
+
+            <div className="space-y-4">
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-semibold text-slate-400">Kode Rahasia (Password)</label>
+                <input
+                  type="password"
+                  placeholder="Masukkan password..."
+                  value={localCode}
+                  onChange={handleCodeChange}
+                  className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-emerald-500 text-sm w-full"
+                />
+              </div>
+
+              <div className="p-3 bg-slate-950/40 rounded-lg border border-slate-800 text-xs font-medium flex items-center gap-2 transition-all">
+                {localCode === 'naufal' ? (
+                  <>
+                    <Unlock className="w-4 h-4 text-rose-400 animate-pulse" />
+                    <span className="text-rose-400 font-bold">🔓 Real Mode Aktif (Menampilkan Aset Sebenarnya)</span>
+                  </>
+                ) : (
+                  <>
+                    <Lock className="w-4 h-4 text-emerald-400" />
+                    <span className="text-emerald-400 font-bold">🔒 Fiktif Mode Aktif (Aset Asli Disamarkan +140jt)</span>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
         </div>
 
       </div>
