@@ -21,7 +21,7 @@ export default function HistoryPage() {
       const { data, error } = await supabase
         .from('transaksi')
         .select('*')
-        .order('Tanggal', { ascending: false })
+        .order('tanggal', { ascending: false })
         .order('id', { ascending: false });
 
       if (error) throw error;
