@@ -1040,8 +1040,8 @@ st.markdown("---")
 st.subheader("🔮 Simulasi Jajan")
 
 # Batasi max_value agar tidak negatif
-max_simulasi = max(0, int(saldo_op + out_hari))
-default_simulasi = max(0, min(int(out_hari), max_simulasi))
+max_simulasi = max(0, int(saldo_op + out_hari_harian))
+default_simulasi = max(0, min(int(out_hari_harian), max_simulasi))
 
 col_sim1, col_sim2 = st.columns(2)
 
@@ -1122,13 +1122,13 @@ st.subheader("💡 Rekomendasi")
 
 # Hitung selisih dan limit masa depan
 # selisih jajan tambahan dari yang sudah tercatat
-selisih_tambah = simulasi_jajan - out_hari
+selisih_tambah = simulasi_jajan - out_hari_harian
 limit_besok_sim = (saldo_op - selisih_tambah) / (SISA_HARI - 1) if SISA_HARI > 1 else (saldo_op - selisih_tambah)
 selisih_limit_sim = limit_besok_sim - batas_hr
 selisih = abs(selisih_tambah)
 
 # ===== LOGIKA SIMULASI YANG FOKUS KE DAMPAK ESOK =====
-if simulasi_jajan > out_hari:
+if simulasi_jajan > out_hari_harian:
     # LEBIH BOROS DARI SEKARANG
     st.warning(f"⚠️ Jika jajan bertambah **Rp {selisih:,.0f}** hari ini (Total: Rp {simulasi_jajan:,.0f})")
     
@@ -1141,14 +1141,14 @@ if simulasi_jajan > out_hari:
     else:
         st.error(f"🚨 DEFISIT Rp {abs(sisa_setelah_jajan):,.0f}! Kamu harus ambil dari tabungan atau jatah besok.")
         
-elif simulasi_jajan < out_hari:
+elif simulasi_jajan < out_hari_harian:
     # LEBIH HEMAT DARI SEKARANG (Simulasi mengurangi jajan yang sudah tercatat - biasanya untuk planning)
     st.success(f"🎉 Jika jajan dikurangi **Rp {selisih:,.0f}** (Total: Rp {simulasi_jajan:,.0f})")
     st.info(f"📈 Dampak: Limit besok akan **naik Rp {selisih_limit_sim:,.0f}** menjadi Rp {limit_besok_sim:,.0f}")
 
 else:
     # SAMA DENGAN PENGELUARAN SAAT INI
-    st.info(f"⚖️ Jika tidak ada jajan lagi hari ini (Tetap Rp {out_hari:,.0f})")
+    st.info(f"⚖️ Jika tidak ada jajan lagi hari ini (Tetap Rp {out_hari_harian:,.0f})")
     if selisih_limit_sim > 0:
         st.success(f"📈 Dampak: Limit besok akan **naik Rp {selisih_limit_sim:,.0f}** menjadi Rp {limit_besok_sim:,.0f}")
     else:
