@@ -217,7 +217,6 @@ export default function Dashboard() {
               <Lock className="w-5 h-5 text-emerald-500 ml-2" title="Mode User" />
             )}
           </div>
-          <p className="text-xs text-slate-400 mt-1">Lightweight, modern dashboard terintegrasi langsung dengan Supabase</p>
         </div>
 
         <div className="flex flex-col sm:flex-row items-end sm:items-center gap-4 w-full md:w-auto">
