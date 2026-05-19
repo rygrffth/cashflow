@@ -178,7 +178,7 @@ export default function AnalyticsPage() {
         if (!map[dStr]) {
           map[dStr] = { date: dStr, Bank: 0, Cash: 0, Total: 0 };
         }
-        const amt = t.net_nominal !== null && t.net_nominal !== undefined ? Number(t.net_nominal) : Number(t.nominal);
+        const amt = Number(t.nominal) - (Number(t.titipan) || 0);
         if (t.sumber === 'Bank') map[dStr].Bank += amt;
         else if (t.sumber === 'Cash') map[dStr].Cash += amt;
         map[dStr].Total += amt;
@@ -194,7 +194,7 @@ export default function AnalyticsPage() {
     chartFilteredData.forEach(t => {
       if (t.tipe === 'Pengeluaran' && !EXCLUDE_FROM_LIMIT.includes(t.kategori)) {
         const kat = t.kategori + (t.sumber === 'Cash' ? ' (Cash)' : '');
-        const amt = t.net_nominal !== null && t.net_nominal !== undefined ? Number(t.net_nominal) : Number(t.nominal);
+        const amt = Number(t.nominal) - (Number(t.titipan) || 0);
         map[kat] = (map[kat] || 0) + (amt || 0);
       }
     });
@@ -221,7 +221,7 @@ export default function AnalyticsPage() {
     let pendingKeluar = 0;
 
     chartFilteredData.forEach(t => {
-      const nom = t.net_nominal !== null && t.net_nominal !== undefined ? Number(t.net_nominal) : Number(t.nominal);
+      const nom = Number(t.nominal) - (Number(t.titipan) || 0);
       if (t.tipe === 'Pemasukan') {
         pemasukan += nom;
       } else if (t.tipe === 'Pengeluaran') {
@@ -257,7 +257,7 @@ export default function AnalyticsPage() {
     transactions.forEach(t => {
       if (t.tipe === 'Pengeluaran' && !EXCLUDE_FROM_LIMIT.includes(t.kategori)) {
         const d = new Date(t.tanggal);
-        const amt = t.net_nominal !== null && t.net_nominal !== undefined ? Number(t.net_nominal) : Number(t.nominal);
+        const amt = Number(t.nominal) - (Number(t.titipan) || 0);
         if (d.getMonth() === curMonth && d.getFullYear() === curYear) {
           mapThis[t.kategori] = (mapThis[t.kategori] || 0) + amt;
         } else if (d.getMonth() === lastMonth && d.getFullYear() === lastYear) {
@@ -316,7 +316,7 @@ export default function AnalyticsPage() {
     let totalIn = 0;
     let totalOut = 0;
     filtered.forEach(t => {
-      const nom = t.net_nominal !== null && t.net_nominal !== undefined ? Number(t.net_nominal) : Number(t.nominal);
+      const nom = Number(t.nominal) - (Number(t.titipan) || 0);
       if (t.tipe === 'Pemasukan') {
         totalIn += nom;
       } else if (t.tipe === 'Pengeluaran' && !EXCLUDE_FROM_LIMIT.includes(t.kategori)) {

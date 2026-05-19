@@ -164,7 +164,7 @@ export default function Dashboard() {
           t.tanggal === todayWIB
         )
         .reduce((acc, curr) => {
-          const net = curr.net_nominal !== null && curr.net_nominal !== undefined ? Number(curr.net_nominal) : Number(curr.nominal);
+          const net = Number(curr.nominal) - (Number(curr.titipan) || 0);
           return acc + net;
         }, 0);
       

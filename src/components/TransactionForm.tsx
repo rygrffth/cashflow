@@ -123,8 +123,7 @@ export default function TransactionForm({ saldoBank, uangCash, onSuccess }: Form
         tenggat_waktu: finalKategori === "Scheduled Settlement" ? tenggatWaktu : "",
         tanggal_bayar: tglBayar,
         sumber: sumber,
-        titipan: totalTitipan,
-        net_nominal: parsedNominal - totalTitipan
+        titipan: totalTitipan
       };
 
       const transactionsToInsert: any[] = [primaryTx];
@@ -142,8 +141,7 @@ export default function TransactionForm({ saldoBank, uangCash, onSuccess }: Form
             tenggat_waktu: '',
             tanggal_bayar: tanggal,
             sumber: 'Bank',
-            titipan: 0,
-            net_nominal: tBankAmt
+            titipan: 0
           });
         }
         if (tCashAmt > 0) {
@@ -157,8 +155,7 @@ export default function TransactionForm({ saldoBank, uangCash, onSuccess }: Form
             tenggat_waktu: '',
             tanggal_bayar: tanggal,
             sumber: 'Cash',
-            titipan: 0,
-            net_nominal: tCashAmt
+            titipan: 0
           });
         }
       }

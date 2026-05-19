@@ -17,6 +17,15 @@ import TopNav from "@/components/TopNav";
 export const metadata: Metadata = {
   title: "Financial Dashboard",
   description: "Next-Gen Cashflow Manager",
+  manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "Cashflow",
+  },
+  icons: {
+    apple: "/icons/apple-touch-icon.png",
+  },
 };
 
 export default function RootLayout({
