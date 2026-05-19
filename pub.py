@@ -435,6 +435,10 @@ def load_piutang():
         df["Nominal"] = pd.to_numeric(df["Nominal"], errors="coerce").fillna(0)
         if "Sumber" not in df.columns:
             df["Sumber"] = "Bank"
+        if "Tanggal_Lunas" not in df.columns:
+            df["Tanggal_Lunas"] = ""
+        else:
+            df["Tanggal_Lunas"] = df["Tanggal_Lunas"].astype(object).fillna("")
         return df
     return pd.DataFrame(columns=["Tanggal","Nama","Nominal","Catatan","Status","Tenggat","Tanggal_Lunas", "Sumber"])
 
@@ -1945,6 +1949,7 @@ with tab_piutang_t:
                         
                         if st.button("✅ Lunas", key=f"lunas_piutang_{idx}", use_container_width=True):
                             # Mark as Lunas
+                            df_piutang["Tanggal_Lunas"] = df_piutang["Tanggal_Lunas"].astype(object)
                             df_piutang.at[idx, "Status"] = "Lunas"
                             df_piutang.at[idx, "Tanggal_Lunas"] = hari_ini_wib.strftime("%Y-%m-%d")
                             # Simpan pilihan sumber yang baru
