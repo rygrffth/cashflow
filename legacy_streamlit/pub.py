@@ -1370,7 +1370,7 @@ PLOT = dict(
 )
 
 tab_grafik, tab_budget_t, tab_piutang_t, tab_settlement, tab_recurring_t, tab_laporan_t, tab_mandiri, tab_tabungan,tab_cash = st.tabs([
-    "📊 Grafik", "🎯 Budget Target", "💸 Piutang", "🗓️ Settlement", "🔄 Recurring", "📋 Laporan", "📧 Mandiri", "🏦 Tabungan", "💵 Uang Cash"
+    "📊 Grafik", "🎯 Budget Target", "💸 Piutang", "🗓️ Settlement", "🔄 Recurring", "📋 Laporan", "🔄 Sinkronisasi", "🏦 Tabungan", "💵 Uang Cash"
 ])
 
 with tab_grafik:
@@ -2361,8 +2361,8 @@ with tab_laporan_t:
 st.divider()
 
 with tab_mandiri:
-    st.subheader("📧 Import Transaksi dari Email Mandiri")
-    st.caption("Otomatis baca email notifikasi Livin' Mandiri dari Gmail kamu.")
+    st.subheader("📧 Sinkronisasi Transaksi Bank")
+    st.caption("Sinkronisasi otomatis data transaksi perbankan langsung dari email Gmail kamu.")
 
     col_m1, col_m2 = st.columns(2)
     with col_m1:
@@ -2385,14 +2385,14 @@ with tab_mandiri:
    → myaccount.google.com → Security → App Passwords
 3. Masukkan Gmail + App Password di sini""")
 
-    if st.button("📥 Fetch Email Mandiri", use_container_width=True):
+    if st.button("📥 Tarik Data Transaksi", use_container_width=True):
         if m_email and m_pass:
-            with st.spinner("📧 Membaca email dari Gmail..."):
+            with st.spinner("📧 Menghubungkan dan mengambil data..."):
                 rows, err = fetch_mandiri_emails(m_email, m_pass, m_limit)
             if err:
                 st.error(f"❌ Error: {err}")
             elif not rows:
-                st.warning("Tidak ada email transaksi Mandiri ditemukan.")
+                st.warning("Tidak ada email transaksi baru ditemukan.")
             else:
                 st.session_state["mandiri_rows"] = rows
                 st.success(f"✅ Ditemukan {len(rows)} transaksi!")

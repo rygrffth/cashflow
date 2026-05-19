@@ -212,9 +212,9 @@ export default function Dashboard() {
           <div className="flex items-center gap-2">
             <h1 className="text-3xl font-extrabold tracking-tight text-white">💼 Financial Dashboard</h1>
             {isRealMode ? (
-              <Unlock className="w-5 h-5 text-rose-500 animate-pulse ml-2" title="Real Mode Aktif" />
+              <Unlock className="w-5 h-5 text-rose-500 animate-pulse ml-2" title="Mode Admin" />
             ) : (
-              <Lock className="w-5 h-5 text-emerald-500 ml-2" title="Fiktif Mode Aktif" />
+              <Lock className="w-5 h-5 text-emerald-500 ml-2" title="Mode User" />
             )}
           </div>
           <p className="text-xs text-slate-400 mt-1">Lightweight, modern dashboard terintegrasi langsung dengan Supabase</p>

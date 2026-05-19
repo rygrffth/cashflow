@@ -125,19 +125,19 @@ export default function SettingsPage() {
           </form>
         </div>
 
-        {/* Mode Aset / Fiktif Mode settings card */}
+        {/* Mode Admin settings card */}
         <div className="glass-card p-6 border-slate-700/50 flex flex-col justify-between">
           <div>
             <h2 className="text-lg font-bold text-slate-100 flex items-center gap-2 mb-4">
-              <Lock className="w-5 h-5 text-emerald-400" /> Mode Tampilan Aset
+              <Lock className="w-5 h-5 text-emerald-400" /> Mode Admin
             </h2>
             <p className="text-xs text-slate-400 mb-6 leading-relaxed">
-              Masukkan kode rahasia untuk menampilkan nominal aset sebenarnya (Real Mode) di halaman dashboard. Jika dikosongkan atau salah, aset asli Anda akan disamarkan dalam Fiktif Mode.
+              Masukkan kode akses untuk mengaktifkan fitur tambahan.
             </p>
 
             <div className="space-y-4">
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-semibold text-slate-400">Kode Rahasia (Password)</label>
+                <label className="text-xs font-semibold text-slate-400">Password</label>
                 <input
                   type="password"
                   placeholder="Masukkan password..."
@@ -151,12 +151,12 @@ export default function SettingsPage() {
                 {localCode === 'naufal' ? (
                   <>
                     <Unlock className="w-4 h-4 text-rose-400 animate-pulse" />
-                    <span className="text-rose-400 font-bold">🔓 Real Mode Aktif (Menampilkan Aset Sebenarnya)</span>
+                    <span className="text-rose-400 font-bold">🔓 Mode Admin Aktif</span>
                   </>
                 ) : (
                   <>
                     <Lock className="w-4 h-4 text-emerald-400" />
-                    <span className="text-emerald-400 font-bold">🔒 Fiktif Mode Aktif (Aset Asli Disamarkan +140jt)</span>
+                    <span className="text-emerald-400 font-bold">🔒 Mode User Aktif</span>
                   </>
                 )}
               </div>
