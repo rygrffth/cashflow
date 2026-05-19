@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { PlusCircle, Calendar, Tag, CreditCard, PenTool, CheckCircle, Loader2 } from 'lucide-react';
+import { PlusCircle, Calendar, Tag, CreditCard, PenTool, CheckCircle, Loader2, ChevronDown, ChevronUp } from 'lucide-react';
 
 interface FormProps {
   saldoBank: number;
@@ -11,11 +11,18 @@ interface FormProps {
 }
 
 const KATEGORI_OPTIONS = [
-  "Makan (Sahur/Buka)",
+  "Makan",
   "Bensin / Mobilitas",
-  "Bukber / Hiburan",
+  "Makan (Sahur/Buka)",
+  "Kos",
+  "Hiburan",
   "Kebutuhan Lab / Magang",
+  "Bulanan",
+  "SPay",
+  "Belanja Dapur",
+  "Penyesuaian",
   "Scheduled Settlement",
+  "Titipan / Jastip",
   "Lainnya (Ketik Manual...)"
 ];
 
@@ -27,7 +34,6 @@ export default function TransactionForm({ saldoBank, uangCash, onSuccess }: Form
 
   // Form States
   const [tanggal, setTanggal] = useState(() => {
-    // Default to today (WIB equivalent: Local timezone date)
     const today = new Date();
     const offset = today.getTimezoneOffset() * 60000;
     const localISODate = new Date(today.getTime() - offset).toISOString().split('T')[0];
@@ -43,6 +49,12 @@ export default function TransactionForm({ saldoBank, uangCash, onSuccess }: Form
   // Scheduled Settlement States
   const [status, setStatus] = useState<'Cleared' | 'Pending'>('Cleared');
   const [tenggatWaktu, setTenggatWaktu] = useState('');
+
+  // Jastip / Titipan States
+  const [showJastip, setShowJastip] = useState(false);
+  const [titBank, setTitBank] = useState<number | ''>('');
+  const [titCash, setTitCash] = useState<number | ''>('');
+  const [titLunas, setTitLunas] = useState(true);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -83,24 +95,78 @@ export default function TransactionForm({ saldoBank, uangCash, onSuccess }: Form
     setLoading(true);
 
     try {
-      // Build transaction object mirroring Python `save_to_cloud` format exactly
+      // 2. Compute Jastip / Titipan values
+      const tBankAmt = Number(titBank || 0);
+      const tCashAmt = Number(titCash || 0);
+      const totalTitipan = tBankAmt + tCashAmt;
+
+      let finalCatatan = catatan.trim();
+      let parts: string[] = [];
+      if (tBankAmt > 0) parts.push(`Bank: Rp ${tBankAmt.toLocaleString('id-ID')}`);
+      if (tCashAmt > 0) parts.push(`Cash: Rp ${tCashAmt.toLocaleString('id-ID')}`);
+      
+      if (totalTitipan > 0) {
+        const titDetail = parts.join(', ');
+        finalCatatan = `${finalCatatan} (Titipan: ${titDetail}${titLunas ? ' - LUNAS' : ''})`.trim();
+      }
+
       const tglBayar = finalKategori === "Scheduled Settlement" && status === "Pending" ? "" : tanggal;
-      const transObj = {
+
+      // Primary transaction object
+      const primaryTx = {
         tanggal: tanggal,
         tipe: tipe,
         kategori: finalKategori,
         nominal: parsedNominal,
-        catatan: catatan,
+        catatan: finalCatatan,
         status: status,
         tenggat_waktu: finalKategori === "Scheduled Settlement" ? tenggatWaktu : "",
         tanggal_bayar: tglBayar,
-        sumber: sumber
+        sumber: sumber,
+        titipan: totalTitipan,
+        net_nominal: parsedNominal - totalTitipan
       };
+
+      const transactionsToInsert: any[] = [primaryTx];
+
+      // Auto-insert Pemasukan receipts if jastip is immediately reimbursed (titLunas is checked)
+      if (totalTitipan > 0 && titLunas) {
+        if (tBankAmt > 0) {
+          transactionsToInsert.push({
+            tanggal: tanggal,
+            tipe: 'Pemasukan',
+            kategori: 'Titipan / Jastip',
+            nominal: tBankAmt,
+            catatan: `Penerimaan Talangan (Bank): ${catatan || finalKategori}`.trim(),
+            status: 'Cleared',
+            tenggat_waktu: '',
+            tanggal_bayar: tanggal,
+            sumber: 'Bank',
+            titipan: 0,
+            net_nominal: tBankAmt
+          });
+        }
+        if (tCashAmt > 0) {
+          transactionsToInsert.push({
+            tanggal: tanggal,
+            tipe: 'Pemasukan',
+            kategori: 'Titipan / Jastip',
+            nominal: tCashAmt,
+            catatan: `Penerimaan Talangan (Cash): ${catatan || finalKategori}`.trim(),
+            status: 'Cleared',
+            tenggat_waktu: '',
+            tanggal_bayar: tanggal,
+            sumber: 'Cash',
+            titipan: 0,
+            net_nominal: tCashAmt
+          });
+        }
+      }
 
       // Insert directly into Supabase 'transaksi' table
       const { error } = await supabase
         .from('transaksi')
-        .insert([transObj]);
+        .insert(transactionsToInsert);
 
       if (error) throw error;
 
@@ -113,6 +179,10 @@ export default function TransactionForm({ saldoBank, uangCash, onSuccess }: Form
       setCustomKategori('');
       setTenggatWaktu('');
       setStatus('Cleared');
+      setTitBank('');
+      setTitCash('');
+      setTitLunas(true);
+      setShowJastip(false);
       
       // Call parent refresh
       onSuccess();
@@ -123,6 +193,8 @@ export default function TransactionForm({ saldoBank, uangCash, onSuccess }: Form
       setLoading(false);
     }
   };
+
+  const currentTotalJastip = Number(titBank || 0) + Number(titCash || 0);
 
   return (
     <div className="glass-card p-6 border-slate-700/40 space-y-5">
@@ -259,7 +331,7 @@ export default function TransactionForm({ saldoBank, uangCash, onSuccess }: Form
 
         {/* Nominal & Catatan */}
         <div className="flex flex-col gap-1.5">
-          <label className="text-xs font-semibold text-slate-400">💰 Nominal (Rp)</label>
+          <label className="text-xs font-semibold text-slate-400 font-bold">💰 Nominal (Rp)</label>
           <input
             type="number"
             placeholder="Nominal transaksi..."
@@ -282,6 +354,70 @@ export default function TransactionForm({ saldoBank, uangCash, onSuccess }: Form
             onChange={(e) => setCatatan(e.target.value)}
             className="bg-slate-900/60 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-emerald-500 text-sm"
           />
+        </div>
+
+        {/* Jastip / Titipan Expander */}
+        <div className="border border-slate-700/40 rounded-lg overflow-hidden bg-slate-950/20 text-xs">
+          <button
+            type="button"
+            onClick={() => setShowJastip(!showJastip)}
+            className="w-full px-3 py-2 bg-slate-900/60 flex justify-between items-center text-slate-300 font-semibold focus:outline-none hover:text-white"
+          >
+            <span>💸 Ada Titipan / Talangan Orang? (Jastip v2)</span>
+            {showJastip ? <ChevronUp className="w-4 h-4 text-emerald-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
+          </button>
+
+          {showJastip && (
+            <div className="p-3.5 space-y-3 border-t border-slate-800/80 animate-fadeIn">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] text-slate-400">Nominal Talangan Bank (Rp)</label>
+                  <input
+                    type="number"
+                    placeholder="0"
+                    value={titBank}
+                    onChange={(e) => setTitBank(e.target.value === '' ? '' : Number(e.target.value))}
+                    className="bg-slate-900 border border-slate-700 rounded px-2 py-1.5 text-white focus:outline-none focus:border-emerald-500"
+                  />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] text-slate-400">Nominal Talangan Cash (Rp)</label>
+                  <input
+                    type="number"
+                    placeholder="0"
+                    value={titCash}
+                    onChange={(e) => setTitCash(e.target.value === '' ? '' : Number(e.target.value))}
+                    className="bg-slate-900 border border-slate-700 rounded px-2 py-1.5 text-white focus:outline-none focus:border-emerald-500"
+                  />
+                </div>
+              </div>
+
+              {currentTotalJastip > 0 && (
+                <div className="pt-2 border-t border-slate-800/60 flex flex-col gap-2">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      id="titLunas"
+                      checked={titLunas}
+                      onChange={(e) => setTitLunas(e.target.checked)}
+                      className="w-3.5 h-3.5 text-emerald-500 focus:ring-0 bg-slate-900 border-slate-700 rounded"
+                    />
+                    <label htmlFor="titLunas" className="text-[11px] text-slate-300 font-bold select-none cursor-pointer">
+                      💰 Uang Talangan SUDAH DITERIMA langsung?
+                    </label>
+                  </div>
+
+                  <div className="p-2.5 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded text-[10px] leading-relaxed">
+                    💡 Web akan otomatis mencatat log Pemasukan jastip senilai Rp {currentTotalJastip.toLocaleString('id-ID')} agar saldo Bank/Cash Anda kembali seimbang.
+                  </div>
+
+                  <div className="text-[10px] text-slate-400 italic">
+                    Limit harian Anda hanya akan terpotong Rp {Math.max(0, (Number(nominal) || 0) - currentTotalJastip).toLocaleString('id-ID')}.
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Submit button */}

@@ -17,7 +17,7 @@ export default function AnalyticsPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [transactions, setTransactions] = useState<any[]>([]);
   const [tabunganTotal, setTabunganTotal] = useState(0);
-  const [gajianDate, setGajianDate] = useState(25); // Default 25
+  const [gajianDate, setGajianDate] = useState('2026-05-17'); // Default date string format
 
   // Tab state: 'grafik' | 'laporan'
   const [activeTab, setActiveTab] = useState<'grafik' | 'laporan'>('grafik');
@@ -72,7 +72,7 @@ export default function AnalyticsPage() {
       const { data: settingData } = await supabase.from('settings').select('*');
       if (settingData && settingData.length > 0) {
         const found = settingData.find(s => s.key === 'tanggal_gajian');
-        if (found) setGajianDate(Number(found.value) || 25);
+        if (found) setGajianDate(found.value || '2026-05-17');
       }
     } catch (e) {
       console.error('Failed to fetch analytics data:', e);
@@ -111,17 +111,19 @@ export default function AnalyticsPage() {
     const totalReal = bankSum + cashSum;
     const saldoOp = totalReal - tabunganTotal;
 
-    // Remaining days to salary
-    const currentYear = now.getFullYear();
-    const currentMonth = now.getMonth();
-    
-    let targetDate = new Date(currentYear, currentMonth, gajianDate);
-    if (now.getDate() >= gajianDate) {
-      targetDate = new Date(currentYear, currentMonth + 1, gajianDate);
+    // Remaining days to salary (robust UTC/midnight calculation)
+    let calculatedDays = 1;
+    if (gajianDate) {
+      try {
+        const tDate = new Date(todayStr + 'T00:00:00');
+        const gDate = new Date(gajianDate + 'T00:00:00');
+        const timeDiff = gDate.getTime() - tDate.getTime();
+        calculatedDays = Math.max(Math.ceil(timeDiff / (1000 * 3600 * 24)), 1);
+      } catch (e) {
+        console.error('Error parsing gajianDate in analytics:', e);
+      }
     }
-    
-    const diffTime = targetDate.getTime() - now.getTime();
-    const sisaHari = Math.max(1, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
+    const sisaHari = calculatedDays;
     const batasHr = Math.max(0, Math.floor(saldoOp / sisaHari));
 
     return { bankSum, cashSum, totalReal, saldoOp, sisaHari, batasHr, todayStr };
@@ -176,7 +178,7 @@ export default function AnalyticsPage() {
         if (!map[dStr]) {
           map[dStr] = { date: dStr, Bank: 0, Cash: 0, Total: 0 };
         }
-        const amt = Number(t.nominal) || 0;
+        const amt = t.net_nominal !== null && t.net_nominal !== undefined ? Number(t.net_nominal) : Number(t.nominal);
         if (t.sumber === 'Bank') map[dStr].Bank += amt;
         else if (t.sumber === 'Cash') map[dStr].Cash += amt;
         map[dStr].Total += amt;
@@ -192,7 +194,8 @@ export default function AnalyticsPage() {
     chartFilteredData.forEach(t => {
       if (t.tipe === 'Pengeluaran' && !EXCLUDE_FROM_LIMIT.includes(t.kategori)) {
         const kat = t.kategori + (t.sumber === 'Cash' ? ' (Cash)' : '');
-        map[kat] = (map[kat] || 0) + (Number(t.nominal) || 0);
+        const amt = t.net_nominal !== null && t.net_nominal !== undefined ? Number(t.net_nominal) : Number(t.nominal);
+        map[kat] = (map[kat] || 0) + (amt || 0);
       }
     });
 
@@ -218,7 +221,7 @@ export default function AnalyticsPage() {
     let pendingKeluar = 0;
 
     chartFilteredData.forEach(t => {
-      const nom = Number(t.nominal) || 0;
+      const nom = t.net_nominal !== null && t.net_nominal !== undefined ? Number(t.net_nominal) : Number(t.nominal);
       if (t.tipe === 'Pemasukan') {
         pemasukan += nom;
       } else if (t.tipe === 'Pengeluaran') {
@@ -254,7 +257,7 @@ export default function AnalyticsPage() {
     transactions.forEach(t => {
       if (t.tipe === 'Pengeluaran' && !EXCLUDE_FROM_LIMIT.includes(t.kategori)) {
         const d = new Date(t.tanggal);
-        const amt = Number(t.nominal) || 0;
+        const amt = t.net_nominal !== null && t.net_nominal !== undefined ? Number(t.net_nominal) : Number(t.nominal);
         if (d.getMonth() === curMonth && d.getFullYear() === curYear) {
           mapThis[t.kategori] = (mapThis[t.kategori] || 0) + amt;
         } else if (d.getMonth() === lastMonth && d.getFullYear() === lastYear) {
@@ -279,7 +282,6 @@ export default function AnalyticsPage() {
     let label = '';
 
     if (laporanMode === 'minggu') {
-      // Selected week offset (0 = this week, 1 = last week, etc.)
       const mondayDiff = today.getDate() - today.getDay() + (today.getDay() === 0 ? -6 : 1);
       const startMonday = new Date(today.setDate(mondayDiff));
       startMonday.setDate(startMonday.getDate() - 7 * selectedMingguOffset);
@@ -314,7 +316,7 @@ export default function AnalyticsPage() {
     let totalIn = 0;
     let totalOut = 0;
     filtered.forEach(t => {
-      const nom = Number(t.nominal) || 0;
+      const nom = t.net_nominal !== null && t.net_nominal !== undefined ? Number(t.net_nominal) : Number(t.nominal);
       if (t.tipe === 'Pemasukan') {
         totalIn += nom;
       } else if (t.tipe === 'Pengeluaran' && !EXCLUDE_FROM_LIMIT.includes(t.kategori)) {
@@ -425,7 +427,7 @@ export default function AnalyticsPage() {
             </div>
 
             {graphRange === 'custom' && (
-              <div className="flex items-center gap-2 w-full md:w-auto animate-fadeIn">
+              <div className="flex items-center gap-2 w-full md:w-auto animate-fadeIn text-xs">
                 <input
                   type="date"
                   value={customStart}
@@ -532,7 +534,7 @@ export default function AnalyticsPage() {
                   )}
                 </div>
 
-                <div className="flex flex-col justify-center space-y-1.5 text-[11px] overflow-y-auto max-h-[240px] pr-2">
+                <div className="flex flex-col justify-center space-y-1.5 text-[11px] overflow-y-auto max-h-[240px] pr-2 font-mono">
                   {categoryChartData.slice(0, 7).map((item, idx) => (
                     <div key={idx} className="flex justify-between items-center bg-slate-900/40 border border-slate-800/40 px-2 py-1 rounded">
                       <div className="flex items-center gap-1.5 truncate max-w-[120px]">
@@ -543,7 +545,7 @@ export default function AnalyticsPage() {
                     </div>
                   ))}
                   {categoryChartData.length > 7 && (
-                    <div className="text-[10px] text-slate-500 text-center italic mt-1">
+                    <div className="text-[10px] text-slate-500 text-center italic mt-1 font-sans">
                       + {categoryChartData.length - 7} kategori lainnya
                     </div>
                   )}

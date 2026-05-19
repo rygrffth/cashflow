@@ -35,7 +35,8 @@ export default function PiutangPage() {
     setErrorMsg('');
 
     try {
-      const { data, error } = await supabase.from('piutang').select('*').order('Tanggal', { ascending: false });
+      // Table piutang does not have a "tanggal" column, order by created_at instead
+      const { data, error } = await supabase.from('piutang').select('*').order('created_at', { ascending: false });
       
       if (error) {
         if (error.code === '42P01') {
@@ -74,16 +75,14 @@ export default function PiutangPage() {
       const todayStr = new Date(today.getTime() - offset).toISOString().split('T')[0];
       const parsedNominal = Number(nominal);
 
-      // 1. Insert to 'piutang' table (Capitalized keys)
+      // 1. Insert to 'piutang' table (Lowercase keys, omit non-existent 'tanggal' and 'sumber' columns)
       const newPiutangObj = {
-        Tanggal: todayStr,
-        Nama: nama,
-        Nominal: parsedNominal,
-        Catatan: catatan,
-        Status: 'Belum Lunas',
-        Tenggat: tenggat,
-        Tanggal_Lunas: '',
-        Sumber: sumber
+        nama: nama,
+        nominal: parsedNominal,
+        catatan: catatan,
+        status: 'Belum Lunas',
+        tenggat: tenggat,
+        tanggal_lunas: ''
       };
 
       const { error: piutangErr } = await supabase
@@ -92,7 +91,7 @@ export default function PiutangPage() {
 
       if (piutangErr) throw piutangErr;
 
-      // 2. Insert transaction log to 'transaksi' (lowercase keys)
+      // 2. Insert transaction log to 'transaksi' (lowercase keys, including 'sumber')
       const txnObj = {
         tanggal: todayStr,
         tipe: 'Pengeluaran',
@@ -132,25 +131,24 @@ export default function PiutangPage() {
       const offset = today.getTimezoneOffset() * 60000;
       const todayStr = new Date(today.getTime() - offset).toISOString().split('T')[0];
 
-      // 1. Update piutang status to Lunas (Capitalized keys)
+      // 1. Update piutang status to Lunas (Omit 'sumber' since it doesn't exist in piutang table)
       const { error: piutangErr } = await supabase
         .from('piutang')
         .update({
-          Status: 'Lunas',
-          Tanggal_Lunas: todayStr,
-          Sumber: sumberKembali // Update the final destination
+          status: 'Lunas',
+          tanggal_lunas: todayStr
         })
         .eq('id', lunasTarget.id);
 
       if (piutangErr) throw piutangErr;
 
-      // 2. Insert to transaksi as Pemasukan (lowercase keys)
+      // 2. Insert to transaksi as Pemasukan (lowercase keys, including destination 'sumber')
       const txnObj = {
         tanggal: todayStr,
         tipe: 'Pemasukan',
         kategori: 'Piutang Kembali',
-        nominal: Number(lunasTarget.Nominal),
-        catatan: `Pelunasan Piutang: ${lunasTarget.Nama}`.trim(),
+        nominal: Number(lunasTarget.nominal || lunasTarget.Nominal),
+        catatan: `Pelunasan Piutang: ${lunasTarget.nama || lunasTarget.Nama}`.trim(),
         status: 'Cleared',
         tenggat_waktu: '',
         tanggal_bayar: todayStr,
@@ -180,7 +178,7 @@ export default function PiutangPage() {
 
       const { error } = await supabase
         .from('piutang')
-        .update({ Tenggat: newTenggat })
+        .update({ tenggat: newTenggat })
         .eq('id', id);
 
       if (error) throw error;
@@ -204,9 +202,10 @@ export default function PiutangPage() {
     }
   };
 
-  const activePiutang = piutangData.filter(p => p.Status === 'Belum Lunas');
-  const historyPiutang = piutangData.filter(p => p.Status === 'Lunas');
-  const totalActive = activePiutang.reduce((s, i) => s + Number(i.Nominal), 0);
+  // Safe checks for lowercase/uppercase key fallbacks
+  const activePiutang = piutangData.filter(p => (p.status || p.Status) === 'Belum Lunas');
+  const historyPiutang = piutangData.filter(p => (p.status || p.Status) === 'Lunas');
+  const totalActive = activePiutang.reduce((s, i) => s + Number(i.nominal || i.Nominal || 0), 0);
 
   // Check deadline
   const isOverdue = (tenggatStr: string) => {
@@ -217,7 +216,7 @@ export default function PiutangPage() {
     return due < today;
   };
 
-  const overdueCount = activePiutang.filter(p => isOverdue(p.Tenggat)).length;
+  const overdueCount = activePiutang.filter(p => isOverdue(p.tenggat || p.Tenggat)).length;
 
   if (loading) return <div className="text-center text-emerald-400 py-20 animate-pulse">Memuat daftar piutang...</div>;
 
@@ -267,21 +266,26 @@ export default function PiutangPage() {
               <div className="space-y-3">
                 {activePiutang.length > 0 ? (
                   activePiutang.map(p => {
-                    const overdue = isOverdue(p.Tenggat);
+                    const pTenggat = p.tenggat || p.Tenggat || '';
+                    const pNama = p.nama || p.Nama || '';
+                    const pNominal = p.nominal || p.Nominal || 0;
+                    const pCatatan = p.catatan || p.Catatan || '';
+                    const pTanggal = p.created_at ? p.created_at.split('T')[0] : (p.tanggal || p.Tanggal || '');
+                    const overdue = isOverdue(pTenggat);
                     return (
                       <div key={p.id} className="p-4 bg-slate-900/60 rounded-xl border border-slate-800/80 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
                         <div>
                           <p className="font-bold text-slate-100 flex items-center gap-2">
-                            {p.Nama}
+                            {pNama}
                             {overdue && <span className="px-1.5 py-0.5 bg-rose-500/20 text-rose-400 text-[8px] rounded uppercase font-black">Overdue</span>}
                           </p>
                           <p className="text-[11px] text-slate-400 mt-1">
-                            Dicatat: {p.Tanggal} • Deadline: <span className={overdue ? 'text-rose-400 font-bold' : 'text-slate-300 font-semibold'}>{p.Tenggat}</span>
+                            Dicatat: {pTanggal} • Deadline: <span className={overdue ? 'text-rose-400 font-bold' : 'text-slate-300 font-semibold'}>{pTenggat}</span>
                           </p>
-                          {p.Catatan && <p className="text-[10px] text-slate-500 italic mt-1">&ldquo;{p.Catatan}&rdquo;</p>}
+                          {pCatatan && <p className="text-[10px] text-slate-500 italic mt-1">&ldquo;{pCatatan}&rdquo;</p>}
                         </div>
                         <div className="flex flex-row sm:flex-col items-center sm:items-end justify-between sm:justify-center gap-2">
-                          <p className="font-black text-amber-400">Rp {Number(p.Nominal).toLocaleString('id-ID')}</p>
+                          <p className="font-black text-amber-400">Rp {Number(pNominal).toLocaleString('id-ID')}</p>
                           <div className="flex gap-1.5">
                             <button 
                               onClick={() => setLunasTarget(p)}
@@ -290,7 +294,7 @@ export default function PiutangPage() {
                               Lunas
                             </button>
                             <button 
-                              onClick={() => handleExtend(p.id, p.Tenggat)}
+                              onClick={() => handleExtend(p.id, pTenggat)}
                               title="Perpanjang 7 hari"
                               className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px] font-bold rounded transition"
                             >
@@ -321,15 +325,21 @@ export default function PiutangPage() {
               
               <div className="space-y-3">
                 {historyPiutang.length > 0 ? (
-                  historyPiutang.slice(0, 10).map(p => (
-                    <div key={p.id} className="p-3 bg-slate-900/30 rounded-xl border border-slate-800 flex justify-between items-center opacity-70">
-                      <div>
-                        <p className="font-bold text-slate-300 line-through">{p.Nama}</p>
-                        <p className="text-[10px] text-slate-500">Lunas pada: {p.Tanggal_Lunas} (Masuk ke {p.Sumber})</p>
+                  historyPiutang.slice(0, 10).map(p => {
+                    const pNama = p.nama || p.Nama || '';
+                    const pTanggalLunas = p.tanggal_lunas || p.Tanggal_Lunas || '';
+                    const pSumber = p.sumber || p.Sumber || 'Bank/Cash';
+                    const pNominal = p.nominal || p.Nominal || 0;
+                    return (
+                      <div key={p.id} className="p-3 bg-slate-900/30 rounded-xl border border-slate-800 flex justify-between items-center opacity-70">
+                        <div>
+                          <p className="font-bold text-slate-300 line-through">{pNama}</p>
+                          <p className="text-[10px] text-slate-500">Lunas pada: {pTanggalLunas} (Masuk ke {pSumber})</p>
+                        </div>
+                        <p className="font-bold text-emerald-400/70">Rp {Number(pNominal).toLocaleString('id-ID')}</p>
                       </div>
-                      <p className="font-bold text-emerald-400/70">Rp {Number(p.Nominal).toLocaleString('id-ID')}</p>
-                    </div>
-                  ))
+                    );
+                  })
                 ) : (
                   <p className="text-sm text-slate-500 italic py-4 text-center">Belum ada riwayat lunas.</p>
                 )}
@@ -341,8 +351,8 @@ export default function PiutangPage() {
           <div className="space-y-4">
             
             {/* Summary */}
-            <div className="glass-card p-5 border-amber-500/30">
-              <h3 className="text-sm font-bold text-amber-400 mb-2">Total Piutang Aktif</h3>
+            <div className="glass-card p-5 border-amber-500/30 bg-slate-900/10">
+              <h3 className="text-sm font-bold text-amber-400 mb-2">Total Piutang</h3>
               <p className="text-3xl font-black text-white">Rp {totalActive.toLocaleString('id-ID')}</p>
               <p className="text-[10px] text-slate-400 mt-2">
                 Dana ini tidak dihitung dalam Saldo Cash atau Saldo Bank Anda sampai ditandai Lunas.
@@ -438,7 +448,7 @@ export default function PiutangPage() {
           <div className="glass-card p-6 max-w-sm w-full border-slate-700/50 space-y-4">
             <h3 className="font-bold text-lg text-emerald-400">💰 Konfirmasi Pelunasan</h3>
             <p className="text-xs text-slate-300">
-              Piutang dari <strong>{lunasTarget.Nama}</strong> senilai <strong>Rp {Number(lunasTarget.Nominal).toLocaleString('id-ID')}</strong> akan ditandai Lunas.
+              Piutang dari <strong>{lunasTarget.nama || lunasTarget.Nama}</strong> senilai <strong>Rp {Number(lunasTarget.nominal || lunasTarget.Nominal || 0).toLocaleString('id-ID')}</strong> akan ditandai Lunas.
             </p>
 
             <div className="flex flex-col gap-1 text-xs">

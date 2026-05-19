@@ -127,20 +127,18 @@ export default function Dashboard() {
 
       // Get gajian date settings
       const gajianSet = (settingsData || []).find(s => s.key === 'tanggal_gajian');
-      let tanggalGajian = new Date(2026, 4, 17); // Default fallback: May 17, 2026
+      let calculatedDays = 1;
 
       if (gajianSet && gajianSet.value) {
         try {
-          tanggalGajian = new Date(gajianSet.value);
+          const tDate = new Date(todayWIB + 'T00:00:00');
+          const gDate = new Date(gajianSet.value + 'T00:00:00');
+          const timeDiff = gDate.getTime() - tDate.getTime();
+          calculatedDays = Math.max(Math.ceil(timeDiff / (1000 * 3600 * 24)), 1);
         } catch (e) {
-          console.error(e);
+          console.error('Error calculating days remaining:', e);
         }
       }
-
-      // Calculate days remaining
-      const todayDate = new Date(todayWIB);
-      const timeDiff = tanggalGajian.getTime() - todayDate.getTime();
-      const calculatedDays = Math.max(Math.ceil(timeDiff / (1000 * 3600 * 24)), 1);
       setSisaHari(calculatedDays);
 
       // Limit Harian
@@ -157,7 +155,10 @@ export default function Dashboard() {
           jajanCategories.includes(t.kategori) &&
           t.tanggal === todayWIB
         )
-        .reduce((acc, curr) => acc + (Number(curr.nominal) || 0), 0);
+        .reduce((acc, curr) => {
+          const net = curr.net_nominal !== null && curr.net_nominal !== undefined ? Number(curr.net_nominal) : Number(curr.nominal);
+          return acc + net;
+        }, 0);
       
       setOutHariHarian(todayJajanSum);
 
