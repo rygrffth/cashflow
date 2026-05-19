@@ -204,15 +204,7 @@ export default function Dashboard() {
             <h1 className="text-3xl font-extrabold tracking-tight text-white">💼 Financial Dashboard</h1>
             <span className={`h-2 w-2 rounded-full ${isRealMode ? 'bg-rose-500 animate-pulse shadow-[0_0_8px_rgba(244,63,94,0.8)]' : 'bg-emerald-500 animate-ping'} mt-1`}></span>
           </div>
-          <div className="text-xs text-slate-400 mt-1 flex items-center">
-            Lightweight, modern dashboard terintegrasi langsung dengan Supabase
-            <input 
-              type="password" 
-              value={secretCode}
-              onChange={e => setSecretCode(e.target.value)}
-              className="bg-transparent border-none w-10 text-transparent focus:text-slate-600 focus:outline-none focus:ring-0 ml-2 cursor-default"
-            />
-          </div>
+          <p className="text-xs text-slate-400 mt-1">Lightweight, modern dashboard terintegrasi langsung dengan Supabase</p>
         </div>
 
         <div className="flex flex-col sm:flex-row items-end sm:items-center gap-4 w-full md:w-auto">
@@ -245,6 +237,9 @@ export default function Dashboard() {
             saldoOp={saldoOp}
             batasHr={batasHr}
             sisaHari={sisaHari}
+            isRealMode={isRealMode}
+            secretCode={secretCode}
+            setSecretCode={setSecretCode}
           />
 
           <DailyLimitCard

@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
-import { RefreshCw, Trash2, Calendar, Filter, Download } from 'lucide-react';
+import { RefreshCw, Trash2, Calendar, Filter, Download, History } from 'lucide-react';
 
 export default function HistoryPage() {
   const [loading, setLoading] = useState(true);

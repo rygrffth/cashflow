@@ -11,6 +11,9 @@ interface PortfolioProps {
   saldoOp: number;
   batasHr: number;
   sisaHari: number;
+  isRealMode: boolean;
+  secretCode: string;
+  setSecretCode: (val: string) => void;
 }
 
 export default function PortfolioGrid({
@@ -20,7 +23,10 @@ export default function PortfolioGrid({
   totalAset,
   saldoOp,
   batasHr,
-  sisaHari
+  sisaHari,
+  isRealMode,
+  secretCode,
+  setSecretCode
 }: PortfolioProps) {
   // Hydration safety flag
   const [isMounted, setIsMounted] = useState(false);
@@ -63,9 +69,25 @@ export default function PortfolioGrid({
 
   return (
     <div className="space-y-6">
-      <h2 className="text-xl font-bold tracking-tight text-emerald-400 flex items-center gap-2">
-        <span>💵</span> Portofolio Aset
-      </h2>
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+        <h2 className="text-xl font-bold tracking-tight text-emerald-400 flex items-center gap-2">
+          <span>💵</span> Portofolio Aset
+        </h2>
+        
+        {/* Hidden password input */}
+        <div className="flex items-center gap-2 bg-slate-900/60 border border-slate-800/80 rounded-xl px-3 py-1.5 text-xs text-slate-300 w-full sm:w-auto shadow-inner">
+          <span className="flex items-center gap-1 font-bold text-[10px] text-slate-400 uppercase tracking-wider">
+            {isRealMode ? '🔓 Real Mode' : '🔒 Fiktif Mode'}
+          </span>
+          <input
+            type="password"
+            placeholder="Secret code..."
+            value={secretCode}
+            onChange={(e) => setSecretCode(e.target.value)}
+            className="bg-slate-950/60 border border-slate-800 rounded px-2 py-0.5 text-[11px] text-white focus:outline-none focus:border-emerald-500 w-full sm:w-28 pl-1"
+          />
+        </div>
+      </div>
 
       {/* Row 1: The 4 Primary Portfolio Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
