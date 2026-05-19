@@ -1,0 +1,47 @@
+@import "tailwindcss";
+
+:root {
+  --background: #0B0F19;
+  --foreground: #F8FAFC;
+  --card-bg: rgba(30, 41, 59, 0.45);
+  --card-border: rgba(51, 65, 85, 0.5);
+  --primary: #10B981;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI";
+  min-height: 100vh;
+}
+
+/* Premium Glassmorphic Cards */
+.glass-card {
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-radius: 16px;
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.glass-card:hover {
+  border-color: rgba(16, 185, 129, 0.35);
+  transform: translateY(-2px);
+  box-shadow: 0 12px 40px 0 rgba(16, 185, 129, 0.08);
+}
+
+/* Smooth custom progress bar transition */
+.progress-bar-fill {
+  transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Hide scrollbars */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
