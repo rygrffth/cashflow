@@ -109,7 +109,8 @@ export default function SettingsPage() {
                 type="date"
                 value={tanggalGajian}
                 onChange={e => setTanggalGajian(e.target.value)}
-                className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-emerald-500 text-sm"
+                onClick={(e) => (e.target as any).showPicker()}
+                className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-emerald-500 text-sm cursor-pointer"
                 required
               />
             </div>

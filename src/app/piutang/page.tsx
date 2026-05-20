@@ -412,7 +412,8 @@ export default function PiutangPage() {
                       type="date"
                       value={tenggat}
                       onChange={e => setTenggat(e.target.value)}
-                      className="bg-slate-900 border border-slate-700 rounded px-2 py-1.5 text-white focus:outline-none focus:border-emerald-500 text-[10px]"
+                      onClick={(e) => (e.target as any).showPicker()}
+                      className="bg-slate-900 border border-slate-700 rounded px-2 py-1.5 text-white focus:outline-none focus:border-emerald-500 text-[10px] cursor-pointer"
                     />
                   </div>
                 </div>

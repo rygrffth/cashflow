@@ -444,7 +444,8 @@ export default function BudgetPage() {
                     type="date"
                     value={tanggalMulai}
                     onChange={e => setTanggalMulai(e.target.value)}
-                    className="bg-slate-900 border border-slate-700 rounded px-2.5 py-1.5 text-white focus:outline-none focus:border-emerald-500 text-[10px]"
+                    onClick={(e) => (e.target as any).showPicker()}
+                    className="bg-slate-900 border border-slate-700 rounded px-2.5 py-1.5 text-white focus:outline-none focus:border-emerald-500 text-[10px] cursor-pointer"
                   />
                 </div>
                 <div className="flex flex-col gap-1">
@@ -453,7 +454,8 @@ export default function BudgetPage() {
                     type="date"
                     value={tanggalTarget}
                     onChange={e => setTanggalTarget(e.target.value)}
-                    className="bg-slate-900 border border-slate-700 rounded px-2.5 py-1.5 text-white focus:outline-none focus:border-emerald-500 text-[10px]"
+                    onClick={(e) => (e.target as any).showPicker()}
+                    className="bg-slate-900 border border-slate-700 rounded px-2.5 py-1.5 text-white focus:outline-none focus:border-emerald-500 text-[10px] cursor-pointer"
                   />
                 </div>
               </div>

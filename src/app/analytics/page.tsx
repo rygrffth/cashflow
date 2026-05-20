@@ -520,14 +520,16 @@ export default function AnalyticsPage() {
                   type="date"
                   value={customStart}
                   onChange={(e) => setCustomStart(e.target.value)}
-                  className="bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-white"
+                  onClick={(e) => (e.target as any).showPicker()}
+                  className="bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-white cursor-pointer"
                 />
                 <span className="text-xs text-slate-500">s/d</span>
                 <input
                   type="date"
                   value={customEnd}
                   onChange={(e) => setCustomEnd(e.target.value)}
-                  className="bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-white"
+                  onClick={(e) => (e.target as any).showPicker()}
+                  className="bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-white cursor-pointer"
                 />
               </div>
             )}
@@ -874,14 +876,16 @@ export default function AnalyticsPage() {
                   type="date"
                   value={laporanCustomStart}
                   onChange={(e) => setLaporanCustomStart(e.target.value)}
-                  className="bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1 text-white"
+                  onClick={(e) => (e.target as any).showPicker()}
+                  className="bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1 text-white cursor-pointer"
                 />
                 <span className="text-slate-500">s/d</span>
                 <input
                   type="date"
                   value={laporanCustomEnd}
                   onChange={(e) => setLaporanCustomEnd(e.target.value)}
-                  className="bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1 text-white"
+                  onClick={(e) => (e.target as any).showPicker()}
+                  className="bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1 text-white cursor-pointer"
                 />
               </div>
             )}

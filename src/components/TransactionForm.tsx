@@ -224,7 +224,8 @@ export default function TransactionForm({ saldoBank, uangCash, onSuccess }: Form
               type="date"
               value={tanggal}
               onChange={(e) => setTanggal(e.target.value)}
-              className="bg-slate-900/60 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-emerald-500 text-sm"
+              onClick={(e) => (e.target as any).showPicker()}
+              className="bg-slate-900/60 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-emerald-500 text-sm cursor-pointer"
               required
             />
           </div>
@@ -319,7 +320,8 @@ export default function TransactionForm({ saldoBank, uangCash, onSuccess }: Form
                   value={tenggatWaktu}
                   min={tanggal}
                   onChange={(e) => setTenggatWaktu(e.target.value)}
-                  className="bg-slate-900/60 border border-slate-700 rounded-lg px-3 py-1.5 text-white focus:outline-none focus:border-emerald-500 text-xs h-[30px]"
+                  onClick={(e) => (e.target as any).showPicker()}
+                  className="bg-slate-900/60 border border-slate-700 rounded-lg px-3 py-1.5 text-white focus:outline-none focus:border-emerald-500 text-xs h-[30px] cursor-pointer"
                 />
               </div>
             </div>

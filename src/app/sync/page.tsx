@@ -295,7 +295,8 @@ export default function SyncPage() {
                             type="date"
                             value={row.tanggal}
                             onChange={e => handleUpdateRow(idx, 'tanggal', e.target.value)}
-                            className="bg-slate-900 border border-slate-800 rounded px-2 py-1 text-white text-xs w-[110px] focus:outline-none focus:border-emerald-500"
+                            onClick={(e) => (e.target as any).showPicker()}
+                            className="bg-slate-900 border border-slate-800 rounded px-2 py-1 text-white text-xs w-[110px] focus:outline-none focus:border-emerald-500 cursor-pointer"
                           />
                         </td>
                         <td className="p-3">

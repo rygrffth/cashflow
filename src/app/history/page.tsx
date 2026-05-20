@@ -271,7 +271,8 @@ export default function HistoryPage() {
               type="month" 
               value={filterMonth} 
               onChange={e => setFilterMonth(e.target.value)}
-              className="bg-slate-900 border border-slate-700 rounded px-3 py-1.5 text-sm text-white focus:border-emerald-500 outline-none w-full sm:w-40"
+              onClick={(e) => (e.target as any).showPicker()}
+              className="bg-slate-900 border border-slate-700 rounded px-3 py-1.5 text-sm text-white focus:border-emerald-500 outline-none w-full sm:w-40 cursor-pointer"
             />
           </div>
           <div className="flex items-center gap-2 w-full sm:w-auto">
@@ -399,7 +400,8 @@ export default function HistoryPage() {
                             type="date"
                             value={rowData.tanggal}
                             onChange={(e) => handleCellChange(t.id, 'tanggal', e.target.value)}
-                            className="bg-slate-900 border border-slate-700 rounded px-2.5 py-1 text-xs text-white focus:border-emerald-500 outline-none w-32"
+                            onClick={(e) => (e.target as any).showPicker()}
+                            className="bg-slate-900 border border-slate-700 rounded px-2.5 py-1 text-xs text-white focus:border-emerald-500 outline-none w-32 cursor-pointer"
                           />
                         ) : (
                           t.tanggal
