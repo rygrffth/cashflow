@@ -219,6 +219,11 @@ export async function POST(req: Request) {
       }
     });
 
+    // Prevent unhandled 'error' events from crashing the process
+    client.on('error', err => {
+      console.error('ImapFlow Client Error Event:', err);
+    });
+
     await client.connect();
 
     const results: any[] = [];
