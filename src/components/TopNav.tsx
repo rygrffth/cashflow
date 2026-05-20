@@ -7,6 +7,7 @@ import { LayoutDashboard, History, Target, HandCoins, Settings, CalendarRange, B
 
 export default function TopNav() {
   const pathname = usePathname();
+  const normalizePath = (p: string) => p.replace(/\/$/, '') || '/';
 
   const links = [
     { href: '/', label: 'Dashboard', icon: LayoutDashboard },
@@ -34,7 +35,7 @@ export default function TopNav() {
           {/* Navigation Links - Scrollable on mobile */}
           <div className="flex space-x-1 sm:space-x-2 overflow-x-auto no-scrollbar pl-4 sm:pl-0">
             {links.map((link) => {
-              const isActive = pathname === link.href;
+              const isActive = normalizePath(pathname) === normalizePath(link.href);
               const Icon = link.icon;
               
               return (
