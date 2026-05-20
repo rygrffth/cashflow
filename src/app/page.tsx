@@ -398,10 +398,7 @@ export default function Dashboard() {
         </div>
       </main>
 
-      {/* Footer */}
-      <footer className="text-center text-[10px] text-slate-500 border-t border-slate-900/80 pt-6 mt-12 tracking-wider">
-        NEXT-GEN CASHFLOW DASHBOARD • DESIGNED WITH GLASSMORPHISM AND TAILWIND CSS
-      </footer>
+
 
       {/* Edit Transaction Modal */}
       {editingTxn && (

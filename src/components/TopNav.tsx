@@ -28,7 +28,8 @@ export default function TopNav() {
           {/* Logo */}
           <div className="flex-shrink-0 flex items-center gap-2">
             <span className="text-xl font-black tracking-tight text-white flex items-center gap-2">
-              💼 <span className="hidden sm:block">Cashflow</span>
+              <img src="/logo.png" alt="Cashflow Logo" className="w-6 h-6 object-contain rounded-lg shadow-emerald-500/20 shadow-md" />
+              <span className="hidden sm:block">Cashflow</span>
             </span>
           </div>
 
