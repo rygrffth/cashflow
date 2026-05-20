@@ -3,7 +3,7 @@
 import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, History, Target, HandCoins, Settings, CalendarRange, BarChart3 } from 'lucide-react';
+import { LayoutDashboard, History, Target, HandCoins, Settings, CalendarRange, BarChart3, RefreshCw } from 'lucide-react';
 
 export default function TopNav() {
   const pathname = usePathname();
@@ -15,6 +15,7 @@ export default function TopNav() {
     { href: '/piutang', label: 'Piutang', icon: HandCoins },
     { href: '/settlement', label: 'Settlement', icon: CalendarRange },
     { href: '/analytics', label: 'Analisis', icon: BarChart3 },
+    { href: '/sync', label: 'Sinkronisasi', icon: RefreshCw },
     { href: '/settings', label: 'Pengaturan', icon: Settings },
   ];
 

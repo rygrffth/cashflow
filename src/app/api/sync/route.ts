@@ -1,4 +1,5 @@
 import { ImapFlow } from 'imapflow';
+import { NextResponse } from 'next/server';
 
 // Helper to decode quoted-printable encoding
 function decodeQuotedPrintable(str: string): string {
@@ -201,7 +202,7 @@ export async function POST(req: Request) {
   try {
     const { email, pass, limit } = await req.json();
     if (!email || !pass) {
-      return Response.json({ success: false, error: 'Email dan password dibutuhkan' }, { status: 400 });
+      return NextResponse.json({ success: false, error: 'Email dan password dibutuhkan' }, { status: 400 });
     }
 
     const client = new ImapFlow({
@@ -212,56 +213,62 @@ export async function POST(req: Request) {
         user: email,
         pass: pass
       },
-      logger: false
+      logger: false,
+      tls: {
+        rejectUnauthorized: false
+      }
     });
 
     await client.connect();
 
-    const lock = await client.getMailboxLock('INBOX');
     const results: any[] = [];
 
     try {
-      // Search for emails from noreply.livin@bankmandiri.co.id
-      const searchResult = await client.search({
-        from: 'noreply.livin@bankmandiri.co.id'
-      });
-
-      const limitVal = limit ? parseInt(limit, 10) : 10;
-      const sortedIds = searchResult.slice(-limitVal).reverse();
-
-      for (const uid of sortedIds) {
-        const message = await client.fetchOne(uid, {
-          envelope: true,
-          source: true
+      const lock = await client.getMailboxLock('INBOX');
+      try {
+        // Search for emails from noreply.livin@bankmandiri.co.id
+        const searchResult = await client.search({
+          from: 'noreply.livin@bankmandiri.co.id'
         });
 
-        const rawSubject = message.envelope?.subject || '';
-        const subject = decodeMimeWords(rawSubject);
+        const limitVal = limit ? parseInt(limit, 10) : 10;
+        const sortedIds = searchResult.slice(-limitVal).reverse();
 
-        // Skip failed transactions
-        if (/Tidak Berhasil|Gagal|Failed|Ditolak/i.test(subject)) {
-          continue;
-        }
+        for (const uid of sortedIds) {
+          const message = await client.fetchOne(uid, {
+            envelope: true,
+            source: true
+          });
 
-        const sourceBuffer = message.source;
-        if (!sourceBuffer) continue;
-        
-        const sourceStr = sourceBuffer.toString('utf-8');
-        const parsedMime = parseMimeEmail(sourceStr);
-        
-        const transaction = parseTransaction(parsedMime.body, parsedMime.subject);
-        if (transaction) {
-          results.push(transaction);
+          const rawSubject = message.envelope?.subject || '';
+          const subject = decodeMimeWords(rawSubject);
+
+          // Skip failed transactions
+          if (/Tidak Berhasil|Gagal|Failed|Ditolak/i.test(subject)) {
+            continue;
+          }
+
+          const sourceBuffer = message.source;
+          if (!sourceBuffer) continue;
+          
+          const sourceStr = sourceBuffer.toString('utf-8');
+          const parsedMime = parseMimeEmail(sourceStr);
+          
+          const transaction = parseTransaction(parsedMime.body, parsedMime.subject);
+          if (transaction) {
+            results.push(transaction);
+          }
         }
+      } finally {
+        lock.release();
       }
     } finally {
-      lock.release();
+      await client.logout();
     }
 
-    await client.logout();
-    return Response.json({ success: true, data: results });
+    return NextResponse.json({ success: true, data: results });
   } catch (error: any) {
     console.error('IMAP API Error:', error);
-    return Response.json({ success: false, error: error.message || String(error) }, { status: 500 });
+    return NextResponse.json({ success: false, error: error.message || String(error) }, { status: 500 });
   }
 }
