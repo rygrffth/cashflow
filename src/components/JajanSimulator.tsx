@@ -8,13 +8,17 @@ interface SimulatorProps {
   outHariHarian: number;
   batasHr: number;
   sisaHari: number;
+  piutangCount?: number;
+  piutangSum?: number;
 }
 
 export default function JajanSimulator({
   saldoOp,
   outHariHarian,
   batasHr,
-  sisaHari
+  sisaHari,
+  piutangCount = 0,
+  piutangSum = 0
 }: SimulatorProps) {
   // Batasi max simulasi agar tidak negatif
   const maxSimulasi = Math.max(0, Math.round(saldoOp + outHariHarian));
@@ -186,6 +190,13 @@ export default function JajanSimulator({
           </div>
         )}
       </div>
+
+      {piutangSum > 0 && (
+        <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 font-semibold text-xs flex items-center gap-3">
+          <AlertCircle className="w-5 h-5 flex-shrink-0 animate-pulse text-amber-400" />
+          <span>💸 Ada <strong>{piutangCount} piutang aktif</strong> senilai <strong>Rp {piutangSum.toLocaleString('id-ID')}</strong> yang belum kembali.</span>
+        </div>
+      )}
     </div>
   );
 }

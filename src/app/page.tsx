@@ -23,6 +23,8 @@ export default function Dashboard() {
   const [batasHr, setBatasHr] = useState(0);
   const [sisaHari, setSisaHari] = useState(1);
   const [outHariHarian, setOutHariHarian] = useState(0);
+  const [piutangCount, setPiutangCount] = useState(0);
+  const [piutangSum, setPiutangSum] = useState(0);
 
   // Lists State
   const [todayTransactions, setTodayTransactions] = useState<any[]>([]);
@@ -92,6 +94,17 @@ export default function Dashboard() {
         .select('*');
 
       if (settingsError) throw settingsError;
+
+      // 4. Fetch Piutang (from table 'piutang')
+      const { data: piutangData, error: piutangError } = await supabase
+        .from('piutang')
+        .select('*');
+
+      if (piutangError) throw piutangError;
+
+      const activePiutang = (piutangData || []).filter(p => (p.status || p.Status) === 'Belum Lunas');
+      setPiutangCount(activePiutang.length);
+      setPiutangSum(activePiutang.reduce((s, i) => s + Number(i.nominal || i.Nominal || 0), 0));
 
       // --- CALCULATIONS (Mirroring pub.py Python logic exactly) ---
 
@@ -264,6 +277,8 @@ export default function Dashboard() {
             outHariHarian={outHariHarian}
             batasHr={batasHr}
             sisaHari={sisaHari}
+            piutangCount={piutangCount}
+            piutangSum={piutangSum}
           />
         </div>
 

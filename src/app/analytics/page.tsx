@@ -5,11 +5,12 @@ import { supabase } from '@/lib/supabase';
 import { 
   BarChart3, RefreshCw, Calendar, Filter, TrendingUp, 
   ArrowUpRight, ArrowDownLeft, Landmark, Wallet, HelpCircle, 
-  ChevronRight, CalendarDays
+  ChevronRight, CalendarDays, AlertTriangle, CheckCircle2, AlertCircle
 } from 'lucide-react';
 import {
   ResponsiveContainer, ComposedChart, BarChart, PieChart, Pie, Cell,
-  Line, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ReferenceLine
+  Line, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ReferenceLine,
+  AreaChart, Area
 } from 'recharts';
 
 export default function AnalyticsPage() {
@@ -273,6 +274,93 @@ export default function AnalyticsPage() {
       'Bulan Ini': mapThis[kat] || 0
     })).sort((a,b) => b['Bulan Ini'] - a['Bulan Ini']);
   }, [transactions, EXCLUDE_FROM_LIMIT]);
+
+  // 5. Chart: Daily Cumulative Balance Trend (Bank + Cash)
+  const dailyBalanceChartData = useMemo(() => {
+    const map: Record<string, number> = {};
+    
+    // Sort all transactions by date ascending
+    const sortedAllTxns = [...transactions]
+      .filter(t => t.status === 'Cleared') // only cleared transactions affect balance
+      .sort((a, b) => a.tanggal.localeCompare(b.tanggal));
+    
+    sortedAllTxns.forEach(t => {
+      const dStr = t.tanggal;
+      const amt = Number(t.nominal) - (Number(t.titipan) || 0);
+      const change = t.tipe === 'Pemasukan' ? amt : -amt;
+      map[dStr] = (map[dStr] || 0) + change;
+    });
+    
+    // Get all sorted dates
+    const sortedDates = Object.keys(map).sort();
+    
+    // Calculate cumulative sum
+    let cumulative = 0;
+    const cumulativeData = sortedDates.map(date => {
+      cumulative += map[date];
+      return { date, Saldo: cumulative };
+    });
+    
+    // Filter the cumulative data to match the selected range
+    const today = new Date();
+    today.setHours(0,0,0,0);
+    let startLimit = new Date(0);
+    let endLimit = new Date(8640000000000000);
+
+    if (graphRange === 'hari') {
+      startLimit = new Date(today);
+      endLimit = new Date(today);
+    } else if (graphRange === 'minggu') {
+      const day = today.getDay();
+      const diff = today.getDate() - day + (day === 0 ? -6 : 1);
+      startLimit = new Date(today.setDate(diff));
+      endLimit = new Date();
+    } else if (graphRange === 'bulan') {
+      startLimit = new Date(today.getFullYear(), today.getMonth(), 1);
+      endLimit = new Date();
+    } else if (graphRange === 'tahun') {
+      startLimit = new Date(today.getFullYear(), 0, 1);
+      endLimit = new Date();
+    } else if (graphRange === 'custom') {
+      startLimit = new Date(customStart);
+      endLimit = new Date(customEnd);
+    }
+    
+    startLimit.setHours(0,0,0,0);
+    endLimit.setHours(23,59,59,999);
+
+    return cumulativeData.filter(d => {
+      const dateObj = new Date(d.date);
+      return dateObj >= startLimit && dateObj <= endLimit;
+    });
+  }, [transactions, graphRange, customStart, customEnd]);
+
+  // 6. Proyeksi & Prediksi Saldo saat Gajian (Rata-rata 7 Hari)
+  const prediksiGajian = useMemo(() => {
+    const today = new Date();
+    today.setHours(0,0,0,0);
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(today.getDate() - 6);
+    sevenDaysAgo.setHours(0,0,0,0);
+
+    const sevenDaysTxns = transactions.filter(t => {
+      if (t.tipe !== 'Pengeluaran' || t.status !== 'Cleared') return false;
+      if (EXCLUDE_FROM_LIMIT.includes(t.kategori)) return false;
+      const d = new Date(t.tanggal);
+      return d >= sevenDaysAgo && d <= today;
+    });
+
+    const totalSpent7Days = sevenDaysTxns.reduce((sum, t) => {
+      const net = Number(t.nominal) - (Number(t.titipan) || 0);
+      return sum + net;
+    }, 0);
+
+    const avg7Days = totalSpent7Days / 7;
+    const proyeksiPengeluaran = avg7Days * stats.sisaHari;
+    const prediksiSaldo = stats.saldoOp - proyeksiPengeluaran;
+
+    return { avg7Days, proyeksiPengeluaran, prediksiSaldo };
+  }, [transactions, stats.saldoOp, stats.sisaHari, EXCLUDE_FROM_LIMIT]);
 
   // Multi-Period Report calculation
   const reportPeriodLimits = useMemo(() => {
@@ -611,6 +699,112 @@ export default function AnalyticsPage() {
               </div>
             </div>
 
+            {/* Chart 5: Operational Balance Gauge */}
+            <div className="glass-card p-5 border-slate-700/50 flex flex-col items-center justify-center space-y-4">
+              <div className="w-full text-left">
+                <h3 className="text-sm font-bold text-slate-200">📊 Status Dana Operasional (Gauge)</h3>
+                <p className="text-[10px] text-slate-400">Rasio saldo operasional (siap pakai) terhadap total aset riil</p>
+              </div>
+              
+              {(() => {
+                const totalReal = stats.totalReal;
+                const saldoOp = stats.saldoOp;
+                const gaugeMax = Math.max(totalReal, saldoOp) * 1.2 || 1000000;
+                const pct = Math.min(1, Math.max(0, saldoOp / gaugeMax));
+                const fillLength = 251.3 * pct;
+                const delta = totalReal - saldoOp;
+
+                return (
+                  <div className="relative w-full max-w-[280px] h-36 flex flex-col items-center justify-center">
+                    <svg width="240" height="130" viewBox="0 0 200 110" className="overflow-visible">
+                      <defs>
+                        <linearGradient id="gauge-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                          <stop offset="0%" stopColor="#EF4444" />
+                          <stop offset="30%" stopColor="#F59E0B" />
+                          <stop offset="70%" stopColor="#10B981" />
+                        </linearGradient>
+                      </defs>
+                      {/* Track */}
+                      <path 
+                        d="M 20 90 A 80 80 0 0 1 180 90" 
+                        fill="none" 
+                        stroke="#1E293B" 
+                        strokeWidth="12" 
+                        strokeLinecap="round" 
+                      />
+                      {/* Active fill */}
+                      <path 
+                        d="M 20 90 A 80 80 0 0 1 180 90" 
+                        fill="none" 
+                        stroke="url(#gauge-gradient)" 
+                        strokeWidth="12" 
+                        strokeDasharray={`${fillLength} 502.6`} 
+                        strokeLinecap="round" 
+                      />
+                      {/* Pointer */}
+                      <line 
+                        x1="100" 
+                        y1="90" 
+                        x2="40" 
+                        y2="90" 
+                        stroke="#F8FAFC" 
+                        strokeWidth="3.5" 
+                        strokeLinecap="round" 
+                        transform={`rotate(${pct * 180}, 100, 90)`}
+                        className="transition-transform duration-700 ease-out"
+                      />
+                      <circle cx="100" cy="90" r="6" fill="#F8FAFC" stroke="#0F172A" strokeWidth="2" />
+                      <text x="20" y="108" fill="#94A3B8" fontSize="8" textAnchor="middle">Rp 0</text>
+                      <text x="180" y="108" fill="#94A3B8" fontSize="8" textAnchor="middle">
+                        Rp {(gaugeMax / 1000).toFixed(0)}k
+                      </text>
+                    </svg>
+                    <div className="absolute bottom-1 text-center">
+                      <p className="text-xs font-black text-emerald-400">Rp {saldoOp.toLocaleString('id-ID')}</p>
+                      <p className="text-[9px] text-slate-500 font-medium">
+                        {delta >= 0 ? `Tabungan: Rp ${delta.toLocaleString('id-ID')}` : `Surplus: Rp ${Math.abs(delta).toLocaleString('id-ID')}`}
+                      </p>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+
+            {/* Chart 6: Daily Balance Area Chart */}
+            <div className="glass-card p-5 border-slate-700/50 space-y-3">
+              <h3 className="text-sm font-bold text-slate-200">📈 Tren Akumulasi Saldo (Bank + Cash)</h3>
+              <p className="text-[10px] text-slate-400">Pergerakan total saldo operasional riil dari waktu ke waktu</p>
+              
+              <div className="h-64 w-full pt-4">
+                {isMounted && dailyBalanceChartData.length > 0 ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={dailyBalanceChartData}>
+                      <defs>
+                        <linearGradient id="balance-glow" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#10B981" stopOpacity={0.25}/>
+                          <stop offset="95%" stopColor="#10B981" stopOpacity={0}/>
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#1E293B" />
+                      <XAxis dataKey="date" stroke="#94A3B8" fontSize={9} tickLine={false} />
+                      <YAxis stroke="#94A3B8" fontSize={9} tickLine={false} tickFormatter={(val) => `Rp ${val / 1000}k`} />
+                      <Tooltip 
+                        contentStyle={{ backgroundColor: '#0F172A', borderColor: '#334155', borderRadius: '12px' }} 
+                        labelStyle={{ color: '#E2E8F0', fontWeight: 'bold', fontSize: '11px' }}
+                        itemStyle={{ fontSize: '11px' }}
+                        formatter={(val: number) => [`Rp ${val.toLocaleString('id-ID')}`]}
+                      />
+                      <Area type="monotone" dataKey="Saldo" stroke="#10B981" strokeWidth={2} fillOpacity={1} fill="url(#balance-glow)" />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="h-full flex items-center justify-center text-slate-500 text-xs italic">
+                    Belum ada transaksi untuk menampilkan tren saldo.
+                  </div>
+                )}
+              </div>
+            </div>
+
           </div>
         </div>
       ) : (
@@ -746,6 +940,52 @@ export default function AnalyticsPage() {
               <p className="text-[10px] text-slate-500 mt-2">Dihitung selama {reportStats.diffDays} hari aktif</p>
             </div>
 
+          </div>
+
+          {/* Prediksi Saldo saat Gajian */}
+          <div className="glass-card p-6 border-slate-700/50 space-y-4">
+            <h3 className="font-bold text-slate-200 flex items-center gap-2">
+              <span>🔮</span> Prediksi Saldo saat Gajian
+            </h3>
+            
+            <p className="text-xs text-slate-400">
+              Kalkulasi didasarkan pada rata-rata pengeluaran 7 hari terakhir (<strong>Rp {Math.round(prediksiGajian.avg7Days).toLocaleString('id-ID')}/hari</strong>) dengan sisa <strong>{stats.sisaHari} hari</strong> menuju tanggal gajian berikutnya.
+            </p>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-2">
+              <div className="bg-slate-950/40 p-4 border border-slate-900 rounded-xl">
+                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-1">Rata-rata Pengeluaran (7 Hari)</p>
+                <p className="text-lg font-black text-slate-200">Rp {Math.round(prediksiGajian.avg7Days).toLocaleString('id-ID')}</p>
+              </div>
+
+              <div className="bg-slate-950/40 p-4 border border-slate-900 rounded-xl">
+                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-1">Proyeksi Pengeluaran s/d Gajian</p>
+                <p className="text-lg font-black text-amber-400">Rp {Math.round(prediksiGajian.proyeksiPengeluaran).toLocaleString('id-ID')}</p>
+              </div>
+
+              <div className="bg-slate-950/40 p-4 border border-slate-900 rounded-xl">
+                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-1">Prediksi Saldo saat Gajian</p>
+                <p className={`text-lg font-black ${prediksiGajian.prediksiSaldo >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                  Rp {Math.round(prediksiGajian.prediksiSaldo).toLocaleString('id-ID')}
+                </p>
+              </div>
+            </div>
+
+            {prediksiGajian.prediksiSaldo >= 0 ? (
+              <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-xs text-slate-300 flex items-center gap-3">
+                <CheckCircle2 className="w-5 h-5 text-emerald-400 flex-shrink-0 animate-pulse" />
+                <span>
+                  <strong>Luar biasa!</strong> Prediksi saldo Anda saat gajian diproyeksikan aman/surplus sebesar <strong>Rp {Math.round(prediksiGajian.prediksiSaldo).toLocaleString('id-ID')}</strong>. Pertahankan gaya hidup ini!
+                </span>
+              </div>
+            ) : (
+              <div className="p-4 rounded-xl bg-rose-500/10 border border-rose-500/20 text-xs text-slate-300 flex items-center gap-3">
+                <AlertTriangle className="w-5 h-5 text-rose-400 flex-shrink-0" />
+                <span>
+                  <strong>Perhatian!</strong> Saldo operasional Anda diproyeksikan <strong>defisit sebesar Rp {Math.abs(Math.round(prediksiGajian.prediksiSaldo)).toLocaleString('id-ID')}</strong> pada hari gajian. Disarankan untuk menekan pengeluaran harian hingga di bawah <strong>Rp {(stats.saldoOp / stats.sisaHari > 0 ? Math.floor(stats.saldoOp / stats.sisaHari) : 0).toLocaleString('id-ID')}/hari</strong>.
+                </span>
+              </div>
+            )}
           </div>
 
           {/* Insights / Tips */}
