@@ -82,7 +82,7 @@ export default function PiutangPage() {
         catatan: catatan,
         status: 'Belum Lunas',
         tenggat: tenggat,
-        tanggal_lunas: ''
+        tanggal_lunas: null
       };
 
       const { error: piutangErr } = await supabase

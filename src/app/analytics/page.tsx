@@ -50,7 +50,7 @@ export default function AnalyticsPage() {
     setIsMounted(true);
   }, []);
 
-  const EXCLUDE_FROM_LIMIT = useMemo(() => ["Transfer Aset", "Scheduled Settlement", "Penyesuaian", "Menabung"], []);
+  const EXCLUDE_FROM_LIMIT = useMemo(() => ["Transfer Aset", "Scheduled Settlement", "Penyesuaian", "Menabung", "Piutang", "Piutang Kembali"], []);
 
   const fetchData = useCallback(async (isSilent = false) => {
     if (!isSilent) setLoading(true);
