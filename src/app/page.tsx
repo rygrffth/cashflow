@@ -6,7 +6,7 @@ import PortfolioGrid from '@/components/PortfolioGrid';
 import DailyLimitCard from '@/components/DailyLimitCard';
 import JajanSimulator from '@/components/JajanSimulator';
 import TransactionForm from '@/components/TransactionForm';
-import { RefreshCw, Clock, Landmark, Wallet, ListTodo, Lock, Unlock } from 'lucide-react';
+import { RefreshCw, Clock, Landmark, Wallet, ListTodo, Lock, Unlock, Pencil, Trash2 } from 'lucide-react';
 
 export default function Dashboard() {
   // Loading & Data States
@@ -28,6 +28,7 @@ export default function Dashboard() {
 
   // Lists State
   const [todayTransactions, setTodayTransactions] = useState<any[]>([]);
+  const [editingTxn, setEditingTxn] = useState<any | null>(null);
 
   // Secret Mode State
   const [secretCode, setSecretCode] = useState('');
@@ -203,6 +204,45 @@ export default function Dashboard() {
     fetchData();
   }, [fetchData]);
 
+  const handleDeleteTxn = async (id: number) => {
+    if (!confirm('Hapus transaksi ini secara permanen?')) return;
+    try {
+      const { error } = await supabase.from('transaksi').delete().eq('id', id);
+      if (error) throw error;
+      fetchData(true);
+    } catch (e: any) {
+      console.error(e);
+      alert(`Gagal menghapus transaksi: ${e.message}`);
+    }
+  };
+
+  const handleUpdateTxn = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingTxn) return;
+    try {
+      const { error } = await supabase
+        .from('transaksi')
+        .update({
+          tanggal: editingTxn.tanggal,
+          tipe: editingTxn.tipe,
+          kategori: editingTxn.kategori,
+          nominal: Number(editingTxn.nominal),
+          catatan: editingTxn.catatan,
+          sumber: editingTxn.sumber,
+          status: editingTxn.status,
+          tenggat_waktu: editingTxn.tenggat_waktu || ''
+        })
+        .eq('id', editingTxn.id);
+
+      if (error) throw error;
+      setEditingTxn(null);
+      fetchData(true);
+    } catch (e: any) {
+      console.error(e);
+      alert(`Gagal memperbarui transaksi: ${e.message}`);
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center gap-4 bg-[#0B0F19]">
@@ -318,15 +358,33 @@ export default function Dashboard() {
                       </div>
                     </div>
 
-                    <div className="text-right">
-                      <p className={`font-black ${t.tipe === 'Pengeluaran' ? 'text-rose-400' : 'text-emerald-400'}`}>
-                        {t.tipe === 'Pengeluaran' ? '-' : '+'}Rp {t.nominal.toLocaleString('id-ID')}
-                      </p>
-                      {t.kategori === 'Scheduled Settlement' && (
-                        <span className={`text-[9px] px-1 rounded font-bold ${t.status === 'Pending' ? 'bg-amber-500/10 text-amber-400' : 'bg-emerald-500/10 text-emerald-400'}`}>
-                          {t.status}
-                        </span>
-                      )}
+                    <div className="flex items-center gap-3">
+                      <div className="text-right">
+                        <p className={`font-black ${t.tipe === 'Pengeluaran' ? 'text-rose-400' : 'text-emerald-400'}`}>
+                          {t.tipe === 'Pengeluaran' ? '-' : '+'}Rp {t.nominal.toLocaleString('id-ID')}
+                        </p>
+                        {t.kategori === 'Scheduled Settlement' && (
+                          <span className={`text-[9px] px-1 rounded font-bold ${t.status === 'Pending' ? 'bg-amber-500/10 text-amber-400' : 'bg-emerald-500/10 text-emerald-400'}`}>
+                            {t.status}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex gap-1">
+                        <button
+                          onClick={() => setEditingTxn(t)}
+                          className="p-1 hover:bg-slate-800 rounded text-slate-400 hover:text-emerald-400 transition cursor-pointer"
+                          title="Edit"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteTxn(t.id)}
+                          className="p-1 hover:bg-slate-800 rounded text-slate-400 hover:text-rose-400 transition cursor-pointer"
+                          title="Hapus"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -344,6 +402,113 @@ export default function Dashboard() {
       <footer className="text-center text-[10px] text-slate-500 border-t border-slate-900/80 pt-6 mt-12 tracking-wider">
         NEXT-GEN CASHFLOW DASHBOARD • DESIGNED WITH GLASSMORPHISM AND TAILWIND CSS
       </footer>
+
+      {/* Edit Transaction Modal */}
+      {editingTxn && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fadeIn">
+          <div className="glass-card max-w-md w-full p-6 border-slate-700/50 space-y-4">
+            <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+              <h3 className="font-bold text-white flex items-center gap-2">
+                <Pencil className="w-4 h-4 text-emerald-400" /> Edit Transaksi
+              </h3>
+              <button 
+                onClick={() => setEditingTxn(null)}
+                className="text-slate-400 hover:text-white text-sm"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdateTxn} className="space-y-4 text-sm">
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-semibold text-slate-400">Tanggal</label>
+                <input
+                  type="date"
+                  value={editingTxn.tanggal}
+                  onChange={e => setEditingTxn({...editingTxn, tanggal: e.target.value})}
+                  onClick={(e) => (e.target as any).showPicker()}
+                  className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none focus:border-emerald-500 text-xs"
+                  required
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-semibold text-slate-400">Tipe</label>
+                  <select
+                    value={editingTxn.tipe}
+                    onChange={e => setEditingTxn({...editingTxn, tipe: e.target.value})}
+                    className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none focus:border-emerald-500 text-xs"
+                  >
+                    <option value="Pengeluaran">Pengeluaran</option>
+                    <option value="Pemasukan">Pemasukan</option>
+                  </select>
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-semibold text-slate-400">Sumber</label>
+                  <select
+                    value={editingTxn.sumber}
+                    onChange={e => setEditingTxn({...editingTxn, sumber: e.target.value})}
+                    className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none focus:border-emerald-500 text-xs"
+                  >
+                    <option value="Bank">Bank</option>
+                    <option value="Cash">Cash</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-semibold text-slate-400">Kategori</label>
+                <input
+                  type="text"
+                  value={editingTxn.kategori}
+                  onChange={e => setEditingTxn({...editingTxn, kategori: e.target.value})}
+                  className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none focus:border-emerald-500 text-xs"
+                  required
+                />
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-semibold text-slate-400">Nominal (Rp)</label>
+                <input
+                  type="number"
+                  value={editingTxn.nominal}
+                  onChange={e => setEditingTxn({...editingTxn, nominal: e.target.value})}
+                  className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none focus:border-emerald-500 text-xs"
+                  required
+                />
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-semibold text-slate-400">Catatan</label>
+                <input
+                  type="text"
+                  value={editingTxn.catatan || ''}
+                  onChange={e => setEditingTxn({...editingTxn, catatan: e.target.value})}
+                  className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none focus:border-emerald-500 text-xs"
+                />
+              </div>
+
+              <div className="flex gap-2 pt-2 justify-end">
+                <button
+                  type="button"
+                  onClick={() => setEditingTxn(null)}
+                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-bold transition cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-slate-950 rounded-lg text-xs font-black transition cursor-pointer"
+                >
+                  Simpan Perubahan
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -2,12 +2,13 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Target, PlusCircle, TrendingUp, RefreshCw, Trash2, ArrowUpRight, ArrowDownLeft, ShieldAlert } from 'lucide-react';
+import { Target, PlusCircle, TrendingUp, RefreshCw, Trash2, ArrowUpRight, ArrowDownLeft, ShieldAlert, Pencil } from 'lucide-react';
 
 export default function BudgetPage() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [tabunganData, setTabunganData] = useState<any[]>([]);
+  const [editingTabungan, setEditingTabungan] = useState<any | null>(null);
 
   // Add Target Form States
   const [nama, setNama] = useState('');
@@ -184,6 +185,33 @@ export default function BudgetPage() {
     }
   };
 
+  const handleUpdateTabungan = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingTabungan) return;
+    try {
+      const { error } = await supabase
+        .from('tabungan')
+        .update({
+          nama: editingTabungan.nama,
+          target_nominal: Number(editingTabungan.target_nominal),
+          nominal_terkumpul: Number(editingTabungan.nominal_terkumpul),
+          tanggal_mulai: editingTabungan.tanggal_mulai,
+          tanggal_target: editingTabungan.tanggal_target,
+          kategori: editingTabungan.kategori,
+          catatan: editingTabungan.catatan,
+          status: editingTabungan.status
+        })
+        .eq('id', editingTabungan.id);
+
+      if (error) throw error;
+      setEditingTabungan(null);
+      fetchTabungan(true);
+    } catch (err: any) {
+      console.error(err);
+      alert(`Gagal memperbarui target tabungan: ${err.message}`);
+    }
+  };
+
   const handleDelete = async (id: number) => {
     if (!confirm('Hapus target tabungan ini?')) return;
     try {
@@ -243,9 +271,14 @@ export default function BudgetPage() {
                       </h3>
                       <p className="text-xs text-slate-400 mt-0.5">Kategori: <span className="text-slate-300 font-semibold">{item.kategori}</span> • Target: <span className="text-emerald-400 font-semibold">{item.tanggal_target || 'Tanpa Tenggat'}</span></p>
                     </div>
-                    <button onClick={() => handleDelete(item.id)} className="text-slate-500 hover:text-rose-400 opacity-0 group-hover:opacity-100 transition">
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    <div className="flex gap-2 items-center opacity-0 group-hover:opacity-100 transition">
+                      <button onClick={() => setEditingTabungan(item)} className="text-slate-500 hover:text-emerald-400 transition cursor-pointer">
+                        <Pencil className="w-4 h-4" />
+                      </button>
+                      <button onClick={() => handleDelete(item.id)} className="text-slate-500 hover:text-rose-400 transition cursor-pointer">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
 
                   {item.catatan && (
@@ -513,6 +546,136 @@ export default function BudgetPage() {
         </div>
 
       </div>
+
+      {/* Edit Tabungan Modal */}
+      {editingTabungan && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fadeIn text-sm">
+          <div className="glass-card max-w-md w-full p-6 border-slate-700/50 space-y-4">
+            <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+              <h3 className="font-bold text-white flex items-center gap-2">
+                <Pencil className="w-4 h-4 text-emerald-400" /> Edit Target Tabungan
+              </h3>
+              <button 
+                onClick={() => setEditingTabungan(null)}
+                className="text-slate-400 hover:text-white"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdateTabungan} className="space-y-4">
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-semibold text-slate-400">Nama Target</label>
+                <input
+                  type="text"
+                  value={editingTabungan.nama}
+                  onChange={e => setEditingTabungan({...editingTabungan, nama: e.target.value})}
+                  className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none focus:border-emerald-500 text-xs"
+                  required
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-semibold text-slate-400">Kategori</label>
+                  <input
+                    type="text"
+                    value={editingTabungan.kategori}
+                    onChange={e => setEditingTabungan({...editingTabungan, kategori: e.target.value})}
+                    className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none focus:border-emerald-500 text-xs"
+                    required
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-semibold text-slate-400">Status</label>
+                  <select
+                    value={editingTabungan.status}
+                    onChange={e => setEditingTabungan({...editingTabungan, status: e.target.value})}
+                    className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none focus:border-emerald-500 text-xs"
+                  >
+                    <option value="Aktif">Aktif</option>
+                    <option value="Selesai">Selesai</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-semibold text-slate-400">Target Nominal (Rp)</label>
+                  <input
+                    type="number"
+                    value={editingTabungan.target_nominal}
+                    onChange={e => setEditingTabungan({...editingTabungan, target_nominal: e.target.value})}
+                    className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none focus:border-emerald-500 text-xs"
+                    required
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-semibold text-slate-400">Terkumpul (Rp)</label>
+                  <input
+                    type="number"
+                    value={editingTabungan.nominal_terkumpul}
+                    onChange={e => setEditingTabungan({...editingTabungan, nominal_terkumpul: e.target.value})}
+                    className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none focus:border-emerald-500 text-xs"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-semibold text-slate-400">Tanggal Mulai</label>
+                  <input
+                    type="date"
+                    value={editingTabungan.tanggal_mulai || ''}
+                    onChange={e => setEditingTabungan({...editingTabungan, tanggal_mulai: e.target.value})}
+                    onClick={(e) => (e.target as any).showPicker()}
+                    className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none focus:border-emerald-500 text-xs cursor-pointer"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-semibold text-slate-400">Tanggal Target</label>
+                  <input
+                    type="date"
+                    value={editingTabungan.tanggal_target || ''}
+                    onChange={e => setEditingTabungan({...editingTabungan, tanggal_target: e.target.value})}
+                    onClick={(e) => (e.target as any).showPicker()}
+                    className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none focus:border-emerald-500 text-xs cursor-pointer"
+                  />
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-semibold text-slate-400">Catatan</label>
+                <textarea
+                  value={editingTabungan.catatan || ''}
+                  onChange={e => setEditingTabungan({...editingTabungan, catatan: e.target.value})}
+                  className="bg-slate-900 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-emerald-500 text-xs min-h-[50px] resize-none"
+                />
+              </div>
+
+              <div className="flex gap-2 pt-2 justify-end">
+                <button
+                  type="button"
+                  onClick={() => setEditingTabungan(null)}
+                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-bold transition cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-slate-950 rounded-lg text-xs font-black transition cursor-pointer"
+                >
+                  Simpan Perubahan
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

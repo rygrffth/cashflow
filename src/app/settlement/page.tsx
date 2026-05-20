@@ -2,12 +2,13 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
-import { CalendarRange, PlusCircle, RefreshCw, Trash2, CheckCircle, AlertCircle, Clock } from 'lucide-react';
+import { CalendarRange, PlusCircle, RefreshCw, Trash2, CheckCircle, AlertCircle, Clock, Pencil } from 'lucide-react';
 
 export default function SettlementPage() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [settlements, setSettlements] = useState<any[]>([]);
+  const [editingSettle, setEditingSettle] = useState<any | null>(null);
 
   // Add Settlement Form States
   const [catatan, setCatatan] = useState('');
@@ -130,6 +131,29 @@ export default function SettlementPage() {
     }
   };
 
+  const handleUpdateSettle = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingSettle) return;
+    try {
+      const { error } = await supabase
+        .from('transaksi')
+        .update({
+          nominal: Number(editingSettle.nominal),
+          catatan: editingSettle.catatan,
+          sumber: editingSettle.sumber,
+          tenggat_waktu: editingSettle.tenggat_waktu
+        })
+        .eq('id', editingSettle.id);
+
+      if (error) throw error;
+      setEditingSettle(null);
+      fetchSettlements(true);
+    } catch (err: any) {
+      console.error(err);
+      alert(`Gagal memperbarui tagihan: ${err.message}`);
+    }
+  };
+
   const totalPending = settlements.reduce((sum, item) => sum + Number(item.nominal), 0);
 
   // Check if deadline is overdue
@@ -209,6 +233,13 @@ export default function SettlementPage() {
                             className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-slate-950 text-xs font-extrabold rounded-lg transition"
                           >
                             Lunas
+                          </button>
+                          <button
+                            onClick={() => setEditingSettle(item)}
+                            title="Edit"
+                            className="p-1.5 text-slate-400 hover:text-emerald-400 hover:bg-emerald-500/10 rounded-lg transition cursor-pointer"
+                          >
+                            <Pencil className="w-4.5 h-4.5" />
                           </button>
                           <button
                             onClick={() => handleDelete(item.id)}
@@ -310,9 +341,92 @@ export default function SettlementPage() {
             </form>
           </div>
 
-        </div>
-
       </div>
+
+      {/* Edit Scheduled Settlement Modal */}
+      {editingSettle && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fadeIn text-sm">
+          <div className="glass-card max-w-md w-full p-6 border-slate-700/50 space-y-4">
+            <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+              <h3 className="font-bold text-white flex items-center gap-2">
+                <Pencil className="w-4.5 h-4.5 text-emerald-400" /> Edit Tagihan Terjadwal
+              </h3>
+              <button 
+                onClick={() => setEditingSettle(null)}
+                className="text-slate-400 hover:text-white"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdateSettle} className="space-y-4">
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-semibold text-slate-400">Catatan Tagihan</label>
+                <input
+                  type="text"
+                  value={editingSettle.catatan}
+                  onChange={e => setEditingSettle({...editingSettle, catatan: e.target.value})}
+                  className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none focus:border-emerald-500 text-xs"
+                  required
+                />
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-semibold text-slate-400">Nominal (Rp)</label>
+                <input
+                  type="number"
+                  value={editingSettle.nominal}
+                  onChange={e => setEditingSettle({...editingSettle, nominal: e.target.value})}
+                  className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none focus:border-emerald-500 text-xs"
+                  required
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-semibold text-slate-400">Sumber Dana</label>
+                  <select
+                    value={editingSettle.sumber}
+                    onChange={e => setEditingSettle({...editingSettle, sumber: e.target.value})}
+                    className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none focus:border-emerald-500 text-xs"
+                  >
+                    <option value="Bank">Bank / ATM</option>
+                    <option value="Cash">Uang Cash</option>
+                  </select>
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-semibold text-slate-400">Jatuh Tempo</label>
+                  <input
+                    type="date"
+                    value={editingSettle.tenggat_waktu || ''}
+                    onChange={e => setEditingSettle({...editingSettle, tenggat_waktu: e.target.value})}
+                    onClick={(e) => (e.target as any).showPicker()}
+                    className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none focus:border-emerald-500 text-xs cursor-pointer"
+                  />
+                </div>
+              </div>
+
+              <div className="flex gap-2 pt-2 justify-end">
+                <button
+                  type="button"
+                  onClick={() => setEditingSettle(null)}
+                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-bold transition cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-slate-950 rounded-lg text-xs font-black transition cursor-pointer"
+                >
+                  Simpan Perubahan
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
+  </div>
   );
 }

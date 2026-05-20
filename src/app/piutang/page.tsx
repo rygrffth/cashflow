@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
-import { HandCoins, RefreshCw, CheckCircle, Clock, PlusCircle, Calendar, AlertTriangle, ShieldAlert } from 'lucide-react';
+import { HandCoins, RefreshCw, CheckCircle, Clock, PlusCircle, Calendar, AlertTriangle, ShieldAlert, Pencil, Trash2 } from 'lucide-react';
 
 export default function PiutangPage() {
   const [loading, setLoading] = useState(true);
@@ -28,6 +28,7 @@ export default function PiutangPage() {
   // Pelunasan modal/inline state
   const [lunasTarget, setLunasTarget] = useState<any | null>(null);
   const [sumberKembali, setSumberKembali] = useState<'Bank' | 'Cash'>('Bank');
+  const [editingPiutang, setEditingPiutang] = useState<any | null>(null);
 
   const fetchPiutang = useCallback(async (isSilent = false) => {
     if (!isSilent) setLoading(true);
@@ -202,6 +203,31 @@ export default function PiutangPage() {
     }
   };
 
+  const handleUpdatePiutang = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingPiutang) return;
+    try {
+      const { error } = await supabase
+        .from('piutang')
+        .update({
+          nama: editingPiutang.nama,
+          nominal: Number(editingPiutang.nominal),
+          catatan: editingPiutang.catatan,
+          tenggat: editingPiutang.tenggat,
+          status: editingPiutang.status,
+          tanggal_lunas: editingPiutang.tanggal_lunas || null
+        })
+        .eq('id', editingPiutang.id);
+
+      if (error) throw error;
+      setEditingPiutang(null);
+      fetchPiutang(true);
+    } catch (err: any) {
+      console.error(err);
+      alert(`Gagal memperbarui data piutang: ${err.message}`);
+    }
+  };
+
   // Safe checks for lowercase/uppercase key fallbacks
   const activePiutang = piutangData.filter(p => (p.status || p.Status) === 'Belum Lunas');
   const historyPiutang = piutangData.filter(p => (p.status || p.Status) === 'Lunas');
@@ -289,20 +315,27 @@ export default function PiutangPage() {
                           <div className="flex gap-1.5">
                             <button 
                               onClick={() => setLunasTarget(p)}
-                              className="px-2 py-1 bg-emerald-500 hover:bg-emerald-600 text-slate-950 text-[10px] font-extrabold rounded transition"
+                              className="px-2 py-1 bg-emerald-500 hover:bg-emerald-600 text-slate-950 text-[10px] font-extrabold rounded transition cursor-pointer"
                             >
                               Lunas
                             </button>
                             <button 
+                              onClick={() => setEditingPiutang(p)}
+                              title="Edit"
+                              className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px] font-bold rounded transition cursor-pointer"
+                            >
+                              ✏️
+                            </button>
+                            <button 
                               onClick={() => handleExtend(p.id, pTenggat)}
                               title="Perpanjang 7 hari"
-                              className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px] font-bold rounded transition"
+                              className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px] font-bold rounded transition cursor-pointer"
                             >
                               ⏳+
                             </button>
                             <button 
                               onClick={() => handleDelete(p.id)}
-                              className="px-2 py-1 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 text-[10px] font-bold rounded transition"
+                              className="px-2 py-1 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 text-[10px] font-bold rounded transition cursor-pointer"
                             >
                               🗑️
                             </button>
@@ -331,12 +364,30 @@ export default function PiutangPage() {
                     const pSumber = p.sumber || p.Sumber || 'Bank/Cash';
                     const pNominal = p.nominal || p.Nominal || 0;
                     return (
-                      <div key={p.id} className="p-3 bg-slate-900/30 rounded-xl border border-slate-800 flex justify-between items-center opacity-70">
+                      <div key={p.id} className="p-3 bg-slate-900/30 rounded-xl border border-slate-800 flex justify-between items-center opacity-70 group hover:opacity-100 transition">
                         <div>
                           <p className="font-bold text-slate-300 line-through">{pNama}</p>
-                          <p className="text-[10px] text-slate-500">Lunas pada: {pTanggalLunas} (Masuk ke {pSumber})</p>
+                          <p className="text-[10px] text-slate-500">Lunas pada: {pTanggalLunas} {pSumber ? `(Masuk ke ${pSumber})` : ''}</p>
                         </div>
-                        <p className="font-bold text-emerald-400/70">Rp {Number(pNominal).toLocaleString('id-ID')}</p>
+                        <div className="flex items-center gap-3">
+                          <p className="font-bold text-emerald-400/70">Rp {Number(pNominal).toLocaleString('id-ID')}</p>
+                          <div className="flex gap-1">
+                            <button 
+                              onClick={() => setEditingPiutang(p)}
+                              title="Edit"
+                              className="p-1 hover:bg-slate-800 rounded text-slate-400 hover:text-emerald-400 transition cursor-pointer text-xs"
+                            >
+                              ✏️
+                            </button>
+                            <button 
+                              onClick={() => handleDelete(p.id)}
+                              title="Hapus"
+                              className="p-1 hover:bg-slate-800 rounded text-slate-400 hover:text-rose-400 transition cursor-pointer text-xs"
+                            >
+                              🗑️
+                            </button>
+                          </div>
+                        </div>
                       </div>
                     );
                   })
@@ -482,6 +533,112 @@ export default function PiutangPage() {
         </div>
       )}
 
+      {/* Edit Piutang Modal */}
+      {editingPiutang && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fadeIn text-sm">
+          <div className="glass-card max-w-md w-full p-6 border-slate-700/50 space-y-4">
+            <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+              <h3 className="font-bold text-white flex items-center gap-2">
+                <Pencil className="w-4 h-4 text-emerald-400" /> Edit Data Piutang
+              </h3>
+              <button 
+                onClick={() => setEditingPiutang(null)}
+                className="text-slate-400 hover:text-white"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdatePiutang} className="space-y-4">
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-semibold text-slate-400">Nama Peminjam</label>
+                <input
+                  type="text"
+                  value={editingPiutang.nama}
+                  onChange={e => setEditingPiutang({...editingPiutang, nama: e.target.value})}
+                  className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none focus:border-emerald-500 text-xs"
+                  required
+                />
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-semibold text-slate-400">Nominal (Rp)</label>
+                <input
+                  type="number"
+                  value={editingPiutang.nominal}
+                  onChange={e => setEditingPiutang({...editingPiutang, nominal: e.target.value})}
+                  className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none focus:border-emerald-500 text-xs"
+                  required
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-semibold text-slate-400">Status</label>
+                  <select
+                    value={editingPiutang.status}
+                    onChange={e => setEditingPiutang({...editingPiutang, status: e.target.value, tanggal_lunas: e.target.value === 'Lunas' ? new Date().toISOString().split('T')[0] : null})}
+                    className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none focus:border-emerald-500 text-xs"
+                  >
+                    <option value="Belum Lunas">Belum Lunas</option>
+                    <option value="Lunas">Lunas</option>
+                  </select>
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-semibold text-slate-400">Deadline</label>
+                  <input
+                    type="date"
+                    value={editingPiutang.tenggat || ''}
+                    onChange={e => setEditingPiutang({...editingPiutang, tenggat: e.target.value})}
+                    onClick={(e) => (e.target as any).showPicker()}
+                    className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none focus:border-emerald-500 text-xs cursor-pointer"
+                  />
+                </div>
+              </div>
+
+              {editingPiutang.status === 'Lunas' && (
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-semibold text-slate-400">Tanggal Lunas</label>
+                  <input
+                    type="date"
+                    value={editingPiutang.tanggal_lunas || ''}
+                    onChange={e => setEditingPiutang({...editingPiutang, tanggal_lunas: e.target.value})}
+                    onClick={(e) => (e.target as any).showPicker()}
+                    className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none focus:border-emerald-500 text-xs cursor-pointer"
+                  />
+                </div>
+              )}
+
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-semibold text-slate-400">Catatan / Jaminan</label>
+                <input
+                  type="text"
+                  value={editingPiutang.catatan || ''}
+                  onChange={e => setEditingPiutang({...editingPiutang, catatan: e.target.value})}
+                  className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none focus:border-emerald-500 text-xs"
+                />
+              </div>
+
+              <div className="flex gap-2 pt-2 justify-end">
+                <button
+                  type="button"
+                  onClick={() => setEditingPiutang(null)}
+                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-bold transition cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-slate-950 rounded-lg text-xs font-black transition cursor-pointer"
+                >
+                  Simpan Perubahan
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
