@@ -61,9 +61,8 @@ export default function Dashboard() {
   // WIB timezone calculation helper
   const getWIBDateString = () => {
     const d = new Date();
-    // Convert to UTC+7 (WIB)
-    const utc = d.getTime() + (d.getTimezoneOffset() * 60000);
-    const wib = new Date(utc + (3600000 * 7));
+    // Convert to UTC+7 (WIB) by adding 7 hours to the UTC timestamp
+    const wib = new Date(d.getTime() + (3600000 * 7));
     return wib.toISOString().split('T')[0];
   };
 
