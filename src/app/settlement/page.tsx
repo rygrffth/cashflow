@@ -12,7 +12,7 @@ export default function SettlementPage() {
 
   // Add Settlement Form States
   const [catatan, setCatatan] = useState('');
-  const [nominal, setNominal] = useState<number | ''>('');
+  const [nominal, setNominal] = useState<string>('');
   const [tenggat, setTenggat] = useState(() => {
     const today = new Date();
     const offset = today.getTimezoneOffset() * 60000;
@@ -300,7 +300,7 @@ export default function SettlementPage() {
                   type="number"
                   placeholder="Nominal..."
                   value={nominal}
-                  onChange={e => setNominal(e.target.value === '' ? '' : Number(e.target.value))}
+                  onChange={e => setNominal(e.target.value)}
                   className="bg-slate-900 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-emerald-500 text-xs font-bold"
                   required
                 />

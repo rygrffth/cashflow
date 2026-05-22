@@ -118,26 +118,20 @@ export default function JajanSimulator({
         {/* Metric 3: Limit Besok */}
         <div className="bg-slate-900/40 p-4 rounded-xl border border-slate-800/60 flex flex-col justify-center">
           <p className="text-xs font-semibold text-slate-400 tracking-wider mb-1">📅 Limit Esok Hari</p>
-          {persentaseSetelah <= 100 ? (
-            <div className="space-y-0.5">
-              <p className="text-base font-bold text-sky-400">
-                Rp {limitBesok.toLocaleString('id-ID')}
-              </p>
-              <p className={`text-[10px] flex items-center gap-1 ${selisihLimit > 0 ? 'text-emerald-400' : selisihLimit < 0 ? 'text-amber-400' : 'text-slate-400'}`}>
-                {selisihLimit > 0 ? (
-                  <>📈 Naik +Rp {selisihLimit.toLocaleString('id-ID')}</>
-                ) : selisihLimit < 0 ? (
-                  <>📉 Turun -Rp {Math.abs(selisihLimit).toLocaleString('id-ID')}</>
-                ) : (
-                  <>⚖️ Tetap Rp 0</>
-                )}
-              </p>
-            </div>
-          ) : (
-            <p className="text-sm font-bold text-rose-400 flex items-center gap-1">
-              <AlertCircle className="w-4 h-4" /> Melebihi Budget!
+          <div className="space-y-0.5">
+            <p className={`text-base font-bold ${persentaseSetelah <= 100 ? 'text-sky-400' : 'text-rose-400'}`}>
+              Rp {limitBesok.toLocaleString('id-ID')}
             </p>
-          )}
+            <p className={`text-[10px] flex items-center gap-1 ${selisihLimit > 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+              {selisihLimit > 0 ? (
+                <>📈 Naik +Rp {selisihLimit.toLocaleString('id-ID')}</>
+              ) : selisihLimit < 0 ? (
+                <>📉 Turun -Rp {Math.abs(selisihLimit).toLocaleString('id-ID')}</>
+              ) : (
+                <>⚖️ Tetap Rp 0</>
+              )}
+            </p>
+          </div>
         </div>
       </div>
 
@@ -163,9 +157,15 @@ export default function JajanSimulator({
                 )}
               </ul>
             ) : (
-              <p className="text-rose-400 font-semibold text-xs bg-rose-500/5 p-2 rounded border border-rose-500/10 mt-1">
-                🚨 DEFISIT Rp {Math.abs(sisaJatahSetelahSimulasi).toLocaleString('id-ID')}! Anda harus berhemat besok atau mengambil dari tabungan/dana darurat.
-              </p>
+              <div className="space-y-2">
+                <p className="text-rose-400 font-semibold text-xs bg-rose-500/5 p-2 rounded border border-rose-500/10 mt-1">
+                  🚨 DEFISIT Rp {Math.abs(sisaJatahSetelahSimulasi).toLocaleString('id-ID')}! Pengeluaran Anda hari ini melebihi jatah harian.
+                </p>
+                <ul className="list-disc list-inside space-y-1 text-slate-400 pl-1 text-xs">
+                  <li>Dampak esok hari: Jatah limit harian Anda besok akan <strong className="text-rose-400">turun drastis sebesar -Rp {Math.abs(selisihLimit).toLocaleString('id-ID')}</strong> menjadi <strong className="text-slate-300">Rp {limitBesok.toLocaleString('id-ID')}</strong>.</li>
+                  <li>Anda harus berhemat di hari-hari berikutnya atau mengambil dana dari tabungan/aset darurat.</li>
+                </ul>
+              </div>
             )}
           </div>
         ) : simulasiJajan < outHariHarian ? (

@@ -167,7 +167,7 @@ export default function Dashboard() {
       setBatasHr(computedBatasHr);
 
       // Out Hari Harian (Makan & Bensin spent today, active)
-      const jajanCategories = ["Makan", "Bensin / Mobilitas", "Makan (Sahur/Buka)"];
+      const jajanCategories = ["Makan", "Bensin / Mobilitas", "Ninis"];
       
       const todayJajanSum = allTxns
         .filter(t => 
@@ -304,11 +304,15 @@ export default function Dashboard() {
             isRealMode={isRealMode}
             secretCode={secretCode}
             setSecretCode={setSecretCode}
+            piutangSum={piutangSum}
+            piutangCount={piutangCount}
           />
 
           <DailyLimitCard
             batasHr={batasHr}
             outHariHarian={outHariHarian}
+            saldoOp={saldoOp}
+            sisaHari={sisaHari}
           />
 
           <JajanSimulator

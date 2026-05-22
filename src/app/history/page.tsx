@@ -7,7 +7,7 @@ import { RefreshCw, Trash2, Calendar, Filter, Download, History } from 'lucide-r
 const KATEGORI_OPTIONS = [
   "Makan",
   "Bensin / Mobilitas",
-  "Makan (Sahur/Buka)",
+  "Ninis",
   "Kos",
   "Hiburan",
   "Kebutuhan Lab / Magang",
@@ -470,7 +470,7 @@ export default function HistoryPage() {
                             <input
                               type="number"
                               value={rowData.nominal}
-                              onChange={(e) => handleCellChange(t.id, 'nominal', Number(e.target.value))}
+                              onChange={(e) => handleCellChange(t.id, 'nominal', e.target.value)}
                               className="bg-slate-900 border border-slate-700 rounded px-2.5 py-1 text-xs text-white text-right focus:border-emerald-500 outline-none w-28"
                             />
                           </div>

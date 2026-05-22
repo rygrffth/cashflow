@@ -14,6 +14,8 @@ interface PortfolioProps {
   isRealMode: boolean;
   secretCode: string;
   setSecretCode: (val: string) => void;
+  piutangSum: number;
+  piutangCount: number;
 }
 
 export default function PortfolioGrid({
@@ -26,7 +28,9 @@ export default function PortfolioGrid({
   sisaHari,
   isRealMode,
   secretCode,
-  setSecretCode
+  setSecretCode,
+  piutangSum,
+  piutangCount
 }: PortfolioProps) {
   // Hydration safety flag
   const [isMounted, setIsMounted] = useState(false);
@@ -191,18 +195,18 @@ export default function PortfolioGrid({
           </button>
         </div>
 
-        {/* Limit Harian */}
-        <div className="glass-card p-5 relative overflow-hidden flex flex-col justify-between min-h-[130px] border-l-4 border-l-emerald-500 bg-gradient-to-r from-emerald-950/5 to-transparent">
+        {/* Piutang Aktif */}
+        <div className="glass-card p-5 relative overflow-hidden flex flex-col justify-between min-h-[130px] border-l-4 border-l-amber-500 bg-gradient-to-r from-amber-955/5 to-transparent">
           <div className="flex justify-between items-start">
             <div>
-              <p className="text-xs font-semibold text-slate-400 tracking-wider uppercase mb-1">⏳ Limit Jajan Harian</p>
-              <h3 className="text-lg font-bold text-emerald-400">
-                Rp {batasHr.toLocaleString('id-ID')}
+              <p className="text-xs font-semibold text-slate-400 tracking-wider uppercase mb-1">💸 Piutang Aktif</p>
+              <h3 className="text-lg font-bold text-amber-400">
+                Rp {piutangSum.toLocaleString('id-ID')}
               </h3>
-              <p className="text-[10px] text-slate-400 mt-1">Sisa Jatah Harian Halaman Utama</p>
+              <p className="text-[10px] text-slate-400 mt-1">{piutangCount} piutang belum lunas</p>
             </div>
-            <span className="p-2 bg-emerald-500/10 rounded-lg text-emerald-400 border border-emerald-500/20">
-              <span>⏳</span>
+            <span className="p-2 bg-amber-500/10 rounded-lg text-amber-400 border border-amber-500/20">
+              <span>💸</span>
             </span>
           </div>
           <div className="h-4"></div> {/* Spacing alignment */}

@@ -194,7 +194,7 @@ export default function AnalyticsPage() {
     const map: Record<string, number> = {};
     chartFilteredData.forEach(t => {
       if (t.tipe === 'Pengeluaran' && !EXCLUDE_FROM_LIMIT.includes(t.kategori)) {
-        const kat = t.kategori + (t.sumber === 'Cash' ? ' (Cash)' : '');
+        const kat = t.kategori;
         const amt = Number(t.nominal) - (Number(t.titipan) || 0);
         map[kat] = (map[kat] || 0) + (amt || 0);
       }

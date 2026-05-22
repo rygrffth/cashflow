@@ -5,12 +5,18 @@ import React from 'react';
 interface DailyLimitProps {
   batasHr: number;
   outHariHarian: number;
+  saldoOp: number;
+  sisaHari: number;
 }
 
-export default function DailyLimitCard({ batasHr, outHariHarian }: DailyLimitProps) {
+export default function DailyLimitCard({ batasHr, outHariHarian, saldoOp, sisaHari }: DailyLimitProps) {
   const sisaJatahHariIni = batasHr - outHariHarian;
   const warnaSisa = sisaJatahHariIni >= 0 ? 'text-emerald-400' : 'text-rose-500';
   const persentase = batasHr > 0 ? (outHariHarian / batasHr) * 100 : 0;
+
+  const sisaHariBesok = Math.max(sisaHari - 1, 1);
+  const realLimitBesok = sisaHari > 1 ? saldoOp / sisaHariBesok : saldoOp;
+  const selisihLimit = realLimitBesok - batasHr;
   
   // Clamped percentage for progress bar width
   const clampedPercent = Math.max(0, Math.min(persentase, 100));
@@ -53,16 +59,16 @@ export default function DailyLimitCard({ batasHr, outHariHarian }: DailyLimitPro
         <span>💰</span> Limit Harian
       </h2>
 
-      {/* Grid: 3 Metric Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      {/* Grid: 4 Metric Cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Budget Hari Ini */}
         <div className="glass-card p-5 relative overflow-hidden flex flex-col justify-between border-t-4 border-t-emerald-500">
           <div>
             <p className="text-xs font-semibold text-emerald-400 tracking-wider uppercase mb-1">📊 BUDGET HARI INI</p>
-            <h3 className="text-2xl font-black text-white mt-1">
+            <h3 className="text-xl sm:text-2xl font-black text-white mt-1">
               Rp {batasHr.toLocaleString('id-ID')}
             </h3>
-            <p className="text-[10px] text-slate-400 mt-2">Maksimal belanja jajan hari ini</p>
+            <p className="text-[10px] text-slate-400 mt-2">Jatah jajan hari ini</p>
           </div>
         </div>
 
@@ -70,11 +76,11 @@ export default function DailyLimitCard({ batasHr, outHariHarian }: DailyLimitPro
         <div className="glass-card p-5 relative overflow-hidden flex flex-col justify-between border-t-4 border-t-amber-500">
           <div>
             <p className="text-xs font-semibold text-amber-400 tracking-wider uppercase mb-1">💰 TERPAKAI</p>
-            <h3 className="text-2xl font-black text-white mt-1">
+            <h3 className="text-xl sm:text-2xl font-black text-white mt-1">
               Rp {outHariHarian.toLocaleString('id-ID')}
             </h3>
             <p className="text-[10px] text-slate-400 mt-2">
-              {persentase.toFixed(1)}% dari budget harian
+              {persentase.toFixed(1)}% dari jatah
             </p>
           </div>
         </div>
@@ -83,10 +89,29 @@ export default function DailyLimitCard({ batasHr, outHariHarian }: DailyLimitPro
         <div className="glass-card p-5 relative overflow-hidden flex flex-col justify-between border-t-4 border-t-indigo-500">
           <div>
             <p className="text-xs font-semibold text-indigo-400 tracking-wider uppercase mb-1">⏳ SISA</p>
-            <h3 className={`text-2xl font-black ${warnaSisa} mt-1`}>
+            <h3 className={`text-xl sm:text-2xl font-black ${warnaSisa} mt-1`}>
               Rp {sisaJatahHariIni.toLocaleString('id-ID')}
             </h3>
-            <p className="text-[10px] text-slate-400 mt-2">Sisa dana jajan yang aman dipakai</p>
+            <p className="text-[10px] text-slate-400 mt-2">Sisa jatah jajan hari ini</p>
+          </div>
+        </div>
+
+        {/* Limit Esok Hari (Real) */}
+        <div className="glass-card p-5 relative overflow-hidden flex flex-col justify-between border-t-4 border-t-sky-500">
+          <div>
+            <p className="text-xs font-semibold text-sky-400 tracking-wider uppercase mb-1">📅 LIMIT ESOK HARI</p>
+            <h3 className="text-xl sm:text-2xl font-black text-white mt-1">
+              Rp {realLimitBesok.toLocaleString('id-ID')}
+            </h3>
+            <p className={`text-[10px] mt-2 font-semibold flex items-center gap-1 ${selisihLimit > 0 ? 'text-emerald-400' : selisihLimit < 0 ? 'text-rose-500' : 'text-slate-400'}`}>
+              {selisihLimit > 0 ? (
+                <>📈 Naik +Rp {selisihLimit.toLocaleString('id-ID')}</>
+              ) : selisihLimit < 0 ? (
+                <>📉 Turun -Rp {Math.abs(selisihLimit).toLocaleString('id-ID')}</>
+              ) : (
+                <>⚖️ Tetap Rp 0</>
+              )}
+            </p>
           </div>
         </div>
       </div>

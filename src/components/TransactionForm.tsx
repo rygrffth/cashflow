@@ -13,7 +13,7 @@ interface FormProps {
 const KATEGORI_OPTIONS = [
   "Makan",
   "Bensin / Mobilitas",
-  "Makan (Sahur/Buka)",
+  "Ninis",
   "Kos",
   "Hiburan",
   "Kebutuhan Lab / Magang",
@@ -43,7 +43,7 @@ export default function TransactionForm({ saldoBank, uangCash, onSuccess }: Form
   const [sumber, setSumber] = useState<'Bank' | 'Cash'>('Bank');
   const [kategori, setKategori] = useState(KATEGORI_OPTIONS[0]);
   const [customKategori, setCustomKategori] = useState('');
-  const [nominal, setNominal] = useState<number | ''>('');
+  const [nominal, setNominal] = useState<string>('');
   const [catatan, setCatatan] = useState('');
 
   // Scheduled Settlement States
@@ -52,8 +52,8 @@ export default function TransactionForm({ saldoBank, uangCash, onSuccess }: Form
 
   // Jastip / Titipan States
   const [showJastip, setShowJastip] = useState(false);
-  const [titBank, setTitBank] = useState<number | ''>('');
-  const [titCash, setTitCash] = useState<number | ''>('');
+  const [titBank, setTitBank] = useState<string>('');
+  const [titCash, setTitCash] = useState<string>('');
   const [titLunas, setTitLunas] = useState(true);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -335,10 +335,7 @@ export default function TransactionForm({ saldoBank, uangCash, onSuccess }: Form
             type="number"
             placeholder="Nominal transaksi..."
             value={nominal}
-            onChange={(e) => {
-              const val = e.target.value === '' ? '' : Number(e.target.value);
-              setNominal(val);
-            }}
+            onChange={(e) => setNominal(e.target.value)}
             className="bg-slate-900/60 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-emerald-500 text-sm font-bold"
             required
           />
@@ -375,7 +372,7 @@ export default function TransactionForm({ saldoBank, uangCash, onSuccess }: Form
                     type="number"
                     placeholder="0"
                     value={titBank}
-                    onChange={(e) => setTitBank(e.target.value === '' ? '' : Number(e.target.value))}
+                    onChange={(e) => setTitBank(e.target.value)}
                     className="bg-slate-900 border border-slate-700 rounded px-2 py-1.5 text-white focus:outline-none focus:border-emerald-500"
                   />
                 </div>
@@ -385,7 +382,7 @@ export default function TransactionForm({ saldoBank, uangCash, onSuccess }: Form
                     type="number"
                     placeholder="0"
                     value={titCash}
-                    onChange={(e) => setTitCash(e.target.value === '' ? '' : Number(e.target.value))}
+                    onChange={(e) => setTitCash(e.target.value)}
                     className="bg-slate-900 border border-slate-700 rounded px-2 py-1.5 text-white focus:outline-none focus:border-emerald-500"
                   />
                 </div>

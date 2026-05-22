@@ -7,7 +7,7 @@ import { RefreshCw, CheckCircle, Loader2 } from 'lucide-react';
 const CATEGORIES = [
   "Makan",
   "Bensin / Mobilitas",
-  "Makan (Sahur/Buka)",
+  "Ninis",
   "Kos",
   "Hiburan",
   "Kebutuhan Lab / Magang",
@@ -110,7 +110,7 @@ export default function SyncPage() {
       
       for (const row of rowsToImport) {
         const isDup = existingTx.some(tx => 
-          tx.nominal === row.nominal && 
+          Number(tx.nominal) === Number(row.nominal) && 
           tx.tanggal === row.tanggal && 
           (tx.catatan || '').toLowerCase().includes((row.catatan || '').toLowerCase().slice(0, 15))
         );
@@ -120,7 +120,7 @@ export default function SyncPage() {
             tanggal: row.tanggal,
             tipe: row.tipe,
             kategori: row.kategori,
-            nominal: row.nominal,
+            nominal: Number(row.nominal),
             catatan: row.catatan,
             status: row.status,
             tenggat_waktu: '',
@@ -324,7 +324,7 @@ export default function SyncPage() {
                           <input
                             type="number"
                             value={row.nominal}
-                            onChange={e => handleUpdateRow(idx, 'nominal', Number(e.target.value))}
+                            onChange={e => handleUpdateRow(idx, 'nominal', e.target.value)}
                             className="bg-slate-900 border border-slate-800 rounded px-2 py-1 text-white text-xs w-[100px] font-semibold focus:outline-none focus:border-emerald-500"
                           />
                         </td>

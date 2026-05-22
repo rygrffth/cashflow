@@ -12,7 +12,7 @@ export default function BudgetPage() {
 
   // Add Target Form States
   const [nama, setNama] = useState('');
-  const [targetNominal, setTargetNominal] = useState<number | ''>('');
+  const [targetNominal, setTargetNominal] = useState<string>('');
   const [tanggalMulai, setTanggalMulai] = useState(() => {
     const today = new Date();
     const offset = today.getTimezoneOffset() * 60000;
@@ -33,7 +33,7 @@ export default function BudgetPage() {
 
   // Inline Setor/Tarik States
   const [activeForm, setActiveForm] = useState<{ id: number; type: 'setor' | 'tarik' } | null>(null);
-  const [txnNominal, setTxnNominal] = useState<number | ''>('');
+  const [txnNominal, setTxnNominal] = useState<string>('');
   const [txnSumber, setTxnSumber] = useState<'Bank' | 'Cash'>('Bank');
   const [txnCatatan, setTxnCatatan] = useState('');
   const [txnLoading, setTxnLoading] = useState(false);
@@ -355,7 +355,7 @@ export default function BudgetPage() {
                             type="number"
                             placeholder="Nominal..."
                             value={txnNominal}
-                            onChange={(e) => setTxnNominal(e.target.value === '' ? '' : Number(e.target.value))}
+                            onChange={(e) => setTxnNominal(e.target.value)}
                             className="bg-slate-900 border border-slate-700 rounded px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-emerald-500 font-bold"
                           />
                         </div>
@@ -464,7 +464,7 @@ export default function BudgetPage() {
                   type="number"
                   placeholder="Nominal target..."
                   value={targetNominal}
-                  onChange={e => setTargetNominal(e.target.value === '' ? '' : Number(e.target.value))}
+                  onChange={e => setTargetNominal(e.target.value)}
                   className="bg-slate-900 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-emerald-500 text-xs font-bold"
                   required
                 />
