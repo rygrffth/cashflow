@@ -2,7 +2,8 @@
 
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Settings, Save, Loader2, CalendarClock, Lock, Unlock } from 'lucide-react';
+import { Settings, Save, Loader2, CalendarClock, Lock, Unlock, Database, Shuffle } from 'lucide-react';
+import { BASE_CATEGORIES } from '@/config/categories';
 
 export default function SettingsPage() {
   const [loading, setLoading] = useState(true);
@@ -11,6 +12,72 @@ export default function SettingsPage() {
   const [successMsg, setSuccessMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
   const [localCode, setLocalCode] = useState('');
+
+  // Category Migration States
+  const [existingCategories, setExistingCategories] = useState<string[]>([]);
+  const [sourceCategory, setSourceCategory] = useState('');
+  const [targetCategory, setTargetCategory] = useState('');
+  const [migrating, setMigrating] = useState(false);
+  const [migrateSuccess, setMigrateSuccess] = useState('');
+  const [migrateError, setMigrateError] = useState('');
+
+  const handleMigrate = async () => {
+    if (!sourceCategory || !targetCategory) {
+      alert('Pilih kategori asal dan kategori tujuan!');
+      return;
+    }
+    if (sourceCategory === targetCategory) {
+      alert('Kategori asal dan kategori tujuan tidak boleh sama!');
+      return;
+    }
+    
+    // Fetch count of affected transactions
+    const { count: txCount, error: countErr } = await supabase
+      .from('transaksi')
+      .select('*', { count: 'exact', head: true })
+      .eq('kategori', sourceCategory);
+      
+    if (countErr) {
+      alert('Gagal menghitung transaksi: ' + countErr.message);
+      return;
+    }
+    
+    if (!txCount || txCount === 0) {
+      alert(`Tidak ada transaksi dengan kategori "${sourceCategory}"`);
+      return;
+    }
+    
+    const confirmOk = confirm(`Apakah Anda yakin ingin memindahkan ${txCount} transaksi dari "${sourceCategory}" ke "${targetCategory}"? Tindakan ini tidak dapat dibatalkan.`);
+    if (!confirmOk) return;
+    
+    setMigrating(true);
+    setMigrateSuccess('');
+    setMigrateError('');
+    
+    try {
+      const { error: updateErr } = await supabase
+        .from('transaksi')
+        .update({ kategori: targetCategory })
+        .eq('kategori', sourceCategory);
+        
+      if (updateErr) throw updateErr;
+      
+      setMigrateSuccess(`✅ Berhasil memindahkan ${txCount} transaksi dari "${sourceCategory}" ke "${targetCategory}"!`);
+      
+      // Refresh list
+      const updatedCats = existingCategories.filter(c => c !== sourceCategory);
+      if (!updatedCats.includes(targetCategory)) {
+        updatedCats.push(targetCategory);
+      }
+      setExistingCategories(updatedCats.sort());
+      setSourceCategory('');
+    } catch (e: any) {
+      console.error(e);
+      setMigrateError(`Gagal melakukan migrasi: ${e.message || 'Error tidak diketahui'}`);
+    } finally {
+      setMigrating(false);
+    }
+  };
 
   // Load secretCode on mount
   useEffect(() => {
@@ -42,7 +109,22 @@ export default function SettingsPage() {
         setLoading(false);
       }
     }
+
+    async function fetchDistinctCategories() {
+      try {
+        const { data, error } = await supabase.from('transaksi').select('kategori');
+        if (error) throw error;
+        if (data) {
+          const cats = Array.from(new Set(data.map((t: any) => t.kategori).filter(Boolean))) as string[];
+          setExistingCategories(cats.sort());
+        }
+      } catch (e) {
+        console.error('Error fetching distinct categories:', e);
+      }
+    }
+
     fetchSettings();
+    fetchDistinctCategories();
   }, []);
 
   const handleSave = async (e: React.FormEvent) => {
@@ -165,6 +247,69 @@ export default function SettingsPage() {
           </div>
         </div>
 
+      </div>
+
+      {/* Full-width card for Category Migration */}
+      <div className="glass-card p-6 border-slate-700/50 mt-6">
+        <h2 className="text-lg font-bold text-slate-100 flex items-center gap-2 mb-2">
+          <Database className="w-5 h-5 text-amber-400" /> Migrasi Kategori Transaksi
+        </h2>
+        <p className="text-xs text-slate-400 mb-6 leading-relaxed">
+          Pindahkan semua transaksi dari kategori lama ke kategori baru secara masal untuk merapikan histori data keuangan Anda.
+        </p>
+
+        {migrateSuccess && <div className="text-xs font-bold text-emerald-400 bg-emerald-500/10 p-3 rounded mb-4">{migrateSuccess}</div>}
+        {migrateError && <div className="text-xs font-bold text-rose-400 bg-rose-500/10 p-3 rounded mb-4">{migrateError}</div>}
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs font-semibold text-slate-400">Kategori Asal (Lama di Database)</label>
+            <select
+              value={sourceCategory}
+              onChange={e => setSourceCategory(e.target.value)}
+              className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-emerald-500 text-sm h-[38px]"
+            >
+              <option value="">-- Pilih Kategori Asal --</option>
+              {existingCategories.map(cat => (
+                <option key={cat} value={cat}>{cat}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs font-semibold text-slate-400">Kategori Tujuan (Baru)</label>
+            <select
+              value={targetCategory}
+              onChange={e => setTargetCategory(e.target.value)}
+              className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-emerald-500 text-sm h-[38px]"
+            >
+              <option value="">-- Pilih Kategori Tujuan --</option>
+              {BASE_CATEGORIES.map(cat => (
+                <option key={cat} value={cat}>{cat}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div className="mt-6 flex justify-end">
+          <button
+            onClick={handleMigrate}
+            disabled={migrating || !sourceCategory || !targetCategory}
+            className="w-full sm:w-auto bg-slate-800 hover:bg-slate-700 text-amber-400 font-bold px-6 py-2.5 rounded-lg text-sm transition-all flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer border border-slate-700"
+          >
+            {migrating ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin text-amber-400" />
+                Memindahkan...
+              </>
+            ) : (
+              <>
+                <Shuffle className="w-4 h-4 text-amber-400" />
+                Migrasikan Kategori
+              </>
+            )}
+          </button>
+        </div>
       </div>
 
     </div>

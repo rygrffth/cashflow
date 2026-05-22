@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import PortfolioGrid from '@/components/PortfolioGrid';
+import { JAJAN_CATEGORIES } from '@/config/categories';
 import DailyLimitCard from '@/components/DailyLimitCard';
 import JajanSimulator from '@/components/JajanSimulator';
 import TransactionForm from '@/components/TransactionForm';
@@ -167,7 +168,7 @@ export default function Dashboard() {
       setBatasHr(computedBatasHr);
 
       // Out Hari Harian (Makan & Bensin spent today, active)
-      const jajanCategories = ["Makan", "Bensin / Mobilitas", "Ninis"];
+      const jajanCategories = JAJAN_CATEGORIES;
       
       const todayJajanSum = allTxns
         .filter(t => 

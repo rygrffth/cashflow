@@ -3,28 +3,13 @@
 import React, { useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { PlusCircle, Calendar, Tag, CreditCard, PenTool, CheckCircle, Loader2, ChevronDown, ChevronUp } from 'lucide-react';
+import { KATEGORI_OPTIONS } from '@/config/categories';
 
 interface FormProps {
   saldoBank: number;
   uangCash: number;
   onSuccess: () => void;
 }
-
-const KATEGORI_OPTIONS = [
-  "Makan",
-  "Bensin / Mobilitas",
-  "Ninis",
-  "Kos",
-  "Hiburan",
-  "Kebutuhan Lab / Magang",
-  "Bulanan",
-  "SPay",
-  "Belanja Dapur",
-  "Penyesuaian",
-  "Scheduled Settlement",
-  "Titipan / Jastip",
-  "Lainnya (Ketik Manual...)"
-];
 
 export default function TransactionForm({ saldoBank, uangCash, onSuccess }: FormProps) {
   // Loading & Feedback States

@@ -4,21 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { RefreshCw, CheckCircle, Loader2 } from 'lucide-react';
 
-const CATEGORIES = [
-  "Makan",
-  "Bensin / Mobilitas",
-  "Ninis",
-  "Kos",
-  "Hiburan",
-  "Kebutuhan Lab / Magang",
-  "Bulanan",
-  "SPay",
-  "Belanja Dapur",
-  "Penyesuaian",
-  "Scheduled Settlement",
-  "Titipan / Jastip",
-  "Lainnya"
-];
+import { KATEGORI_SYNC_OPTIONS as CATEGORIES } from '@/config/categories';
 
 export default function SyncPage() {
   const [successMsg, setSuccessMsg] = useState('');

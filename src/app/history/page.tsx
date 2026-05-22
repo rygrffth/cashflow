@@ -2,25 +2,8 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
+import { KATEGORI_HISTORY_OPTIONS as KATEGORI_OPTIONS } from '@/config/categories';
 import { RefreshCw, Trash2, Calendar, Filter, Download, History } from 'lucide-react';
-
-const KATEGORI_OPTIONS = [
-  "Makan",
-  "Bensin / Mobilitas",
-  "Ninis",
-  "Kos",
-  "Hiburan",
-  "Kebutuhan Lab / Magang",
-  "Bulanan",
-  "SPay",
-  "Belanja Dapur",
-  "Penyesuaian",
-  "Scheduled Settlement",
-  "Titipan / Jastip",
-  "Piutang",
-  "Piutang Kembali",
-  "Lainnya"
-];
 
 export default function HistoryPage() {
   const [loading, setLoading] = useState(true);
