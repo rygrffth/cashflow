@@ -338,7 +338,7 @@ export default function BudgetPage() {
                   )}
 
                   {/* Setor/Tarik Inline Form */}
-                  {isFormOpen && (
+                  {activeForm && activeForm.id === item.id && (
                     <div className="p-4 bg-slate-950/60 border border-slate-800 rounded-xl space-y-3 animate-fadeIn">
                       <h4 className="text-xs font-extrabold text-slate-300 flex items-center gap-1.5">
                         {activeForm.type === 'setor' ? (

@@ -265,9 +265,13 @@ export default function Dashboard() {
           <div className="flex items-center gap-2">
             <h1 className="text-3xl font-extrabold tracking-tight text-white">💼 Financial Dashboard</h1>
             {isRealMode ? (
-              <Unlock className="w-5 h-5 text-rose-500 animate-pulse ml-2" title="Mode Admin" />
+              <span title="Mode Admin">
+                <Unlock className="w-5 h-5 text-rose-500 animate-pulse ml-2" />
+              </span>
             ) : (
-              <Lock className="w-5 h-5 text-emerald-500 ml-2" title="Mode User" />
+              <span title="Mode User">
+                <Lock className="w-5 h-5 text-emerald-500 ml-2" />
+              </span>
             )}
           </div>
         </div>

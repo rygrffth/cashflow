@@ -236,32 +236,36 @@ export async function POST(req: Request) {
           from: 'noreply.livin@bankmandiri.co.id'
         });
 
-        const limitVal = limit ? parseInt(limit, 10) : 10;
-        const sortedIds = searchResult.slice(-limitVal).reverse();
+        if (searchResult) {
+          const limitVal = limit ? parseInt(limit, 10) : 10;
+          const sortedIds = searchResult.slice(-limitVal).reverse();
 
-        for (const uid of sortedIds) {
-          const message = await client.fetchOne(uid, {
-            envelope: true,
-            source: true
-          });
+          for (const uid of sortedIds) {
+            const message = await client.fetchOne(uid, {
+              envelope: true,
+              source: true
+            });
 
-          const rawSubject = message.envelope?.subject || '';
-          const subject = decodeMimeWords(rawSubject);
+            if (!message) continue;
 
-          // Skip failed transactions
-          if (/Tidak Berhasil|Gagal|Failed|Ditolak/i.test(subject)) {
-            continue;
-          }
+            const rawSubject = message.envelope?.subject || '';
+            const subject = decodeMimeWords(rawSubject);
 
-          const sourceBuffer = message.source;
-          if (!sourceBuffer) continue;
-          
-          const sourceStr = sourceBuffer.toString('utf-8');
-          const parsedMime = parseMimeEmail(sourceStr);
-          
-          const transaction = parseTransaction(parsedMime.body, parsedMime.subject);
-          if (transaction) {
-            results.push(transaction);
+            // Skip failed transactions
+            if (/Tidak Berhasil|Gagal|Failed|Ditolak/i.test(subject)) {
+              continue;
+            }
+
+            const sourceBuffer = message.source;
+            if (!sourceBuffer) continue;
+            
+            const sourceStr = sourceBuffer.toString('utf-8');
+            const parsedMime = parseMimeEmail(sourceStr);
+            
+            const transaction = parseTransaction(parsedMime.body, parsedMime.subject);
+            if (transaction) {
+              results.push(transaction);
+            }
           }
         }
       } finally {

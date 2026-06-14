@@ -13,6 +13,19 @@ export default function SettingsPage() {
   const [errorMsg, setErrorMsg] = useState('');
   const [localCode, setLocalCode] = useState('');
 
+  // Excluded categories settings states
+  const [excludeCategories, setExcludeCategories] = useState<string[]>([
+    "Transfer Aset",
+    "Scheduled Settlement",
+    "Penyesuaian",
+    "Menabung",
+    "Piutang",
+    "Piutang Kembali"
+  ]);
+  const [excludeSuccessMsg, setExcludeSuccessMsg] = useState('');
+  const [excludeErrorMsg, setExcludeErrorMsg] = useState('');
+  const [savingExclude, setSavingExclude] = useState(false);
+
   // Category Migration States
   const [existingCategories, setExistingCategories] = useState<string[]>([]);
   const [sourceCategory, setSourceCategory] = useState('');
@@ -103,6 +116,20 @@ export default function SettingsPage() {
         if (data && data.value) {
           setTanggalGajian(data.value);
         }
+
+        const { data: excludeData, error: excludeError } = await supabase
+          .from('settings')
+          .select('*')
+          .eq('key', 'exclude_categories')
+          .single();
+        if (excludeError && excludeError.code !== 'PGRST116') throw excludeError;
+        if (excludeData && excludeData.value) {
+          try {
+            setExcludeCategories(JSON.parse(excludeData.value));
+          } catch (e) {
+            console.error('Failed to parse excludeCategories:', e);
+          }
+        }
       } catch (e) {
         console.error(e);
       } finally {
@@ -157,6 +184,43 @@ export default function SettingsPage() {
       setErrorMsg('Gagal memperbarui pengaturan.');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleSaveExcludeCategories = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSavingExclude(true);
+    setExcludeSuccessMsg('');
+    setExcludeErrorMsg('');
+
+    try {
+      const { data: existing } = await supabase
+        .from('settings')
+        .select('*')
+        .eq('key', 'exclude_categories')
+        .single();
+
+      const stringifiedValue = JSON.stringify(excludeCategories);
+
+      if (existing) {
+        const { error } = await supabase
+          .from('settings')
+          .update({ value: stringifiedValue, tipe_data: 'json' })
+          .eq('key', 'exclude_categories');
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from('settings')
+          .insert([{ key: 'exclude_categories', value: stringifiedValue, tipe_data: 'json' }]);
+        if (error) throw error;
+      }
+
+      setExcludeSuccessMsg('✅ Filter kategori berhasil diperbarui!');
+    } catch (e: any) {
+      console.error(e);
+      setExcludeErrorMsg('Gagal memperbarui filter kategori.');
+    } finally {
+      setSavingExclude(false);
     }
   };
 
@@ -245,6 +309,53 @@ export default function SettingsPage() {
               </div>
             </div>
           </div>
+        </div>
+
+        {/* Filter Kategori Operational */}
+        <div className="glass-card p-6 border-slate-700/50">
+          <h2 className="text-lg font-bold text-slate-100 flex items-center gap-2 mb-4">
+            <Shuffle className="w-5 h-5 text-emerald-400" /> Filter Kategori Operational
+          </h2>
+          <p className="text-xs text-slate-400 mb-6 leading-relaxed">
+            Pilih kategori pengeluaran yang ingin **dikecualikan** dari perhitungan limit harian dan charts di halaman Analytics (misal transfer aset, pinjaman, tabungan).
+          </p>
+
+          <form onSubmit={handleSaveExcludeCategories} className="space-y-4">
+            {excludeSuccessMsg && <div className="text-xs font-bold text-emerald-400 bg-emerald-500/10 p-3 rounded">{excludeSuccessMsg}</div>}
+            {excludeErrorMsg && <div className="text-xs font-bold text-rose-400 bg-rose-500/10 p-3 rounded">{excludeErrorMsg}</div>}
+
+            <div className="grid grid-cols-2 gap-2 max-h-[120px] overflow-y-auto pr-2 border border-slate-800 rounded-lg p-3 bg-slate-950/40 text-xs font-medium">
+              {BASE_CATEGORIES.map(cat => {
+                const checked = excludeCategories.includes(cat);
+                return (
+                  <label key={cat} className="flex items-center gap-2 py-1 cursor-pointer text-slate-300 hover:text-white transition">
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setExcludeCategories([...excludeCategories, cat]);
+                        } else {
+                          setExcludeCategories(excludeCategories.filter(c => c !== cat));
+                        }
+                      }}
+                      className="rounded border-slate-750 bg-slate-900 text-emerald-500 focus:ring-emerald-500"
+                    />
+                    <span>{cat}</span>
+                  </label>
+                );
+              })}
+            </div>
+
+            <button
+              type="submit"
+              disabled={savingExclude}
+              className="w-full bg-slate-800 hover:bg-slate-700 text-emerald-400 font-bold py-2 rounded-lg text-sm transition-all flex justify-center items-center gap-2"
+            >
+              {savingExclude ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+              Simpan Filter Kategori
+            </button>
+          </form>
         </div>
 
       </div>

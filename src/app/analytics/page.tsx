@@ -50,7 +50,15 @@ export default function AnalyticsPage() {
     setIsMounted(true);
   }, []);
 
-  const EXCLUDE_FROM_LIMIT = useMemo(() => ["Transfer Aset", "Scheduled Settlement", "Penyesuaian", "Menabung", "Piutang", "Piutang Kembali"], []);
+  const [excludeCategories, setExcludeCategories] = useState<string[]>([
+    "Transfer Aset",
+    "Scheduled Settlement",
+    "Penyesuaian",
+    "Menabung",
+    "Piutang",
+    "Piutang Kembali"
+  ]);
+  const EXCLUDE_FROM_LIMIT = excludeCategories;
 
   const fetchData = useCallback(async (isSilent = false) => {
     if (!isSilent) setLoading(true);
@@ -69,11 +77,20 @@ export default function AnalyticsPage() {
       const totalTabungan = (tabunganData || []).reduce((sum, item) => sum + Number(item.nominal_terkumpul), 0);
       setTabunganTotal(totalTabungan);
 
-      // 3. Fetch setting gajian
+      // 3. Fetch setting gajian & excluded categories
       const { data: settingData } = await supabase.from('settings').select('*');
       if (settingData && settingData.length > 0) {
         const found = settingData.find(s => s.key === 'tanggal_gajian');
         if (found) setGajianDate(found.value || '2026-05-17');
+
+        const foundExclude = settingData.find(s => s.key === 'exclude_categories');
+        if (foundExclude && foundExclude.value) {
+          try {
+            setExcludeCategories(JSON.parse(foundExclude.value));
+          } catch (e) {
+            console.error('Failed to parse exclude_categories setting:', e);
+          }
+        }
       }
     } catch (e) {
       console.error('Failed to fetch analytics data:', e);
@@ -559,7 +576,7 @@ export default function AnalyticsPage() {
                         contentStyle={{ backgroundColor: '#0F172A', borderColor: '#334155', borderRadius: '12px' }} 
                         labelStyle={{ color: '#E2E8F0', fontWeight: 'bold', fontSize: '11px' }}
                         itemStyle={{ fontSize: '11px' }}
-                        formatter={(val: number) => [`Rp ${val.toLocaleString('id-ID')}`]}
+                        formatter={(val: any) => [`Rp ${Number(val || 0).toLocaleString('id-ID')}`]}
                       />
                       <Legend wrapperStyle={{ fontSize: '10px', paddingTop: '10px' }} />
                       <Bar dataKey="Bank" stackId="a" fill="#3B82F6" radius={[0, 0, 0, 0]} />
@@ -607,7 +624,7 @@ export default function AnalyticsPage() {
                         <Tooltip
                           contentStyle={{ backgroundColor: '#0F172A', borderColor: '#334155', borderRadius: '12px' }}
                           itemStyle={{ fontSize: '11px', color: '#FFF' }}
-                          formatter={(val: number) => `Rp ${val.toLocaleString('id-ID')}`}
+                          formatter={(val: any) => `Rp ${Number(val || 0).toLocaleString('id-ID')}`}
                         />
                       </PieChart>
                     </ResponsiveContainer>
@@ -658,7 +675,7 @@ export default function AnalyticsPage() {
                       <Tooltip
                         contentStyle={{ backgroundColor: '#0F172A', borderColor: '#334155', borderRadius: '12px' }}
                         itemStyle={{ fontSize: '11px' }}
-                        formatter={(val: number) => [`Rp ${val.toLocaleString('id-ID')}`]}
+                        formatter={(val: any) => [`Rp ${Number(val || 0).toLocaleString('id-ID')}`]}
                       />
                       <Bar dataKey="Nominal" radius={[4, 4, 0, 0]}>
                         {cashflowChartData.map((entry, index) => (
@@ -686,7 +703,7 @@ export default function AnalyticsPage() {
                       <Tooltip
                         contentStyle={{ backgroundColor: '#0F172A', borderColor: '#334155', borderRadius: '12px' }}
                         itemStyle={{ fontSize: '11px' }}
-                        formatter={(val: number) => [`Rp ${val.toLocaleString('id-ID')}`]}
+                        formatter={(val: any) => [`Rp ${Number(val || 0).toLocaleString('id-ID')}`]}
                       />
                       <Legend wrapperStyle={{ fontSize: '10px' }} />
                       <Bar dataKey="Bulan Lalu" fill="#334155" radius={[2, 2, 0, 0]} />
@@ -794,7 +811,7 @@ export default function AnalyticsPage() {
                         contentStyle={{ backgroundColor: '#0F172A', borderColor: '#334155', borderRadius: '12px' }} 
                         labelStyle={{ color: '#E2E8F0', fontWeight: 'bold', fontSize: '11px' }}
                         itemStyle={{ fontSize: '11px' }}
-                        formatter={(val: number) => [`Rp ${val.toLocaleString('id-ID')}`]}
+                        formatter={(val: any) => [`Rp ${Number(val || 0).toLocaleString('id-ID')}`]}
                       />
                       <Area type="monotone" dataKey="Saldo" stroke="#10B981" strokeWidth={2} fillOpacity={1} fill="url(#balance-glow)" />
                     </AreaChart>
