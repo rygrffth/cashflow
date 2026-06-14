@@ -24,7 +24,7 @@ export default function TransactionForm({ saldoBank, uangCash, onSuccess }: Form
     const localISODate = new Date(today.getTime() - offset).toISOString().split('T')[0];
     return localISODate;
   });
-  const [tipe, setTipe] = useState<'Pengeluaran' | 'Pemasukan'>('Pengeluaran');
+  const [tipe, setTipe] = useState<'Pengeluaran' | 'Pemasukan' | 'Transfer'>('Pengeluaran');
   const [sumber, setSumber] = useState<'Bank' | 'Cash'>('Bank');
   const [kategori, setKategori] = useState(KATEGORI_OPTIONS[0]);
   const [customKategori, setCustomKategori] = useState('');
@@ -65,8 +65,8 @@ export default function TransactionForm({ saldoBank, uangCash, onSuccess }: Form
       return;
     }
 
-    // Balance check for expenses
-    if (tipe === 'Pengeluaran') {
+    // Balance check for expenses or transfers
+    if (tipe === 'Pengeluaran' || tipe === 'Transfer') {
       if (sumber === 'Bank' && parsedNominal > saldoBank) {
         setErrorMsg(`❌ Saldo bank tidak cukup! (Sisa: Rp ${saldoBank.toLocaleString('id-ID')})`);
         return;
@@ -80,6 +80,46 @@ export default function TransactionForm({ saldoBank, uangCash, onSuccess }: Form
     setLoading(true);
 
     try {
+      if (tipe === 'Transfer') {
+        const tujuan = sumber === 'Bank' ? 'Cash' : 'Bank';
+        const finalCatatan = catatan.trim() || 'Transfer Aset';
+
+        const outboundTx = {
+          tanggal: tanggal,
+          tipe: 'Pengeluaran',
+          kategori: 'Transfer Aset',
+          nominal: parsedNominal,
+          catatan: `[Transfer Ke ${tujuan}] ${finalCatatan}`.trim(),
+          status: 'Cleared',
+          tenggat_waktu: '',
+          tanggal_bayar: tanggal,
+          sumber: sumber,
+          titipan: 0
+        };
+
+        const inboundTx = {
+          tanggal: tanggal,
+          tipe: 'Pemasukan',
+          kategori: 'Transfer Aset',
+          nominal: parsedNominal,
+          catatan: `[Transfer Dari ${sumber}] ${finalCatatan}`.trim(),
+          status: 'Cleared',
+          tenggat_waktu: '',
+          tanggal_bayar: tanggal,
+          sumber: tujuan,
+          titipan: 0
+        };
+
+        const { error } = await supabase.from('transaksi').insert([outboundTx, inboundTx]);
+        if (error) throw error;
+
+        setSuccessMsg('✅ Transfer aset berhasil dicatat!');
+        setNominal('');
+        setCatatan('');
+        if (onSuccess) onSuccess();
+        return;
+      }
+
       // 2. Compute Jastip / Titipan values
       const tBankAmt = Number(titBank || 0);
       const tCashAmt = Number(titCash || 0);
@@ -221,11 +261,18 @@ export default function TransactionForm({ saldoBank, uangCash, onSuccess }: Form
             </label>
             <select
               value={tipe}
-              onChange={(e) => setTipe(e.target.value as 'Pengeluaran' | 'Pemasukan')}
+              onChange={(e) => {
+                const newTipe = e.target.value as 'Pengeluaran' | 'Pemasukan' | 'Transfer';
+                setTipe(newTipe);
+                if (newTipe === 'Transfer') {
+                  setKategori('Transfer Aset');
+                }
+              }}
               className="bg-slate-900/60 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-emerald-500 text-sm h-[38px]"
             >
               <option value="Pengeluaran">Pengeluaran</option>
               <option value="Pemasukan">Pemasukan</option>
+              <option value="Transfer">Transfer (Bank ↔ Cash)</option>
             </select>
           </div>
         </div>
@@ -234,7 +281,7 @@ export default function TransactionForm({ saldoBank, uangCash, onSuccess }: Form
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="flex flex-col gap-1.5">
             <label className="text-xs font-semibold text-slate-400 flex items-center gap-1.5">
-              <CreditCard className="w-3.5 h-3.5" /> Sumber Dana
+              <CreditCard className="w-3.5 h-3.5" /> {tipe === 'Transfer' ? 'Dari Sumber' : 'Sumber Dana'}
             </label>
             <select
               value={sumber}
@@ -246,20 +293,34 @@ export default function TransactionForm({ saldoBank, uangCash, onSuccess }: Form
             </select>
           </div>
 
-          <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-semibold text-slate-400 flex items-center gap-1.5">
-              <Tag className="w-3.5 h-3.5" /> Kategori
-            </label>
-            <select
-              value={kategori}
-              onChange={(e) => setKategori(e.target.value)}
-              className="bg-slate-900/60 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-emerald-500 text-sm h-[38px]"
-            >
-              {KATEGORI_OPTIONS.map((opt) => (
-                <option key={opt} value={opt}>{opt}</option>
-              ))}
-            </select>
-          </div>
+          {tipe === 'Transfer' ? (
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-semibold text-slate-400 flex items-center gap-1.5">
+                <CreditCard className="w-3.5 h-3.5" /> Ke Sumber
+              </label>
+              <input
+                type="text"
+                value={sumber === 'Bank' ? 'Cash' : 'Bank'}
+                disabled
+                className="bg-slate-900/20 border border-slate-800 rounded-lg px-3 py-2 text-slate-400 text-sm h-[38px] font-semibold"
+              />
+            </div>
+          ) : (
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-semibold text-slate-400 flex items-center gap-1.5">
+                <Tag className="w-3.5 h-3.5" /> Kategori
+              </label>
+              <select
+                value={kategori}
+                onChange={(e) => setKategori(e.target.value)}
+                className="bg-slate-900/60 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-emerald-500 text-sm h-[38px]"
+              >
+                {KATEGORI_OPTIONS.map((opt) => (
+                  <option key={opt} value={opt}>{opt}</option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
 
         {/* Dynamic: Custom Category Input */}
@@ -338,9 +399,10 @@ export default function TransactionForm({ saldoBank, uangCash, onSuccess }: Form
         </div>
 
         {/* Jastip / Titipan Expander */}
-        <div className="border border-slate-700/40 rounded-lg overflow-hidden bg-slate-950/20 text-xs">
-          <button
-            type="button"
+        {tipe !== 'Transfer' && (
+          <div className="border border-slate-700/40 rounded-lg overflow-hidden bg-slate-950/20 text-xs">
+            <button
+              type="button"
             onClick={() => setShowJastip(!showJastip)}
             className="w-full px-3 py-2 bg-slate-900/60 flex justify-between items-center text-slate-300 font-semibold focus:outline-none hover:text-white"
           >
@@ -400,6 +462,7 @@ export default function TransactionForm({ saldoBank, uangCash, onSuccess }: Form
             </div>
           )}
         </div>
+        )}
 
         {/* Submit button */}
         <button

@@ -48,7 +48,23 @@ export default function RootLayout({
       lang="id"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col bg-[#0B0F19] safe-padding">
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function() {
+                var theme = localStorage.getItem('theme') || 'dark';
+                if (theme === 'light') {
+                  document.documentElement.classList.add('light');
+                } else {
+                  document.documentElement.classList.remove('light');
+                }
+              })();
+            `
+          }}
+        />
+      </head>
+      <body className="min-h-full flex flex-col safe-padding">
         <RegisterSW />
         <TopNav />
         <div className="flex-1">
