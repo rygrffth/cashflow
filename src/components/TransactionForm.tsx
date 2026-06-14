@@ -302,7 +302,7 @@ export default function TransactionForm({ saldoBank, uangCash, onSuccess }: Form
                 type="text"
                 value={sumber === 'Bank' ? 'Cash' : 'Bank'}
                 disabled
-                className="bg-slate-900/20 border border-slate-800 rounded-lg px-3 py-2 text-slate-400 text-sm h-[38px] font-semibold"
+                className="bg-slate-900/60 border border-slate-700 rounded-lg px-3 py-2 text-slate-400 text-sm h-[38px] font-semibold cursor-not-allowed opacity-80"
               />
             </div>
           ) : (

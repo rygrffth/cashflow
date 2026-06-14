@@ -17,56 +17,76 @@
 }
 
 /* Light Mode specific color overrides to avoid file refactoring */
-.light .text-white { color: #0F172A !important; }
-.light .text-slate-100 { color: #1E293B !important; }
-.light .text-slate-250 { color: #334155 !important; }
-.light .text-slate-200 { color: #334155 !important; }
-.light .text-slate-300 { color: #334155 !important; }
-.light .text-slate-400 { color: #475569 !important; }
-.light .text-slate-500 { color: #64748B !important; }
+html.light .text-white { color: #0F172A !important; }
+html.light .text-slate-100 { color: #1E293B !important; }
+html.light .text-slate-250 { color: #334155 !important; }
+html.light .text-slate-200 { color: #334155 !important; }
+html.light .text-slate-300 { color: #334155 !important; }
+html.light .text-slate-400 { color: #475569 !important; }
+html.light .text-slate-500 { color: #475569 !important; }
+html.light .text-emerald-400 { color: #059669 !important; }
 
 /* Border color overrides */
-.light .border-slate-700,
-.light .border-slate-700\/50,
-.light .border-slate-700\/40,
-.light .border-slate-800,
-.light .border-slate-850,
-.light .border-slate-800\/60,
-.light .border-slate-800\/80 {
-  border-color: #E2E8F0 !important;
+html.light .border-slate-700,
+html.light .border-slate-700\/50,
+html.light .border-slate-700\/40,
+html.light .border-slate-800,
+html.light .border-slate-850,
+html.light .border-slate-800\/60,
+html.light .border-slate-800\/80 {
+  border-color: #CBD5E1 !important;
 }
 
 /* Background overrides */
-.light .bg-slate-900,
-.light .bg-slate-900\/60,
-.light .bg-slate-950,
-.light .bg-slate-950\/40,
-.light .bg-slate-900\/35 {
-  background-color: #FFFFFF !important;
+html.light .bg-emerald-500\/10 {
+  background-color: rgba(16, 185, 129, 0.15) !important;
+}
+html.light .bg-slate-800,
+html.light .bg-slate-800\/10,
+html.light .bg-slate-800\/20,
+html.light .bg-slate-800\/30,
+html.light .bg-slate-800\/40,
+html.light .bg-slate-800\/50,
+html.light .bg-slate-800\/60,
+html.light .bg-slate-800\/80,
+html.light .bg-slate-800\/90,
+html.light .bg-slate-800\/95,
+html.light .bg-slate-900,
+html.light .bg-slate-900\/60,
+html.light .bg-slate-950,
+html.light .bg-slate-950\/40,
+html.light .bg-slate-900\/35 {
+  background-color: #F1F5F9 !important;
   color: #0F172A !important;
 }
 
 /* Form inputs override */
-.light input, 
-.light select, 
-.light textarea {
+html.light input, 
+html.light select, 
+html.light textarea {
   color: #0F172A !important;
   background-color: #FFFFFF !important;
   border-color: #CBD5E1 !important;
 }
-.light ::placeholder {
+html.light ::placeholder {
   color: #94A3B8 !important;
 }
 
-/* Chart Tooltip overrides */
-.light .recharts-default-tooltip {
+/* Chart Tooltip & SVG overrides */
+html.light .recharts-default-tooltip {
   background-color: #FFFFFF !important;
   border: 1px solid #CBD5E1 !important;
   color: #0F172A !important;
 }
-.light .recharts-tooltip-label {
+html.light .recharts-tooltip-label {
   color: #0F172A !important;
   font-weight: bold;
+}
+html.light text.recharts-text {
+  fill: #475569 !important;
+}
+html.light .recharts-legend-item-text {
+  color: #334155 !important;
 }
 
 body {
