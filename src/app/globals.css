@@ -136,3 +136,17 @@ a, button, select, input, textarea, [role="button"] {
   -webkit-overflow-scrolling: touch;
 }
 
+/* Sidebar Collapsible Layout Helpers */
+.main-content-wrapper {
+  transition: padding-left 300ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+@media (min-width: 768px) {
+  body:not(.sidebar-collapsed) .main-content-wrapper {
+    padding-left: 16rem; /* Equivalent to md:pl-64 */
+  }
+  body.sidebar-collapsed .main-content-wrapper {
+    padding-left: 4rem; /* Equivalent to md:pl-16 */
+  }
+}
+
+

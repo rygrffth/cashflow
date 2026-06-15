@@ -6,7 +6,7 @@ import { usePathname } from 'next/navigation';
 import { 
   LayoutDashboard, History, Target, HandCoins, Settings, 
   CalendarRange, BarChart3, RefreshCw, Sun, Moon, Landmark, 
-  Menu, X 
+  Menu, X, ChevronLeft, ChevronRight 
 } from 'lucide-react';
 
 export default function Sidebar() {
@@ -15,10 +15,24 @@ export default function Sidebar() {
   
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
   const [isOpen, setIsOpen] = useState(false); // Mobile drawer state
+  const [isCollapsed, setIsCollapsed] = useState(false); // Desktop collapsed state
+  const [isMounted, setIsMounted] = useState(false);
 
+  // Load theme and collapsed state on mount
   useEffect(() => {
+    setIsMounted(true);
     const savedTheme = localStorage.getItem('theme') || 'dark';
     setTheme(savedTheme as 'dark' | 'light');
+    
+    const savedCollapsed = localStorage.getItem('sidebar_collapsed') === 'true';
+    setIsCollapsed(savedCollapsed);
+    
+    // Sync class to body for page layout padding
+    if (savedCollapsed) {
+      document.body.classList.add('sidebar-collapsed');
+    } else {
+      document.body.classList.remove('sidebar-collapsed');
+    }
   }, []);
 
   const toggleTheme = () => {
@@ -29,6 +43,18 @@ export default function Sidebar() {
       document.documentElement.classList.add('light');
     } else {
       document.documentElement.classList.remove('light');
+    }
+  };
+
+  const toggleCollapse = () => {
+    const nextCollapsed = !isCollapsed;
+    setIsCollapsed(nextCollapsed);
+    localStorage.setItem('sidebar_collapsed', String(nextCollapsed));
+    
+    if (nextCollapsed) {
+      document.body.classList.add('sidebar-collapsed');
+    } else {
+      document.body.classList.remove('sidebar-collapsed');
     }
   };
 
@@ -80,20 +106,26 @@ export default function Sidebar() {
         />
       )}
 
-      {/* 📂 Sidebar Container (Desktop fixed sidebar & Mobile slide-in drawer) */}
+      {/* 📂 Sidebar Container */}
       <aside className={`
-        fixed top-0 bottom-0 left-0 z-50 flex w-64 flex-col bg-[color:var(--background)] border-r border-[color:var(--card-border)] transition-transform duration-300 ease-in-out md:translate-x-0
-        ${isOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
+        fixed top-0 bottom-0 left-0 z-50 flex flex-col bg-[color:var(--background)] border-r border-[color:var(--card-border)] transition-all duration-300 ease-in-out
+        ${isOpen ? 'translate-x-0 w-64' : '-translate-x-full md:translate-x-0'}
+        ${isMounted && isCollapsed ? 'md:w-16' : 'md:w-64'}
       `}>
         {/* Sidebar Header (Logo & Close Button on Mobile) */}
-        <div className="flex h-16 items-center justify-between px-6 border-b border-[color:var(--card-border)]">
+        <div className={`
+          flex h-16 items-center justify-between border-b border-[color:var(--card-border)] transition-all duration-300
+          ${isMounted && isCollapsed ? 'md:px-0 md:justify-center' : 'px-6'}
+        `}>
           <Link 
             href="/" 
             className="text-lg font-black tracking-tight text-white flex items-center gap-2.5"
             onClick={() => setIsOpen(false)}
           >
             <img src="/logo.png" alt="Logo" className="w-6 h-6 object-contain rounded-lg shadow-emerald-500/20 shadow-md animate-pulse" />
-            <span>Cashflow</span>
+            <span className={`transition-all duration-300 ${isMounted && isCollapsed ? 'md:hidden md:w-0' : 'block'}`}>
+              Cashflow
+            </span>
           </Link>
           <button
             onClick={() => setIsOpen(false)}
@@ -105,7 +137,10 @@ export default function Sidebar() {
         </div>
 
         {/* Navigation Links List */}
-        <nav className="flex-1 space-y-1.5 px-4 py-6 overflow-y-auto custom-scrollbar">
+        <nav className={`
+          flex-1 space-y-1.5 py-6 overflow-y-auto custom-scrollbar transition-all duration-300
+          ${isMounted && isCollapsed ? 'md:px-2' : 'px-4'}
+        `}>
           {links.map((link) => {
             const isActive = normalizePath(pathname) === normalizePath(link.href);
             const Icon = link.icon;
@@ -115,35 +150,66 @@ export default function Sidebar() {
                 key={link.href}
                 href={link.href}
                 onClick={() => setIsOpen(false)}
+                title={isCollapsed ? link.label : undefined}
                 className={`
-                  flex items-center gap-3.5 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition-all
+                  flex items-center rounded-xl text-xs sm:text-sm font-semibold transition-all
+                  ${isMounted && isCollapsed ? 'md:justify-center md:h-10 md:w-12 md:mx-auto' : 'px-4 py-2.5 gap-3.5'}
                   ${isActive 
                     ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shadow-[0_0_15px_rgba(16,185,129,0.04)]' 
                     : 'text-slate-400 hover:text-slate-200 hover:bg-slate-850/50 border border-transparent'}
                 `}
               >
                 <Icon className="w-4.5 h-4.5 flex-shrink-0" />
-                <span>{link.label}</span>
+                <span className={`transition-all duration-300 ${isMounted && isCollapsed ? 'md:hidden md:w-0' : 'block'}`}>
+                  {link.label}
+                </span>
               </Link>
             );
           })}
         </nav>
 
-        {/* Sidebar Footer (Theme Toggler on Desktop) */}
-        <div className="hidden md:flex p-4 border-t border-[color:var(--card-border)]">
+        {/* Sidebar Footer (Theme Toggler & Collapse Button on Desktop) */}
+        <div className={`
+          hidden md:flex flex-col gap-2 p-3 border-t border-[color:var(--card-border)] transition-all duration-300
+          ${isMounted && isCollapsed ? 'items-center' : 'items-stretch'}
+        `}>
+          {/* Theme Toggle Button */}
           <button
             onClick={toggleTheme}
-            className="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold text-slate-400 hover:text-slate-200 hover:bg-slate-850/50 border border-transparent transition-all cursor-pointer bg-slate-900/25"
+            title={isCollapsed ? (theme === 'dark' ? 'Mode Terang' : 'Mode Gelap') : undefined}
+            className={`
+              flex items-center rounded-xl text-xs sm:text-sm font-semibold text-slate-400 hover:text-slate-200 hover:bg-slate-850/50 border border-transparent transition-all cursor-pointer bg-slate-900/25
+              ${isMounted && isCollapsed ? 'justify-center h-10 w-10' : 'px-4 py-2.5 gap-3'}
+            `}
           >
             {theme === 'dark' ? (
               <>
                 <Sun className="w-4.5 h-4.5 text-amber-400 flex-shrink-0" />
-                <span>Mode Terang</span>
+                <span className={isMounted && isCollapsed ? 'hidden' : 'block'}>Mode Terang</span>
               </>
             ) : (
               <>
                 <Moon className="w-4.5 h-4.5 text-indigo-400 flex-shrink-0" />
-                <span>Mode Gelap</span>
+                <span className={isMounted && isCollapsed ? 'hidden' : 'block'}>Mode Gelap</span>
+              </>
+            )}
+          </button>
+
+          {/* Collapse Toggle Button */}
+          <button
+            onClick={toggleCollapse}
+            title={isCollapsed ? 'Perluas Menu' : 'Ciutkan Menu'}
+            className={`
+              flex items-center rounded-xl text-xs sm:text-sm font-semibold text-slate-450 hover:text-white hover:bg-slate-850/50 border border-transparent transition-all cursor-pointer
+              ${isMounted && isCollapsed ? 'justify-center h-10 w-10' : 'px-4 py-2.5 gap-3'}
+            `}
+          >
+            {isMounted && isCollapsed ? (
+              <ChevronRight className="w-4.5 h-4.5 flex-shrink-0" />
+            ) : (
+              <>
+                <ChevronLeft className="w-4.5 h-4.5 flex-shrink-0" />
+                <span>Ciutkan Menu</span>
               </>
             )}
           </button>
