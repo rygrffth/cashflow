@@ -12,7 +12,7 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-import TopNav from "@/components/TopNav";
+import Sidebar from "@/components/Sidebar";
 import RegisterSW from "@/components/RegisterSW";
 
 export const metadata: Metadata = {
@@ -64,11 +64,13 @@ export default function RootLayout({
           }}
         />
       </head>
-      <body className="min-h-full flex flex-col safe-padding">
+      <body className="min-h-full flex flex-col md:flex-row bg-[color:var(--background)]">
         <RegisterSW />
-        <TopNav />
-        <div className="flex-1">
-          {children}
+        <Sidebar />
+        <div className="flex-1 min-w-0 md:pl-64">
+          <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+            {children}
+          </main>
         </div>
       </body>
     </html>
