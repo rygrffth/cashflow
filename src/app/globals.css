@@ -27,34 +27,24 @@ html.light .text-slate-500 { color: #475569 !important; }
 html.light .text-emerald-400 { color: #059669 !important; }
 
 /* Border color overrides */
-html.light .border-slate-700,
-html.light .border-slate-700\/50,
-html.light .border-slate-700\/40,
-html.light .border-slate-800,
-html.light .border-slate-850,
-html.light .border-slate-800\/60,
-html.light .border-slate-800\/80 {
+html.light [class*="border-slate-700"],
+html.light [class*="border-slate-800"] {
   border-color: #CBD5E1 !important;
 }
 
-/* Background overrides */
+/* Background overrides using wildcard selectors to capture all opacities */
 html.light .bg-emerald-500\/10 {
   background-color: rgba(16, 185, 129, 0.15) !important;
 }
-html.light .bg-slate-800,
-html.light .bg-slate-800\/10,
-html.light .bg-slate-800\/20,
-html.light .bg-slate-800\/30,
-html.light .bg-slate-800\/40,
-html.light .bg-slate-800\/50,
-html.light .bg-slate-800\/60,
-html.light .bg-slate-800\/80,
-html.light .bg-slate-800\/90,
-html.light .bg-slate-800\/95,
-html.light .bg-slate-900,
-html.light .bg-slate-900\/60,
-html.light .bg-slate-950,
+html.light [class*="bg-slate-800"],
+html.light [class*="bg-slate-900"],
+html.light [class*="bg-slate-950"] {
+  background-color: #E2E8F0 !important;
+  color: #0F172A !important;
+}
 html.light .bg-slate-950\/40,
+html.light .bg-slate-900\/60,
+html.light .bg-slate-900\/40,
 html.light .bg-slate-900\/35 {
   background-color: #F1F5F9 !important;
   color: #0F172A !important;

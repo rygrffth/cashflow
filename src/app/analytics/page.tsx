@@ -747,9 +747,9 @@ export default function AnalyticsPage() {
                       <path 
                         d="M 20 90 A 80 80 0 0 1 180 90" 
                         fill="none" 
-                        stroke="#1E293B" 
                         strokeWidth="12" 
                         strokeLinecap="round" 
+                        className="stroke-slate-200 dark:stroke-slate-800"
                       />
                       {/* Active fill */}
                       <path 
@@ -766,15 +766,14 @@ export default function AnalyticsPage() {
                         y1="90" 
                         x2="40" 
                         y2="90" 
-                        stroke="#F8FAFC" 
                         strokeWidth="3.5" 
                         strokeLinecap="round" 
                         transform={`rotate(${pct * 180}, 100, 90)`}
-                        className="transition-transform duration-700 ease-out"
+                        className="stroke-slate-800 dark:stroke-slate-100 transition-transform duration-700 ease-out"
                       />
-                      <circle cx="100" cy="90" r="6" fill="#F8FAFC" stroke="#0F172A" strokeWidth="2" />
-                      <text x="20" y="108" fill="#94A3B8" fontSize="8" textAnchor="middle">Rp 0</text>
-                      <text x="180" y="108" fill="#94A3B8" fontSize="8" textAnchor="middle">
+                      <circle cx="100" cy="90" r="6" strokeWidth="2" className="fill-slate-800 dark:fill-slate-100 stroke-slate-100 dark:stroke-slate-900" />
+                      <text x="20" y="108" fontSize="8" textAnchor="middle" className="fill-slate-500 dark:fill-slate-400">Rp 0</text>
+                      <text x="180" y="108" fontSize="8" textAnchor="middle" className="fill-slate-500 dark:fill-slate-400">
                         Rp {(gaugeMax / 1000).toFixed(0)}k
                       </text>
                     </svg>
