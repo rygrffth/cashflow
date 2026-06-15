@@ -13,7 +13,8 @@ export const BASE_CATEGORIES = [
   "Scheduled Settlement",
   "Titipan / Jastip",
   "Piutang",
-  "Piutang Kembali"
+  "Piutang Kembali",
+  "Investasi"
 ];
 
 // Categories counted towards daily spending limit
