@@ -5,7 +5,8 @@ import { supabase } from '@/lib/supabase';
 import { 
   BarChart3, RefreshCw, Calendar, Filter, TrendingUp, 
   ArrowUpRight, ArrowDownLeft, Landmark, Wallet, HelpCircle, 
-  ChevronRight, CalendarDays, AlertTriangle, CheckCircle2, AlertCircle
+  ChevronRight, CalendarDays, AlertTriangle, CheckCircle2, AlertCircle,
+  Activity, Target
 } from 'lucide-react';
 import {
   ResponsiveContainer, ComposedChart, BarChart, PieChart, Pie, Cell,
@@ -19,6 +20,7 @@ export default function AnalyticsPage() {
   const [transactions, setTransactions] = useState<any[]>([]);
   const [tabunganTotal, setTabunganTotal] = useState(0);
   const [gajianDate, setGajianDate] = useState('2026-05-17'); // Default date string format
+  const [categoryBudgets, setCategoryBudgets] = useState<Record<string, number>>({});
 
   // Tab state: 'grafik' | 'laporan'
   const [activeTab, setActiveTab] = useState<'grafik' | 'laporan'>('grafik');
@@ -91,6 +93,15 @@ export default function AnalyticsPage() {
             console.error('Failed to parse exclude_categories setting:', e);
           }
         }
+
+        const foundBudgets = settingData.find(s => s.key === 'category_budgets');
+        if (foundBudgets && foundBudgets.value) {
+          try {
+            setCategoryBudgets(JSON.parse(foundBudgets.value));
+          } catch (e) {
+            console.error('Failed to parse category_budgets setting:', e);
+          }
+        }
       }
     } catch (e) {
       console.error('Failed to fetch analytics data:', e);
@@ -146,6 +157,149 @@ export default function AnalyticsPage() {
 
     return { bankSum, cashSum, totalReal, saldoOp, sisaHari, batasHr, todayStr };
   }, [transactions, tabunganTotal, gajianDate]);
+
+  // Financial Health Score & Category Budget Actuals Computations
+  const monthlyStats = useMemo(() => {
+    const now = new Date();
+    const curMonth = now.getMonth();
+    const curYear = now.getFullYear();
+
+    let monthlyIncome = 0;
+    let monthlyExpense = 0;
+    const categorySpendMap: Record<string, number> = {};
+
+    transactions.forEach(t => {
+      if (t.tanggal) {
+        const d = new Date(t.tanggal);
+        if (d.getMonth() === curMonth && d.getFullYear() === curYear) {
+          const nom = Number(t.nominal) - (Number(t.titipan) || 0);
+          if (t.tipe === 'Pemasukan') {
+            if (t.status === 'Cleared') {
+              monthlyIncome += nom;
+            }
+          } else if (t.tipe === 'Pengeluaran' && !EXCLUDE_FROM_LIMIT.includes(t.kategori)) {
+            if (t.status === 'Cleared' || t.status === 'Pending') {
+              monthlyExpense += nom;
+              categorySpendMap[t.kategori] = (categorySpendMap[t.kategori] || 0) + nom;
+            }
+          }
+        }
+      }
+    });
+
+    const savingsRate = monthlyIncome > 0 
+      ? ((monthlyIncome - monthlyExpense) / monthlyIncome) * 100 
+      : (monthlyExpense > 0 ? -100 : 0);
+
+    const expenseRatio = monthlyIncome > 0 
+      ? (monthlyExpense / monthlyIncome) * 100 
+      : (monthlyExpense > 0 ? 100 : 0);
+
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(now.getDate() - 30);
+    let last30DaysSpend = 0;
+    transactions.forEach(t => {
+      if (t.tanggal) {
+        const d = new Date(t.tanggal);
+        if (d >= thirtyDaysAgo && d <= now && t.tipe === 'Pengeluaran' && !EXCLUDE_FROM_LIMIT.includes(t.kategori) && t.status === 'Cleared') {
+          last30DaysSpend += Number(t.nominal) - (Number(t.titipan) || 0);
+        }
+      }
+    });
+    const avgMonthlySpend = last30DaysSpend || 100000;
+    const emergencyFundMonths = stats.saldoOp / avgMonthlySpend;
+
+    let lentTotal = 0;
+    let returnedTotal = 0;
+    transactions.forEach(t => {
+      if (t.status === 'Cleared') {
+        const nom = Number(t.nominal) || 0;
+        if (t.kategori === 'Piutang') lentTotal += nom;
+        else if (t.kategori === 'Piutang Kembali') returnedTotal += nom;
+      }
+    });
+    const unpaidPiutang = Math.max(0, lentTotal - returnedTotal);
+    const piutangRatio = stats.totalReal > 0 ? (unpaidPiutang / stats.totalReal) * 100 : 0;
+
+    let savingsGrade = 'F';
+    let savingsScore = 0;
+    if (savingsRate >= 30) { savingsGrade = 'A'; savingsScore = 4; }
+    else if (savingsRate >= 20) { savingsGrade = 'B'; savingsScore = 3; }
+    else if (savingsRate >= 10) { savingsGrade = 'C'; savingsScore = 2; }
+    else if (savingsRate >= 0) { savingsGrade = 'D'; savingsScore = 1; }
+    else { savingsGrade = 'F'; savingsScore = 0; }
+
+    let expenseGrade = 'F';
+    let expenseScore = 0;
+    if (expenseRatio <= 50) { expenseGrade = 'A'; expenseScore = 4; }
+    else if (expenseRatio <= 70) { expenseGrade = 'B'; expenseScore = 3; }
+    else if (expenseRatio <= 85) { expenseGrade = 'C'; expenseScore = 2; }
+    else if (expenseRatio <= 100) { expenseGrade = 'D'; expenseScore = 1; }
+    else { expenseGrade = 'F'; expenseScore = 0; }
+
+    let emergencyGrade = 'F';
+    let emergencyScore = 0;
+    if (emergencyFundMonths >= 3) { emergencyGrade = 'A'; emergencyScore = 4; }
+    else if (emergencyFundMonths >= 1.5) { emergencyGrade = 'B'; emergencyScore = 3; }
+    else if (emergencyFundMonths >= 0.5) { emergencyGrade = 'C'; emergencyScore = 2; }
+    else if (emergencyFundMonths >= 0.1) { emergencyGrade = 'D'; emergencyScore = 1; }
+    else { emergencyGrade = 'F'; emergencyScore = 0; }
+
+    let piutangGrade = 'A';
+    let piutangScore = 4;
+    if (piutangRatio <= 10) { piutangGrade = 'A'; piutangScore = 4; }
+    else if (piutangRatio <= 25) { piutangGrade = 'B'; piutangScore = 3; }
+    else if (piutangRatio <= 40) { piutangGrade = 'C'; piutangScore = 2; }
+    else if (piutangRatio <= 60) { piutangGrade = 'D'; piutangScore = 1; }
+    else { piutangGrade = 'F'; piutangScore = 0; }
+
+    const gpa = (savingsScore + expenseScore + emergencyScore + piutangScore) / 4;
+    let overallGrade = 'C';
+    let overallText = 'Cukup Sehat';
+    let overallColor = 'text-amber-400';
+    let overallBg = 'bg-amber-500/10 border-amber-500/20';
+
+    if (gpa >= 3.5) {
+      overallGrade = 'A';
+      overallText = 'Sangat Sehat';
+      overallColor = 'text-emerald-400';
+      overallBg = 'bg-emerald-500/10 border-emerald-500/20';
+    } else if (gpa >= 2.5) {
+      overallGrade = 'B';
+      overallText = 'Sehat';
+      overallColor = 'text-blue-400';
+      overallBg = 'bg-blue-500/10 border-blue-500/20';
+    } else if (gpa >= 1.5) {
+      overallGrade = 'C';
+      overallText = 'Cukup Sehat';
+      overallColor = 'text-amber-400';
+      overallBg = 'bg-amber-500/10 border-amber-500/20';
+    } else {
+      overallGrade = 'D';
+      overallText = 'Perlu Evaluasi';
+      overallColor = 'text-rose-400';
+      overallBg = 'bg-rose-500/10 border-rose-500/20';
+    }
+
+    return {
+      monthlyIncome,
+      monthlyExpense,
+      savingsRate,
+      expenseRatio,
+      emergencyFundMonths,
+      unpaidPiutang,
+      piutangRatio,
+      savingsGrade,
+      expenseGrade,
+      emergencyGrade,
+      piutangGrade,
+      overallGrade,
+      overallText,
+      overallColor,
+      overallBg,
+      categorySpendMap
+    };
+  }, [transactions, EXCLUDE_FROM_LIMIT, stats.saldoOp, stats.totalReal]);
 
   // Period ranges mapping for Charts
   const chartFilteredData = useMemo(() => {
@@ -555,6 +709,154 @@ export default function AnalyticsPage() {
             <div className="text-[10px] text-slate-400 italic">
               *Menampilkan data terfilter ({chartFilteredData.length} transaksi)
             </div>
+          </div>
+
+          {/* Financial Health Score & Category Budgets Overview */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            
+            {/* Financial Health Score Card */}
+            <div className="glass-card p-5 border-slate-700/50 flex flex-col justify-between space-y-4">
+              <div>
+                <h3 className="text-sm font-bold text-slate-200 flex items-center gap-1.5">
+                  <Activity className="w-4 h-4 text-emerald-400" /> Rasio & Kesehatan Keuangan
+                </h3>
+                <p className="text-[10px] text-slate-400">Skor kesehatan finansial dihitung otomatis berdasarkan rasio pengeluaran bulan ini</p>
+              </div>
+
+              <div className={`p-4 rounded-xl border flex items-center justify-between ${monthlyStats.overallBg}`}>
+                <div className="space-y-1">
+                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Financial Grade</p>
+                  <p className={`text-lg font-black ${monthlyStats.overallColor}`}>{monthlyStats.overallText}</p>
+                </div>
+                <div className="h-12 w-12 rounded-full border border-slate-750 flex items-center justify-center bg-slate-900/60 font-black text-xl shadow-inner font-mono text-white">
+                  {monthlyStats.overallGrade}
+                </div>
+              </div>
+
+              {/* Sub-Metrics Grid */}
+              <div className="space-y-2.5 text-xs">
+                {/* 1. Savings Rate */}
+                <div className="flex justify-between items-center bg-slate-900/40 p-2 border border-slate-850 rounded-lg">
+                  <div className="space-y-0.5">
+                    <p className="text-[10px] text-slate-400 font-semibold">Savings Rate (Ideal &gt;20%)</p>
+                    <p className="font-bold text-slate-200">{monthlyStats.savingsRate.toFixed(1)}%</p>
+                  </div>
+                  <span className={`text-[10px] font-black px-2 py-0.5 rounded font-mono ${
+                    monthlyStats.savingsGrade === 'A' || monthlyStats.savingsGrade === 'B' ? 'bg-emerald-500/10 text-emerald-400' : 
+                    monthlyStats.savingsGrade === 'C' ? 'bg-amber-500/10 text-amber-400' : 'bg-rose-500/10 text-rose-450'
+                  }`}>
+                    {monthlyStats.savingsGrade}
+                  </span>
+                </div>
+
+                {/* 2. Expense Ratio */}
+                <div className="flex justify-between items-center bg-slate-900/40 p-2 border border-slate-850 rounded-lg">
+                  <div className="space-y-0.5">
+                    <p className="text-[10px] text-slate-400 font-semibold">Rasio Pengeluaran (Ideal &lt;70%)</p>
+                    <p className="font-bold text-slate-200">{monthlyStats.expenseRatio.toFixed(1)}%</p>
+                  </div>
+                  <span className={`text-[10px] font-black px-2 py-0.5 rounded font-mono ${
+                    monthlyStats.expenseGrade === 'A' || monthlyStats.expenseGrade === 'B' ? 'bg-emerald-500/10 text-emerald-400' : 
+                    monthlyStats.expenseGrade === 'C' ? 'bg-amber-500/10 text-amber-400' : 'bg-rose-500/10 text-rose-450'
+                  }`}>
+                    {monthlyStats.expenseGrade}
+                  </span>
+                </div>
+
+                {/* 3. Emergency Fund */}
+                <div className="flex justify-between items-center bg-slate-900/40 p-2 border border-slate-850 rounded-lg">
+                  <div className="space-y-0.5">
+                    <p className="text-[10px] text-slate-400 font-semibold">Dana Darurat (Ideal &gt;3 bulan)</p>
+                    <p className="font-bold text-slate-200">{monthlyStats.emergencyFundMonths.toFixed(2)} bln</p>
+                  </div>
+                  <span className={`text-[10px] font-black px-2 py-0.5 rounded font-mono ${
+                    monthlyStats.emergencyGrade === 'A' || monthlyStats.emergencyGrade === 'B' ? 'bg-emerald-500/10 text-emerald-400' : 
+                    monthlyStats.emergencyGrade === 'C' ? 'bg-amber-500/10 text-amber-400' : 'bg-rose-500/10 text-rose-450'
+                  }`}>
+                    {monthlyStats.emergencyGrade}
+                  </span>
+                </div>
+
+                {/* 4. Piutang Ratio */}
+                <div className="flex justify-between items-center bg-slate-900/40 p-2 border border-slate-850 rounded-lg">
+                  <div className="space-y-0.5">
+                    <p className="text-[10px] text-slate-400 font-semibold">Aset di Piutang (Ideal &lt;20%)</p>
+                    <p className="font-bold text-slate-200">{monthlyStats.piutangRatio.toFixed(1)}%</p>
+                  </div>
+                  <span className={`text-[10px] font-black px-2 py-0.5 rounded font-mono ${
+                    monthlyStats.piutangGrade === 'A' || monthlyStats.piutangGrade === 'B' ? 'bg-emerald-500/10 text-emerald-400' : 
+                    monthlyStats.piutangGrade === 'C' ? 'bg-amber-500/10 text-amber-400' : 'bg-rose-500/10 text-rose-450'
+                  }`}>
+                    {monthlyStats.piutangGrade}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Category Budgets Overview Card */}
+            <div className="glass-card p-5 border-slate-700/50 flex flex-col justify-between space-y-4 lg:col-span-2">
+              <div>
+                <h3 className="text-sm font-bold text-slate-200 flex items-center gap-1.5">
+                  <Target className="w-4 h-4 text-emerald-400" /> Monitoring Anggaran Bulanan Kategori
+                </h3>
+                <p className="text-[10px] text-slate-400">Status penyerapan limit anggaran bulanan untuk kategori yang Anda tetapkan</p>
+              </div>
+
+              <div className="flex-1 overflow-y-auto max-h-[260px] pr-2 space-y-3.5 custom-scrollbar min-h-[160px] flex flex-col justify-start">
+                {Object.keys(categoryBudgets).length > 0 ? (
+                  Object.entries(categoryBudgets).map(([cat, budget]) => {
+                    const actual = monthlyStats.categorySpendMap[cat] || 0;
+                    const pct = budget > 0 ? Math.min(100, (actual / budget) * 100) : 0;
+                    const remaining = budget - actual;
+                    const isOver = remaining < 0;
+
+                    // Progress bar color
+                    const progressColor = pct >= 90 ? 'bg-rose-500' : pct >= 70 ? 'bg-amber-500' : 'bg-emerald-500';
+                    const textColor = pct >= 90 ? 'text-rose-455' : pct >= 70 ? 'text-amber-400' : 'text-slate-400';
+
+                    return (
+                      <div key={cat} className="space-y-1.5">
+                        <div className="flex justify-between items-center text-xs">
+                          <span className="font-semibold text-slate-300">{cat}</span>
+                          <span className="font-mono text-slate-400">
+                            Rp {actual.toLocaleString('id-ID')} / <span className="text-slate-500">Rp {budget.toLocaleString('id-ID')}</span>
+                          </span>
+                        </div>
+                        
+                        {/* Progress Bar Container */}
+                        <div className="w-full bg-slate-900 border border-slate-850 h-2.5 rounded-full overflow-hidden">
+                          <div 
+                            className={`h-full rounded-full transition-all duration-500 ${progressColor}`}
+                            style={{ width: `${pct}%` }}
+                          />
+                        </div>
+
+                        {/* Status Label */}
+                        <div className="flex justify-between items-center text-[10px]">
+                          <span className={`font-semibold ${textColor}`}>
+                            {pct.toFixed(0)}% Terpakai
+                          </span>
+                          <span className={`font-medium ${isOver ? 'text-rose-455 font-bold' : 'text-slate-500'}`}>
+                            {isOver ? `Overbudget Rp ${Math.abs(remaining).toLocaleString('id-ID')}` : `Sisa Rp ${remaining.toLocaleString('id-ID')}`}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <div className="flex-1 flex flex-col items-center justify-center text-center p-6 space-y-2">
+                    <p className="text-slate-500 text-xs italic">Belum ada anggaran kategori yang dikonfigurasi.</p>
+                    <a 
+                      href="/settings" 
+                      className="text-[11px] font-bold text-emerald-400 hover:text-emerald-300 hover:underline transition"
+                    >
+                      Atur Anggaran Bulanan Kategori di Pengaturan &rarr;
+                    </a>
+                  </div>
+                )}
+              </div>
+            </div>
+
           </div>
 
           {/* Grid Layout Charts */}

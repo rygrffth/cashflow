@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Settings, Save, Loader2, CalendarClock, Lock, Unlock, Database, Shuffle } from 'lucide-react';
+import { Settings, Save, Loader2, CalendarClock, Lock, Unlock, Database, Shuffle, Tags } from 'lucide-react';
 import { BASE_CATEGORIES } from '@/config/categories';
 
 export default function SettingsPage() {
@@ -25,6 +25,12 @@ export default function SettingsPage() {
   const [excludeSuccessMsg, setExcludeSuccessMsg] = useState('');
   const [excludeErrorMsg, setExcludeErrorMsg] = useState('');
   const [savingExclude, setSavingExclude] = useState(false);
+
+  // Category Budgets settings states
+  const [categoryBudgets, setCategoryBudgets] = useState<Record<string, number>>({});
+  const [budgetSuccessMsg, setBudgetSuccessMsg] = useState('');
+  const [budgetErrorMsg, setBudgetErrorMsg] = useState('');
+  const [savingBudgets, setSavingBudgets] = useState(false);
 
   // Category Migration States
   const [existingCategories, setExistingCategories] = useState<string[]>([]);
@@ -130,6 +136,20 @@ export default function SettingsPage() {
             console.error('Failed to parse excludeCategories:', e);
           }
         }
+
+        const { data: budgetData, error: budgetError } = await supabase
+          .from('settings')
+          .select('*')
+          .eq('key', 'category_budgets')
+          .single();
+        if (budgetError && budgetError.code !== 'PGRST116') throw budgetError;
+        if (budgetData && budgetData.value) {
+          try {
+            setCategoryBudgets(JSON.parse(budgetData.value));
+          } catch (e) {
+            console.error('Failed to parse categoryBudgets:', e);
+          }
+        }
       } catch (e) {
         console.error(e);
       } finally {
@@ -221,6 +241,49 @@ export default function SettingsPage() {
       setExcludeErrorMsg('Gagal memperbarui filter kategori.');
     } finally {
       setSavingExclude(false);
+    }
+  };
+
+  const handleSaveCategoryBudgets = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSavingBudgets(true);
+    setBudgetSuccessMsg('');
+    setBudgetErrorMsg('');
+
+    try {
+      const { data: existing } = await supabase
+        .from('settings')
+        .select('*')
+        .eq('key', 'category_budgets')
+        .single();
+
+      // Clean empty/zero budgets
+      const cleanedBudgets = Object.entries(categoryBudgets).reduce((acc, [cat, val]) => {
+        if (val > 0) acc[cat] = val;
+        return acc;
+      }, {} as Record<string, number>);
+
+      const stringifiedValue = JSON.stringify(cleanedBudgets);
+
+      if (existing) {
+        const { error } = await supabase
+          .from('settings')
+          .update({ value: stringifiedValue, tipe_data: 'json' })
+          .eq('key', 'category_budgets');
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from('settings')
+          .insert([{ key: 'category_budgets', value: stringifiedValue, tipe_data: 'json' }]);
+        if (error) throw error;
+      }
+
+      setBudgetSuccessMsg('✅ Anggaran kategori berhasil diperbarui!');
+    } catch (e: any) {
+      console.error(e);
+      setBudgetErrorMsg('Gagal memperbarui anggaran kategori.');
+    } finally {
+      setSavingBudgets(false);
     }
   };
 
@@ -354,6 +417,57 @@ export default function SettingsPage() {
             >
               {savingExclude ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
               Simpan Filter Kategori
+            </button>
+          </form>
+        </div>
+
+        {/* Anggaran Kategori (Category Budgeting) */}
+        <div className="glass-card p-6 border-slate-700/50">
+          <h2 className="text-lg font-bold text-slate-100 flex items-center gap-2 mb-4">
+            <Tags className="w-5 h-5 text-emerald-400" /> Anggaran Bulanan Kategori
+          </h2>
+          <p className="text-xs text-slate-400 mb-6 leading-relaxed">
+            Atur limit pengeluaran bulanan untuk masing-masing kategori. Isi `0` atau kosongkan untuk menonaktifkan budget pada kategori tersebut.
+          </p>
+
+          <form onSubmit={handleSaveCategoryBudgets} className="space-y-4">
+            {budgetSuccessMsg && <div className="text-xs font-bold text-emerald-400 bg-emerald-500/10 p-3 rounded">{budgetSuccessMsg}</div>}
+            {budgetErrorMsg && <div className="text-xs font-bold text-rose-400 bg-rose-500/10 p-3 rounded">{budgetErrorMsg}</div>}
+
+            <div className="grid grid-cols-1 gap-3 max-h-[200px] overflow-y-auto pr-2 border border-slate-800 rounded-lg p-3 bg-slate-950/40 text-xs">
+              {BASE_CATEGORIES.filter(c => c !== "Transfer Aset" && c !== "Scheduled Settlement" && c !== "Penyesuaian" && c !== "Piutang" && c !== "Piutang Kembali").map(cat => {
+                const currentVal = categoryBudgets[cat] || '';
+                return (
+                  <div key={cat} className="flex justify-between items-center gap-4">
+                    <span className="text-slate-300 font-medium truncate">{cat}</span>
+                    <div className="relative flex-shrink-0 w-36">
+                      <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[10px] text-slate-500 font-bold">Rp</span>
+                      <input
+                        type="number"
+                        placeholder="Unlimited"
+                        value={currentVal}
+                        onChange={(e) => {
+                          const val = e.target.value === '' ? 0 : Math.max(0, parseInt(e.target.value));
+                          setCategoryBudgets({
+                            ...categoryBudgets,
+                            [cat]: val
+                          });
+                        }}
+                        className="bg-slate-900 border border-slate-750 rounded px-2 py-1 pl-8 text-right text-white focus:outline-none focus:border-emerald-500 text-xs w-full font-mono"
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <button
+              type="submit"
+              disabled={savingBudgets}
+              className="w-full bg-slate-800 hover:bg-slate-700 text-emerald-400 font-bold py-2 rounded-lg text-sm transition-all flex justify-center items-center gap-2 cursor-pointer"
+            >
+              {savingBudgets ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+              Simpan Anggaran Bulanan
             </button>
           </form>
         </div>
