@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { KATEGORI_HISTORY_OPTIONS as KATEGORI_OPTIONS } from '@/config/categories';
-import { RefreshCw, Trash2, Calendar, Filter, Download, History } from 'lucide-react';
+import { RefreshCw, Trash2, Calendar, Filter, Download, History, Search, CreditCard, Tag } from 'lucide-react';
 
 export default function HistoryPage() {
   const [loading, setLoading] = useState(true);
@@ -12,6 +12,9 @@ export default function HistoryPage() {
 
   // Filter states
   const [filterType, setFilterType] = useState('Semua');
+  const [filterSumber, setFilterSumber] = useState('Semua');
+  const [filterKategori, setFilterKategori] = useState('Semua');
+  const [searchQuery, setSearchQuery] = useState('');
   const [filterMonth, setFilterMonth] = useState(() => new Date().toISOString().split('T')[0].substring(0, 7)); // YYYY-MM
 
   // Edit Mode States
@@ -315,8 +318,14 @@ export default function HistoryPage() {
   // Derived filtered data
   const filteredData = transactions.filter(t => {
     const matchType = filterType === 'Semua' || t.tipe === filterType;
-    const matchMonth = t.tanggal ? t.tanggal.startsWith(filterMonth) : false;
-    return matchType && matchMonth;
+    const matchMonth = !filterMonth || (t.tanggal ? t.tanggal.startsWith(filterMonth) : false);
+    const matchSumber = filterSumber === 'Semua' || t.sumber === filterSumber;
+    const matchKategori = filterKategori === 'Semua' || t.kategori === filterKategori;
+    const matchSearch = !searchQuery.trim() ||
+      (t.catatan || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (t.kategori || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (t.sumber || '').toLowerCase().includes(searchQuery.toLowerCase());
+    return matchType && matchMonth && matchSumber && matchKategori && matchSearch;
   });
 
   // Calculate summaries
@@ -343,7 +352,7 @@ export default function HistoryPage() {
           <h1 className="text-2xl font-bold text-white flex items-center gap-2">
             <History className="w-6 h-6 text-emerald-400" /> Riwayat Transaksi
           </h1>
-          <p className="text-sm text-slate-400">Log semua pemasukan dan pengeluaran Anda.</p>
+          <p className="text-sm text-slate-400">Log semua pemasukan, pengeluaran, penarikan, dan aliran dana Anda.</p>
         </div>
 
         <button
@@ -358,15 +367,21 @@ export default function HistoryPage() {
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="glass-card p-4 border-slate-700/50">
-          <p className="text-xs text-slate-400 font-semibold mb-1">PEMASUKAN BULAN INI</p>
+          <p className="text-xs text-slate-400 font-semibold mb-1">
+            PEMASUKAN {filterSumber !== 'Semua' ? filterSumber.toUpperCase() : ''} BULAN INI
+          </p>
           <p className="text-xl font-bold text-emerald-400">Rp {totalIn.toLocaleString('id-ID')}</p>
         </div>
         <div className="glass-card p-4 border-slate-700/50">
-          <p className="text-xs text-slate-400 font-semibold mb-1">PENGELUARAN BULAN INI</p>
+          <p className="text-xs text-slate-400 font-semibold mb-1">
+            PENGELUARAN {filterSumber !== 'Semua' ? filterSumber.toUpperCase() : ''} BULAN INI
+          </p>
           <p className="text-xl font-bold text-rose-400">Rp {totalOut.toLocaleString('id-ID')}</p>
         </div>
         <div className="glass-card p-4 border-slate-700/50">
-          <p className="text-xs text-slate-400 font-semibold mb-1">SALDO BERSIH (NET)</p>
+          <p className="text-xs text-slate-400 font-semibold mb-1">
+            SALDO BERSIH (NET) {filterSumber !== 'Semua' ? filterSumber.toUpperCase() : ''}
+          </p>
           <p className={`text-xl font-bold ${totalIn - totalOut >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
             Rp {(totalIn - totalOut).toLocaleString('id-ID')}
           </p>
@@ -374,82 +389,129 @@ export default function HistoryPage() {
       </div>
 
       {/* Filters & Bulk Operations bar */}
-      <div className="glass-card p-4 border-slate-700/50 flex flex-col lg:flex-row gap-4 items-center">
-        <div className="flex flex-wrap items-center gap-4 w-full lg:w-auto">
-          <div className="flex items-center gap-2 w-full sm:w-auto">
+      <div className="glass-card p-4 border-slate-700/50 flex flex-col gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Filter Bulan */}
+          <div className="flex items-center gap-2">
             <Calendar className="w-4 h-4 text-slate-400" />
             <input
               type="month"
               value={filterMonth}
               onChange={e => setFilterMonth(e.target.value)}
               onClick={(e) => (e.target as any).showPicker()}
-              className="bg-slate-900 border border-slate-700 rounded px-3 py-1.5 text-sm text-white focus:border-emerald-500 outline-none w-full sm:w-40 cursor-pointer"
+              className="bg-slate-900 border border-slate-700 rounded px-2.5 py-1.5 text-xs text-white focus:border-emerald-500 outline-none w-36 cursor-pointer"
             />
           </div>
-          <div className="flex items-center gap-2 w-full sm:w-auto">
+
+          {/* Filter Sumber Rekening */}
+          <div className="flex items-center gap-2">
+            <CreditCard className="w-4 h-4 text-slate-400" />
+            <select
+              value={filterSumber}
+              onChange={e => setFilterSumber(e.target.value)}
+              className="bg-slate-900 border border-slate-700 rounded px-2.5 py-1.5 text-xs text-white focus:border-emerald-500 outline-none"
+            >
+              <option value="Semua">Semua Rekening</option>
+              <option value="Bank">🏦 Bank</option>
+              <option value="Cash">💵 Cash</option>
+            </select>
+          </div>
+
+          {/* Filter Tipe */}
+          <div className="flex items-center gap-2">
             <Filter className="w-4 h-4 text-slate-400" />
             <select
               value={filterType}
               onChange={e => setFilterType(e.target.value)}
-              className="bg-slate-900 border border-slate-700 rounded px-3 py-1.5 text-sm text-white focus:border-emerald-500 outline-none w-full sm:w-40"
+              className="bg-slate-900 border border-slate-700 rounded px-2.5 py-1.5 text-xs text-white focus:border-emerald-500 outline-none"
             >
               <option value="Semua">Semua Tipe</option>
               <option value="Pengeluaran">Pengeluaran</option>
               <option value="Pemasukan">Pemasukan</option>
             </select>
           </div>
+
+          {/* Filter Kategori */}
+          <div className="flex items-center gap-2">
+            <Tag className="w-4 h-4 text-slate-400" />
+            <select
+              value={filterKategori}
+              onChange={e => setFilterKategori(e.target.value)}
+              className="bg-slate-900 border border-slate-700 rounded px-2.5 py-1.5 text-xs text-white focus:border-emerald-500 outline-none max-w-[140px]"
+            >
+              <option value="Semua">Semua Kategori</option>
+              {KATEGORI_OPTIONS.map(c => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Search Bar */}
+          <div className="flex items-center gap-2 flex-1 min-w-[200px]">
+            <Search className="w-4 h-4 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Cari catatan, teman, atau kata kunci..."
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              className="bg-slate-900 border border-slate-700 rounded px-3 py-1.5 text-xs text-white focus:border-emerald-500 outline-none w-full"
+            />
+          </div>
         </div>
 
-        <div className="flex-1"></div>
+        {/* Action Buttons Row */}
+        <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-800/60 justify-between">
+          <div className="text-xs text-slate-400">
+            Menampilkan <span className="font-bold text-white">{filteredData.length}</span> transaksi
+          </div>
 
-        <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto justify-end">
-          {/* Export CSV */}
-          <button
-            onClick={handleExportCSV}
-            className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs flex items-center gap-2 w-full sm:w-auto justify-center cursor-pointer transition"
-          >
-            <Download className="w-3.5 h-3.5" /> Export CSV
-          </button>
-
-          {/* Toggle Edit Mode */}
-          {!isEditMode ? (
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Export CSV */}
             <button
-              onClick={() => setIsEditMode(true)}
-              className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs flex items-center gap-2 w-full sm:w-auto justify-center cursor-pointer transition"
+              onClick={handleExportCSV}
+              className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs flex items-center gap-2 cursor-pointer transition"
             >
-              📝 Mode Edit Inline
+              <Download className="w-3.5 h-3.5" /> Export CSV
             </button>
-          ) : (
-            <div className="flex gap-2 w-full sm:w-auto">
-              <button
-                onClick={handleSaveAll}
-                disabled={isSavingMassal}
-                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs flex items-center gap-2 justify-center cursor-pointer disabled:opacity-50 transition flex-1 sm:flex-initial"
-              >
-                {isSavingMassal ? 'Menyimpan...' : '💾 Simpan Massal'}
-              </button>
-              <button
-                onClick={() => {
-                  setEditedTransactions({});
-                  setIsEditMode(false);
-                }}
-                className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs flex items-center gap-2 justify-center cursor-pointer transition flex-1 sm:flex-initial"
-              >
-                ❌ Batal
-              </button>
-            </div>
-          )}
 
-          {/* Hapus Massal Button */}
-          {selectedIds.length > 0 && (
-            <button
-              onClick={() => setIsDeleteModalOpen(true)}
-              className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs flex items-center gap-2 justify-center cursor-pointer animate-pulse transition w-full sm:w-auto"
-            >
-              <Trash2 className="w-3.5 h-3.5" /> Hapus Terpilih ({selectedIds.length})
-            </button>
-          )}
-        </div>
+            {/* Toggle Edit Mode */}
+            {!isEditMode ? (
+              <button
+                onClick={() => setIsEditMode(true)}
+                className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs flex items-center gap-2 cursor-pointer transition"
+              >
+                📝 Mode Edit Inline
+              </button>
+            ) : (
+              <div className="flex gap-2">
+                <button
+                  onClick={handleSaveAll}
+                  disabled={isSavingMassal}
+                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs flex items-center gap-2 justify-center cursor-pointer disabled:opacity-50 transition"
+                >
+                  {isSavingMassal ? 'Menyimpan...' : '💾 Simpan Massal'}
+                </button>
+                <button
+                  onClick={() => {
+                    setEditedTransactions({});
+                    setIsEditMode(false);
+                  }}
+                  className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs flex items-center gap-2 justify-center cursor-pointer transition"
+                >
+                  ❌ Batal
+                </button>
+              </div>
+            )}
+
+            {/* Hapus Massal Button */}
+            {selectedIds.length > 0 && (
+              <button
+                onClick={() => setIsDeleteModalOpen(true)}
+                className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs flex items-center gap-2 justify-center cursor-pointer animate-pulse transition"
+              >
+                <Trash2 className="w-3.5 h-3.5" /> Hapus Terpilih ({selectedIds.length})
+              </button>
+            )}
       </div>
 
       {/* Data Table */}
