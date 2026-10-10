@@ -19,10 +19,52 @@ function decodeMimeWords(str: string): string {
   });
 }
 
+function getAllMimeParts(rawSource: string): Array<{ contentType: string; content: string }> {
+  const partsList: Array<{ contentType: string; content: string }> = [];
+
+  function walk(source: string) {
+    const sepMatch = source.match(/\r?\n\r?\n/);
+    const sepIndex = sepMatch ? sepMatch.index : -1;
+    const sepLen = sepMatch ? sepMatch[0].length : 0;
+
+    const headers = sepIndex !== -1 ? source.slice(0, sepIndex) : '';
+    const body = sepIndex !== -1 ? source.slice(sepIndex + sepLen) : source;
+
+    const contentTypeMatch = headers.match(/^Content-Type:\s*([^;]+)/im);
+    const contentType = contentTypeMatch ? contentTypeMatch[1].trim().toLowerCase() : 'text/plain';
+
+    const encodingMatch = headers.match(/^Content-Transfer-Encoding:\s*([^\s;]+)/im);
+    const encoding = encodingMatch ? encodingMatch[1].trim().toLowerCase() : '7bit';
+
+    if (contentType.startsWith('multipart/')) {
+      const boundaryMatch = headers.match(/boundary="?([^"\n\r;]+)"?/i);
+      if (boundaryMatch) {
+        const boundary = boundaryMatch[1];
+        const subParts = body.split('--' + boundary);
+        for (const sp of subParts) {
+          if (!sp.trim() || sp.trim() === '--') continue;
+          walk(sp);
+        }
+      }
+    } else {
+      let decoded = body;
+      if (encoding === 'quoted-printable') {
+        decoded = decodeQuotedPrintable(body);
+      } else if (encoding === 'base64') {
+        decoded = Buffer.from(body.replace(/\s+/g, ''), 'base64').toString('utf-8');
+      }
+      partsList.push({ contentType, content: decoded });
+    }
+  }
+
+  walk(rawSource);
+  return partsList;
+}
+
 function parseMimeEmail(rawSource: string): { body: string; subject: string } {
-  const separatorIndex = rawSource.indexOf('\r\n\r\n');
-  const headersPart = separatorIndex !== -1 ? rawSource.slice(0, separatorIndex) : '';
-  const bodyPart = separatorIndex !== -1 ? rawSource.slice(separatorIndex + 4) : rawSource;
+  const sepMatch = rawSource.match(/\r?\n\r?\n/);
+  const sepIndex = sepMatch ? sepMatch.index : -1;
+  const headersPart = sepIndex !== -1 ? rawSource.slice(0, sepIndex) : '';
 
   const subjectMatch = headersPart.match(/^Subject:\s*(.*)$/im);
   let subject = '';
@@ -30,54 +72,13 @@ function parseMimeEmail(rawSource: string): { body: string; subject: string } {
     subject = decodeMimeWords(subjectMatch[1].trim());
   }
 
-  const contentTypeMatch = headersPart.match(/^Content-Type:\s*([^;]+)/im);
-  const contentType = contentTypeMatch ? contentTypeMatch[1].trim().toLowerCase() : 'text/plain';
-
-  const encodingMatch = headersPart.match(/^Content-Transfer-Encoding:\s*([^\s;]+)/im);
-  const encoding = encodingMatch ? encodingMatch[1].trim().toLowerCase() : '7bit';
-
-  let body = bodyPart;
-
-  if (contentType.startsWith('multipart/')) {
-    const boundaryMatch = headersPart.match(/boundary="?([^"\n\r;]+)"?/i);
-    if (boundaryMatch) {
-      const boundary = boundaryMatch[1];
-      const parts = bodyPart.split('--' + boundary);
-      for (const part of parts) {
-        if (part.trim() === '' || part.trim() === '--') continue;
-        const partSep = part.indexOf('\r\n\r\n');
-        if (partSep === -1) continue;
-        const partHeaders = part.slice(0, partSep);
-        const partBody = part.slice(partSep + 4);
-
-        const partContentTypeMatch = partHeaders.match(/^Content-Type:\s*([^;]+)/im);
-        const partContentType = partContentTypeMatch ? partContentTypeMatch[1].trim().toLowerCase() : '';
-
-        if (partContentType.includes('text/html') || partContentType.includes('text/plain')) {
-          const partEncodingMatch = partHeaders.match(/^Content-Transfer-Encoding:\s*([^\s;]+)/im);
-          const partEncoding = partEncodingMatch ? partEncodingMatch[1].trim().toLowerCase() : '7bit';
-
-          let decodedPart = partBody;
-          if (partEncoding === 'quoted-printable') {
-            decodedPart = decodeQuotedPrintable(partBody);
-          } else if (partEncoding === 'base64') {
-            decodedPart = Buffer.from(partBody.replace(/\s+/g, ''), 'base64').toString('utf-8');
-          }
-          body = decodedPart;
-          break;
-        }
-      }
-    }
-  } else {
-    if (encoding === 'quoted-printable') {
-      body = decodeQuotedPrintable(bodyPart);
-    } else if (encoding === 'base64') {
-      body = Buffer.from(bodyPart.replace(/\s+/g, ''), 'base64').toString('utf-8');
-    }
-  }
+  const parts = getAllMimeParts(rawSource);
+  const htmlPart = parts.find(p => p.contentType.includes('text/html'));
+  const textPart = parts.find(p => p.contentType.includes('text/plain'));
+  const bestBody = htmlPart ? htmlPart.content : (textPart ? textPart.content : rawSource);
 
   // Strip HTML tags and clean up whitespace
-  const cleanedBody = body
+  const cleanedBody = bestBody
     .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
     .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
     .replace(/<[^>]+>/g, ' ')
@@ -210,10 +211,13 @@ function parseTransaction(body: string, subject: string) {
 
   // 5. Determine Transaction Type (Tipe)
   let tipe = 'Pengeluaran';
+  const isLifeGoalsTx = /Life\s*Goals/i.test(body) || /Life\s*Goals/i.test(subject);
   const outKeywords = ["Pembayaran", "Debit", "Transfer Keluar", "Tarik", "Top-up", "Top Up", "Bayar", "QRIS", "Setoran", "Life Goals"];
-  const inKeywords = ["Kredit", "Transfer Masuk", "Terima", "Masuk"];
+  const inKeywords = ["Kredit", "Transfer Masuk", "Terima Transfer", "Dana Masuk", "Uang Masuk", "Setoran Masuk"];
 
-  if (outKeywords.some(k => subject.includes(k) || body.includes(k))) {
+  if (isLifeGoalsTx) {
+    tipe = 'Pengeluaran';
+  } else if (outKeywords.some(k => subject.includes(k) || body.includes(k))) {
     tipe = 'Pengeluaran';
   } else if (inKeywords.some(k => subject.includes(k) || body.includes(k))) {
     tipe = 'Pemasukan';
@@ -223,7 +227,7 @@ function parseTransaction(body: string, subject: string) {
   let kategori = 'Lainnya';
   const lowerDesc = (penerima + ' ' + body).toLowerCase();
 
-  if (/life\s*goals|menabung|nabung/i.test(lowerDesc)) {
+  if (isLifeGoalsTx || /life\s*goals|menabung|nabung/i.test(lowerDesc)) {
     kategori = 'Menabung';
   } else if (/pisang|mie|ayam|nasi|resto|warung|cafe|kopi|coffee|food|bakso|sate|makan|dapur|burger|pizza|martabak|roti|kuliner|snack/i.test(lowerDesc)) {
     kategori = 'Makan';
