@@ -171,7 +171,9 @@ export default function Dashboard() {
       let excludedCats: string[] = [];
       if (excludeSet && excludeSet.value) {
         try {
-          excludedCats = JSON.parse(excludeSet.value);
+          excludedCats = typeof excludeSet.value === 'string'
+            ? JSON.parse(excludeSet.value)
+            : (Array.isArray(excludeSet.value) ? excludeSet.value : []);
           setExcludeCategories(excludedCats);
         } catch (e) {
           console.error('Error parsing exclude_categories:', e);
@@ -181,25 +183,26 @@ export default function Dashboard() {
       // Out Hari Harian (Jajan Hari Ini yang dihitung ke Limit Harian)
       // Menghormati pengaturan Filter Kategori Operational (excludedCats)
       const isCountedInDailyLimit = (kat: string) => {
+        const normKat = (kat || '').trim().toLowerCase();
         // Jika dicentang di Settings (dikecualikan), PASTI TIDAK DIHITUNG
-        if (excludedCats.includes(kat)) return false;
+        if (excludedCats.some(c => (c || '').trim().toLowerCase() === normKat)) return false;
 
         // Kategori non-harian bawaan
         const nonDailySystem = [
-          'Kos',
-          'Investasi',
-          'Transfer Aset',
-          'Scheduled Settlement',
-          'Penyesuaian',
-          'Menabung',
-          'Tarik Tabungan',
-          'Piutang',
-          'Piutang Kembali'
+          'kos',
+          'investasi',
+          'transfer aset',
+          'scheduled settlement',
+          'penyesuaian',
+          'menabung',
+          'tarik tabungan',
+          'piutang',
+          'piutang kembali'
         ];
-        if (nonDailySystem.includes(kat)) return false;
+        if (nonDailySystem.includes(normKat)) return false;
 
         // Kategori jajan harian aktif
-        return JAJAN_CATEGORIES.includes(kat);
+        return JAJAN_CATEGORIES.some(c => c.trim().toLowerCase() === normKat);
       };
 
       const todayJajanSum = allTxns
@@ -502,7 +505,10 @@ export default function Dashboard() {
             {todayTransactions.length > 0 ? (
               <div className="space-y-3 max-h-[300px] overflow-y-auto pr-1 no-scrollbar">
                 {todayTransactions.map((t) => {
-                  const isExcludedFromLimit = excludeCategories.includes(t.kategori) || !JAJAN_CATEGORIES.includes(t.kategori);
+                  const normKat = (t.kategori || '').trim().toLowerCase();
+                  const isExcludedFromLimit =
+                    excludeCategories.some(c => (c || '').trim().toLowerCase() === normKat) ||
+                    !JAJAN_CATEGORIES.some(c => c.trim().toLowerCase() === normKat);
                   return (
                     <div
                       key={t.id || Math.random()}

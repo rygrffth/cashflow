@@ -1,5 +1,5 @@
-const CACHE_NAME = 'cashflow-pwa-v1';
-const STATIC_CACHE_NAME = 'cashflow-static-v1';
+const CACHE_NAME = 'cashflow-pwa-v2';
+const STATIC_CACHE_NAME = 'cashflow-static-v2';
 
 // Assets to cache immediately on SW installation
 const PRECACHE_ASSETS = [
@@ -79,15 +79,36 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // 6. Navigation/HTML Pages & Next.js RSC Prefetches -> Stale-While-Revalidate
+  // 6. Navigation/HTML Pages & Next.js RSC Prefetches -> Network First (fresh live financial data)
   const isRSC = request.headers.get('RSC') === '1';
   const isHTML = request.headers.get('accept')?.includes('text/html');
 
   if (isHTML || isRSC) {
-    event.respondWith(staleWhileRevalidate(request, CACHE_NAME));
+    event.respondWith(networkFirst(request, CACHE_NAME));
     return;
   }
 });
+
+// Network First Strategy (always fetch latest when online, cache fallback when offline)
+async function networkFirst(request, cacheName) {
+  const cache = await caches.open(cacheName);
+  try {
+    const networkResponse = await fetch(request);
+    if (networkResponse.status === 200) {
+      cache.put(request, networkResponse.clone());
+    }
+    return networkResponse;
+  } catch (error) {
+    const cachedResponse = await cache.match(request);
+    if (cachedResponse) {
+      return cachedResponse;
+    }
+    return new Response('Offline: Resource not available', {
+      status: 503,
+      statusText: 'Service Unavailable',
+    });
+  }
+}
 
 // Cache First Strategy
 async function cacheFirst(request, cacheName) {
@@ -110,22 +131,4 @@ async function cacheFirst(request, cacheName) {
       statusText: 'Service Unavailable',
     });
   }
-}
-
-// Stale-While-Revalidate Strategy
-async function staleWhileRevalidate(request, cacheName) {
-  const cache = await caches.open(cacheName);
-  const cachedResponse = await cache.match(request);
-
-  const fetchPromise = fetch(request).then(async (networkResponse) => {
-    if (networkResponse.status === 200) {
-      await cache.put(request, networkResponse.clone());
-    }
-    return networkResponse;
-  }).catch(() => {
-    // Return cached response if offline/network fails
-    return cachedResponse;
-  });
-
-  return cachedResponse || fetchPromise;
 }
