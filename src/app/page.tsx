@@ -559,7 +559,8 @@ export default function Dashboard() {
                       </div>
                     </div>
                   </div>
-                ))}
+                );
+              })}
               </div>
             ) : (
               <p className="text-xs text-slate-400 text-center py-6 bg-slate-950/20 rounded-xl border border-slate-900/50">

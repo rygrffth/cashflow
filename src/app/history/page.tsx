@@ -512,6 +512,8 @@ export default function HistoryPage() {
                 <Trash2 className="w-3.5 h-3.5" /> Hapus Terpilih ({selectedIds.length})
               </button>
             )}
+          </div>
+        </div>
       </div>
 
       {/* Data Table */}
