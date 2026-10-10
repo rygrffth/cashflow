@@ -166,6 +166,12 @@ export default function BudgetPage() {
 
     const amt = Number(txnNominal);
     const isSetor = activeForm?.type === 'setor';
+    const sisaTarget = Math.max(0, targetNominalVal - currentTerkumpul);
+
+    if (isSetor && amt > sisaTarget) {
+      alert(`⚠️ Nominal setor melebihi sisa target tabungan! Maksimal yang dapat disetor adalah Rp ${sisaTarget.toLocaleString('id-ID')}.`);
+      return;
+    }
 
     if (!isSetor && amt > currentTerkumpul) {
       alert('Nominal penarikan melebihi jumlah terkumpul!');
@@ -435,29 +441,37 @@ export default function BudgetPage() {
         return;
       }
 
-      // 1. Update transaksi_tabungan
-      const { error } = await supabase
-        .from('transaksi_tabungan')
-        .update({
-          tanggal: editHistoryForm.tanggal,
-          tabungan_id: newTargetId,
-          tipe: newTipe,
-          nominal: newNominal,
-          catatan: editHistoryForm.catatan
-        })
-        .eq('id', editingHistoryItem.id);
-
-      if (error) throw error;
-
-      // 2. Adjust target tabungan balance
+      // 2. Adjust target tabungan balance and validate maximum deposit limit
       if (oldTargetId === newTargetId) {
         const target = tabunganData.find(t => t.id === newTargetId);
         if (target) {
           const currentTerkumpul = Number(target.nominal_terkumpul) || 0;
           const oldContribution = oldTipe === 'Setor' ? oldNominal : -oldNominal;
           const newContribution = newTipe === 'Setor' ? newNominal : -newNominal;
-          const updatedTerkumpul = Math.max(0, currentTerkumpul - oldContribution + newContribution);
           const targetNominal = Number(target.target_nominal) || 0;
+          const baseTerkumpul = Math.max(0, currentTerkumpul - oldContribution);
+          const maxAllowedSetor = Math.max(0, targetNominal - baseTerkumpul);
+
+          if (newTipe === 'Setor' && newNominal > maxAllowedSetor) {
+            alert(`⚠️ Nominal setor melebihi sisa target tabungan! Maksimal yang dapat disetor adalah Rp ${maxAllowedSetor.toLocaleString('id-ID')}.`);
+            return;
+          }
+
+          // 1. Update transaksi_tabungan
+          const { error } = await supabase
+            .from('transaksi_tabungan')
+            .update({
+              tanggal: editHistoryForm.tanggal,
+              tabungan_id: newTargetId,
+              tipe: newTipe,
+              nominal: newNominal,
+              catatan: editHistoryForm.catatan
+            })
+            .eq('id', editingHistoryItem.id);
+
+          if (error) throw error;
+
+          const updatedTerkumpul = Math.max(0, currentTerkumpul - oldContribution + newContribution);
 
           await supabase.from('tabungan').update({
             nominal_terkumpul: updatedTerkumpul,
@@ -466,6 +480,32 @@ export default function BudgetPage() {
         }
       } else {
         // Different targets
+        const newTarget = tabunganData.find(t => t.id === newTargetId);
+        if (newTarget) {
+          const newTargetNominal = Number(newTarget.target_nominal) || 0;
+          const newCurrent = Number(newTarget.nominal_terkumpul) || 0;
+          const maxAllowedSetor = Math.max(0, newTargetNominal - newCurrent);
+
+          if (newTipe === 'Setor' && newNominal > maxAllowedSetor) {
+            alert(`⚠️ Nominal setor melebihi target tabungan tujuan! Maksimal yang dapat disetor adalah Rp ${maxAllowedSetor.toLocaleString('id-ID')}.`);
+            return;
+          }
+        }
+
+        // 1. Update transaksi_tabungan
+        const { error } = await supabase
+          .from('transaksi_tabungan')
+          .update({
+            tanggal: editHistoryForm.tanggal,
+            tabungan_id: newTargetId,
+            tipe: newTipe,
+            nominal: newNominal,
+            catatan: editHistoryForm.catatan
+          })
+          .eq('id', editingHistoryItem.id);
+
+        if (error) throw error;
+
         const oldTarget = tabunganData.find(t => t.id === oldTargetId);
         if (oldTarget) {
           const oldTerkumpul = Number(oldTarget.nominal_terkumpul) || 0;
@@ -477,7 +517,6 @@ export default function BudgetPage() {
           }).eq('id', oldTargetId);
         }
 
-        const newTarget = tabunganData.find(t => t.id === newTargetId);
         if (newTarget) {
           const newCurrent = Number(newTarget.nominal_terkumpul) || 0;
           const newContribution = newTipe === 'Setor' ? newNominal : -newNominal;
@@ -538,6 +577,7 @@ export default function BudgetPage() {
             tabunganData.map(item => {
               const target = Number(item.target_nominal) || 1;
               const current = Number(item.nominal_terkumpul) || 0;
+              const sisaTarget = Math.max(0, target - current);
               const pct = Math.min(100, Math.max(0, (current / target) * 100));
               const isFormOpen = activeForm?.id === item.id;
 
@@ -601,10 +641,15 @@ export default function BudgetPage() {
                     <span className="text-slate-300">{pct.toFixed(1)}% Terkumpul</span>
                   </div>
 
-                  {/* Setor/Tarik Buttons: ALWAYS ACTIVE even if Selesai */}
+                  {/* Setor/Tarik Buttons */}
                   <div className="flex gap-2 pt-2 border-t border-slate-800/40">
                     <button
+                      disabled={sisaTarget <= 0}
                       onClick={() => {
+                        if (sisaTarget <= 0) {
+                          alert('🎯 Target tabungan ini sudah tercapai 100%! Tidak dapat menyetor lebih dari target.');
+                          return;
+                        }
                         if (isFormOpen && activeForm?.type === 'setor') setActiveForm(null);
                         else {
                           setActiveForm({ id: item.id, type: 'setor' });
@@ -612,9 +657,14 @@ export default function BudgetPage() {
                           setTxnCatatan('');
                         }
                       }}
-                      className="flex-1 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 text-xs font-bold rounded-lg border border-emerald-500/20 flex items-center justify-center gap-1 transition cursor-pointer"
+                      className={`flex-1 py-1.5 text-xs font-bold rounded-lg border flex items-center justify-center gap-1 transition ${
+                        sisaTarget <= 0
+                          ? 'bg-slate-900 text-slate-500 border-slate-800 cursor-not-allowed opacity-60'
+                          : 'bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border-emerald-500/20 cursor-pointer'
+                      }`}
+                      title={sisaTarget <= 0 ? 'Target sudah tercapai 100%' : 'Nabung ke target ini'}
                     >
-                      <ArrowUpRight className="w-3.5 h-3.5" /> Nabung (Setor)
+                      <ArrowUpRight className="w-3.5 h-3.5" /> {sisaTarget <= 0 ? 'Target Terpenuhi (100%)' : 'Nabung (Setor)'}
                     </button>
                     {current > 0 && (
                       <button
@@ -646,14 +696,58 @@ export default function BudgetPage() {
 
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                         <div className="flex flex-col gap-1">
-                          <label className="text-[10px] text-slate-400 font-semibold">Nominal (Rp)</label>
-                          <input
-                            type="number"
-                            placeholder="Nominal..."
-                            value={txnNominal}
-                            onChange={(e) => setTxnNominal(e.target.value)}
-                            className="bg-slate-900 border border-slate-700 rounded px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-emerald-500 font-bold"
-                          />
+                          <div className="flex justify-between items-center text-[10px]">
+                            <label className="text-slate-400 font-semibold">Nominal (Rp)</label>
+                            {activeForm.type === 'setor' ? (
+                              <span className="text-emerald-400 font-bold">
+                                Maks: Rp {sisaTarget.toLocaleString('id-ID')}
+                              </span>
+                            ) : (
+                              <span className="text-rose-400 font-bold">
+                                Maks: Rp {current.toLocaleString('id-ID')}
+                              </span>
+                            )}
+                          </div>
+                          <div className="relative">
+                            <input
+                              type="number"
+                              placeholder={`Maks: ${activeForm.type === 'setor' ? sisaTarget.toLocaleString('id-ID') : current.toLocaleString('id-ID')}`}
+                              min="1"
+                              max={activeForm.type === 'setor' ? sisaTarget : current}
+                              value={txnNominal}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                if (val === '') {
+                                  setTxnNominal('');
+                                  return;
+                                }
+                                const numVal = Number(val);
+                                if (activeForm.type === 'setor' && numVal > sisaTarget) {
+                                  setTxnNominal(String(sisaTarget));
+                                  return;
+                                }
+                                if (activeForm.type === 'tarik' && numVal > current) {
+                                  setTxnNominal(String(current));
+                                  return;
+                                }
+                                setTxnNominal(val);
+                              }}
+                              className="bg-slate-900 border border-slate-700 rounded px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-emerald-500 font-bold w-full pr-12"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setTxnNominal(String(activeForm.type === 'setor' ? sisaTarget : current))}
+                              className="absolute right-1.5 top-1/2 -translate-y-1/2 px-1.5 py-0.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-[9px] font-bold cursor-pointer transition"
+                              title="Isi nominal maksimal"
+                            >
+                              Maks
+                            </button>
+                          </div>
+                          {activeForm.type === 'setor' && sisaTarget > 0 && (
+                            <p className="text-[10px] text-slate-400">
+                              *Sisa target: <span className="text-emerald-400 font-semibold">Rp {sisaTarget.toLocaleString('id-ID')}</span> lagi (setor dibatasi agar tidak melampaui target).
+                            </p>
+                          )}
                         </div>
 
                         <div className="flex flex-col gap-1">
@@ -1395,16 +1489,67 @@ export default function BudgetPage() {
                 </div>
               </div>
 
-              <div className="flex flex-col gap-1">
-                <label className="text-xs font-semibold text-slate-400">Nominal (Rp)</label>
-                <input
-                  type="number"
-                  value={editHistoryForm.nominal}
-                  onChange={e => setEditHistoryForm({ ...editHistoryForm, nominal: e.target.value })}
-                  className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none focus:border-emerald-500 text-xs font-bold"
-                  required
-                />
-              </div>
+              {(() => {
+                const selectedTargetForEdit = tabunganData.find(t => t.id === editHistoryForm.tabungan_id);
+                const targetNominalForEdit = Number(selectedTargetForEdit?.target_nominal) || 0;
+                const currentTerkumpulForEdit = Number(selectedTargetForEdit?.nominal_terkumpul) || 0;
+                const isSameTargetForEdit = editingHistoryItem && editingHistoryItem.tabungan_id === editHistoryForm.tabungan_id;
+                const oldContributionForEdit = isSameTargetForEdit 
+                  ? (editingHistoryItem.tipe === 'Setor' ? Number(editingHistoryItem.nominal) : -Number(editingHistoryItem.nominal))
+                  : 0;
+                const baseTerkumpulForEdit = Math.max(0, currentTerkumpulForEdit - oldContributionForEdit);
+                const maxAllowedSetorForEdit = Math.max(0, targetNominalForEdit - baseTerkumpulForEdit);
+
+                return (
+                  <div className="flex flex-col gap-1">
+                    <div className="flex justify-between items-center text-xs">
+                      <label className="font-semibold text-slate-400">Nominal (Rp)</label>
+                      {editHistoryForm.tipe === 'Setor' && (
+                        <span className="text-emerald-400 text-[10px] font-bold">
+                          Maks: Rp {maxAllowedSetorForEdit.toLocaleString('id-ID')}
+                        </span>
+                      )}
+                    </div>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        value={editHistoryForm.nominal}
+                        max={editHistoryForm.tipe === 'Setor' ? maxAllowedSetorForEdit : undefined}
+                        onChange={e => {
+                          const val = e.target.value;
+                          if (val === '') {
+                            setEditHistoryForm({ ...editHistoryForm, nominal: '' });
+                            return;
+                          }
+                          const numVal = Number(val);
+                          if (editHistoryForm.tipe === 'Setor' && maxAllowedSetorForEdit > 0 && numVal > maxAllowedSetorForEdit) {
+                            setEditHistoryForm({ ...editHistoryForm, nominal: String(maxAllowedSetorForEdit) });
+                            return;
+                          }
+                          setEditHistoryForm({ ...editHistoryForm, nominal: val });
+                        }}
+                        className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none focus:border-emerald-500 text-xs font-bold w-full pr-12"
+                        required
+                      />
+                      {editHistoryForm.tipe === 'Setor' && (
+                        <button
+                          type="button"
+                          onClick={() => setEditHistoryForm({ ...editHistoryForm, nominal: String(maxAllowedSetorForEdit) })}
+                          className="absolute right-1.5 top-1/2 -translate-y-1/2 px-1.5 py-0.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-[9px] font-bold cursor-pointer transition"
+                          title="Isi nominal maksimal"
+                        >
+                          Maks
+                        </button>
+                      )}
+                    </div>
+                    {editHistoryForm.tipe === 'Setor' && (
+                      <p className="text-[10px] text-slate-400">
+                        *Maksimal setor Rp {maxAllowedSetorForEdit.toLocaleString('id-ID')} agar total tabungan tidak melebihi target Rp {targetNominalForEdit.toLocaleString('id-ID')}.
+                      </p>
+                    )}
+                  </div>
+                );
+              })()}
 
               <div className="flex flex-col gap-1">
                 <label className="text-xs font-semibold text-slate-400">Catatan / Keterangan</label>
