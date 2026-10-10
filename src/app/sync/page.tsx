@@ -188,7 +188,7 @@ export default function SyncPage() {
             </button>
           </div>
           <p className="text-xs text-slate-400 mb-6 leading-relaxed">
-            Hubungkan akun Gmail Anda untuk melakukan sinkronisasi otomatis notifikasi transaksi dari bank (misal: Livin&apos; by Mandiri).
+            Hubungkan akun Gmail Anda untuk melakukan sinkronisasi otomatis notifikasi transaksi dari bank (didukung: <strong>Livin&apos; by Mandiri</strong> &amp; <strong>wondr by BNI</strong>).
           </p>
 
           {showGuide && (

@@ -92,11 +92,15 @@ function parseMimeEmail(rawSource: string): { body: string; subject: string } {
 function parseTransaction(body: string, subject: string) {
   // 1. Extract Nominal
   let nominal = 0;
-  let nominalMatch = body.match(/Total\s*Transaksi\s*Rp\s*([\d.,]+)/i);
-  if (!nominalMatch) nominalMatch = body.match(/Nominal\s*Transaksi\s*Rp\s*([\d.,]+)/i);
-  if (!nominalMatch) nominalMatch = body.match(/Nominal\s*Top-?up\s*Rp\s*([\d.,]+)/i);
-  if (!nominalMatch) nominalMatch = body.match(/Nominal\s*Transfer\s*Rp\s*([\d.,]+)/i);
-  if (!nominalMatch) nominalMatch = body.match(/Rp\s*([\d.,]+)/i);
+  let nominalMatch = body.match(/Total\s*Transaksi\s*Rp\s*([\d.,]+)/i)
+    || body.match(/Nominal\s*Transaksi\s*Rp\s*([\d.,]+)/i)
+    || body.match(/Nominal\s*Top-?up\s*Rp\s*([\d.,]+)/i)
+    || body.match(/Nominal\s*Transfer\s*Rp\s*([\d.,]+)/i)
+    || body.match(/Detail\s*pembayaran[\s\S]*?Nominal\s*Rp\s*([\d.,]+)/i)
+    || body.match(/Detail\s*pembayaran[\s\S]*?Total\s*Rp\s*([\d.,]+)/i)
+    || body.match(/Total\s*Rp\s*([\d.,]+)/i)
+    || body.match(/Nominal\s*Rp\s*([\d.,]+)/i)
+    || body.match(/Rp\s*([\d.,]+)/i);
 
   if (nominalMatch) {
     const nominalStr = nominalMatch[1].replace(/\./g, '').replace(/,/g, '.');
@@ -107,9 +111,9 @@ function parseTransaction(body: string, subject: string) {
 
   // 2. Extract Date
   let tanggal = new Date().toISOString().split('T')[0];
-  let tglMatch = body.match(/Tanggal\s*(\d{1,2}\s+\w+\s+\d{4})/i);
-  if (!tglMatch) tglMatch = body.match(/(\d{1,2}\s+(?:Jan|Feb|Mar|Apr|Mei|Jun|Jul|Agu|Sep|Okt|Nov|Des)\s+\d{4})/i);
-  if (!tglMatch) tglMatch = body.match(/(\d{1,2}\s+(?:Januari|Februari|Maret|April|Mei|Juni|Juli|Agustus|September|Oktober|November|Desember)\s+\d{4})/i);
+  let tglMatch = body.match(/Tanggal\s*(\d{1,2}\s+\w+\s+\d{4})/i)
+    || body.match(/(\d{1,2}\s+(?:Jan|Feb|Mar|Apr|Mei|Jun|Jul|Agu|Sep|Okt|Nov|Des)\s+\d{4})/i)
+    || body.match(/(\d{1,2}\s+(?:Januari|Februari|Maret|April|Mei|Juni|Juli|Agustus|September|Oktober|November|Desember)\s+\d{4})/i);
 
   if (tglMatch) {
     try {
@@ -139,38 +143,55 @@ function parseTransaction(body: string, subject: string) {
 
   // 3. Extract Time (Jam)
   let jamMatch = body.match(/(\d{2}:\d{2}:\d{2})\s*WIB/i);
+  if (!jamMatch) jamMatch = body.match(/Waktu\s*(\d{2}:\d{2}:\d{2})/i);
   if (!jamMatch) jamMatch = body.match(/Jam\s*(\d{2}:\d{2}:\d{2})/i);
   const jam = jamMatch ? jamMatch[1] : '';
 
-  // 4. Extract Recipient (Penerima)
-  let penerima = 'Mandiri Transaction';
-  const penerimaMatch = body.match(/Penerima\s+"?([\s\S]*?)"?\s+[\w\s().,\-]*?\s*-\s*ID/i);
-  if (penerimaMatch) {
-    const kandidat = penerimaMatch[1].trim();
-    const blacklist = ["Tanggal", "Nominal", "Jam", "Halo", "Berikut"];
-    if (kandidat.length > 2 && kandidat.length < 80 && !blacklist.some(k => kandidat.includes(k))) {
-      penerima = kandidat;
-    }
-  }
+  // 4. Extract Recipient & Bank Platform (Livin' Mandiri vs wondr by BNI)
+  const isBNI = /wondr|bni/i.test(body) || /bni/i.test(subject);
+  let penerima = isBNI ? 'BNI Transaction' : 'Mandiri Transaction';
 
-  if (penerima === 'Mandiri Transaction') {
-    const penyediaMatch = body.match(/Penyedia\s*Jasa\s+([\w\s]+?)(?:\s*\*{4}\d+)/i);
-    if (penyediaMatch) {
-      penerima = penyediaMatch[1].trim();
-    }
-  }
+  if (isBNI) {
+    const isQRIS = /bayar\s*pakai\s*QRIS|Jenis\s*transaksi\s*QRIS/i.test(body);
+    const bniPenerimaMatch = body.match(/Penerima\s+([\w\s,.\-&'/()]+?)(?:\s+\w+,\s*\d{5},\s*ID|\s+Sumber\s*dana)/i)
+      || body.match(/Penerima\s+([\w\s,.\-&'/()]{2,60}?)(?:\s+Sumber|\s+Tanggal|\s+Detail)/i);
 
-  if (penerima === 'Mandiri Transaction') {
-    const transferMatch = body.match(/(?:Tujuan|Kepada)\s+([A-Za-z0-9\s,.\-]{3,50}?)(?:\s{2,}|\d{10,})/i);
-    if (transferMatch) {
-      penerima = transferMatch[1].trim();
+    if (bniPenerimaMatch) {
+      const namaMerchant = bniPenerimaMatch[1].trim();
+      penerima = isQRIS ? `QRIS: ${namaMerchant}` : namaMerchant;
+    } else if (isQRIS) {
+      penerima = 'QRIS wondr BNI';
     }
-  }
+  } else {
+    // Livin' Mandiri regexes
+    const penerimaMatch = body.match(/Penerima\s+"?([\s\S]*?)"?\s+[\w\s().,\-]*?\s*-\s*ID/i);
+    if (penerimaMatch) {
+      const kandidat = penerimaMatch[1].trim();
+      const blacklist = ["Tanggal", "Nominal", "Jam", "Halo", "Berikut"];
+      if (kandidat.length > 2 && kandidat.length < 80 && !blacklist.some(k => kandidat.includes(k))) {
+        penerima = kandidat;
+      }
+    }
 
-  if (penerima === 'Mandiri Transaction') {
-    const fallback = body.match(/(?:Penerima|Penyedia\s*Jasa|Tujuan|Kepada)\s+"?([\w\s',.\-&/()]{3,60}?)"?(?:\s*-\s*ID|\*{4}|\s{2,})/i);
-    if (fallback) {
-      penerima = fallback[1].trim();
+    if (penerima === 'Mandiri Transaction') {
+      const penyediaMatch = body.match(/Penyedia\s*Jasa\s+([\w\s]+?)(?:\s*\*{4}\d+)/i);
+      if (penyediaMatch) {
+        penerima = penyediaMatch[1].trim();
+      }
+    }
+
+    if (penerima === 'Mandiri Transaction') {
+      const transferMatch = body.match(/(?:Tujuan|Kepada)\s+([A-Za-z0-9\s,.\-]{3,50}?)(?:\s{2,}|\d{10,})/i);
+      if (transferMatch) {
+        penerima = transferMatch[1].trim();
+      }
+    }
+
+    if (penerima === 'Mandiri Transaction') {
+      const fallback = body.match(/(?:Penerima|Penyedia\s*Jasa|Tujuan|Kepada)\s+"?([\w\s',.\-&/()]{3,60}?)"?(?:\s*-\s*ID|\*{4}|\s{2,})/i);
+      if (fallback) {
+        penerima = fallback[1].trim();
+      }
     }
   }
 
@@ -178,22 +199,41 @@ function parseTransaction(body: string, subject: string) {
 
   // 5. Determine Transaction Type (Tipe)
   let tipe = 'Pengeluaran';
-  const outKeywords = ["Pembayaran", "Debit", "Transfer Keluar", "Tarik", "Top-up", "Top Up"];
+  const outKeywords = ["Pembayaran", "Debit", "Transfer Keluar", "Tarik", "Top-up", "Top Up", "Bayar", "QRIS"];
   const inKeywords = ["Kredit", "Transfer Masuk", "Terima", "Masuk"];
 
-  if (outKeywords.some(k => subject.includes(k))) {
+  if (outKeywords.some(k => subject.includes(k) || body.includes(k))) {
     tipe = 'Pengeluaran';
-  } else if (inKeywords.some(k => subject.includes(k))) {
+  } else if (inKeywords.some(k => subject.includes(k) || body.includes(k))) {
     tipe = 'Pemasukan';
+  }
+
+  // 6. Smart Category Detection
+  let kategori = 'Lainnya';
+  const lowerDesc = (penerima + ' ' + body).toLowerCase();
+
+  if (/pisang|mie|ayam|nasi|resto|warung|cafe|kopi|coffee|food|bakso|sate|makan|dapur|burger|pizza|martabak|roti|kuliner|snack/i.test(lowerDesc)) {
+    kategori = 'Makan';
+  } else if (/spbu|pertamina|shell|bp-akr|bensin|parkir|toll|tol\b|transport|grab|gojek|maxim/i.test(lowerDesc)) {
+    kategori = 'Bensin / Mobilitas';
+  } else if (/shopee|spay|tokopedia|lazada|tiktok|blibli/i.test(lowerDesc)) {
+    kategori = 'SPay';
+  } else if (/kos\b|kost\b|kontrakan/i.test(lowerDesc)) {
+    kategori = 'Kos';
+  } else if (/pln|listrik|pdam|wifi|indihome|pulsa|telkomsel|indosat|xl|tri|smartfren/i.test(lowerDesc)) {
+    kategori = 'Bulanan';
+  } else if (/netflix|spotify|bioskop|cinema|xxi|cgv|steam|playstation|game/i.test(lowerDesc)) {
+    kategori = 'Hiburan';
   }
 
   return {
     tanggal,
     tipe,
-    kategori: 'Lainnya',
+    kategori,
     nominal,
     catatan: jam ? `[${jam}] ${penerima}` : penerima,
     status: 'Cleared',
+    sumber: 'Bank',
     tanggal_bayar: tanggal
   };
 }
@@ -231,12 +271,19 @@ export async function POST(req: Request) {
     try {
       const lock = await client.getMailboxLock('INBOX');
       try {
-        // Search for emails from noreply.livin@bankmandiri.co.id
-        const searchResult = await client.search({
-          from: 'noreply.livin@bankmandiri.co.id'
-        });
+        // Search for emails from both Mandiri (Livin') and BNI (wondr)
+        let searchResult: number[] = [];
+        try {
+          const mandiriIds = (await client.search({ from: 'bankmandiri.co.id' })) || [];
+          const bniIds = (await client.search({ from: 'bni.co.id' })) || [];
+          searchResult = Array.from(new Set([...mandiriIds, ...bniIds])).sort((a, b) => a - b);
+        } catch (searchErr) {
+          console.warn('Fallback search query:', searchErr);
+          const fallbackIds = (await client.search({ from: 'noreply.livin@bankmandiri.co.id' })) || [];
+          searchResult = fallbackIds;
+        }
 
-        if (searchResult) {
+        if (searchResult && searchResult.length > 0) {
           const limitVal = limit ? parseInt(limit, 10) : 10;
           const sortedIds = searchResult.slice(-limitVal).reverse();
 
