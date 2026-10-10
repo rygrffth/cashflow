@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import { RefreshCw, CheckCircle, Loader2 } from 'lucide-react';
+import { RefreshCw, CheckCircle, Loader2, HelpCircle, ChevronDown, ChevronUp, ExternalLink, ShieldCheck } from 'lucide-react';
 
 import { KATEGORI_SYNC_OPTIONS as CATEGORIES } from '@/config/categories';
 import CurrencyInput from '@/components/CurrencyInput';
@@ -10,6 +10,7 @@ import CurrencyInput from '@/components/CurrencyInput';
 export default function SyncPage() {
   const [successMsg, setSuccessMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
+  const [showGuide, setShowGuide] = useState(false);
 
   // Sync state
   const [syncEmail, setSyncEmail] = useState('');
@@ -172,12 +173,79 @@ export default function SyncPage() {
 
       <div className="glass-card p-6 border-slate-700/50 space-y-6">
         <div>
-          <h2 className="text-lg font-bold text-slate-100 flex items-center gap-2 mb-2">
-            <RefreshCw className="w-5 h-5 text-emerald-400" /> Integrasi Layanan Data
-          </h2>
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-2">
+            <h2 className="text-lg font-bold text-slate-100 flex items-center gap-2">
+              <RefreshCw className="w-5 h-5 text-emerald-400" /> Integrasi Layanan Data (Gmail IMAP)
+            </h2>
+            <button
+              type="button"
+              onClick={() => setShowGuide(!showGuide)}
+              className="text-xs text-emerald-400 hover:text-emerald-300 font-bold flex items-center gap-1.5 py-1 px-3 bg-emerald-500/10 hover:bg-emerald-500/20 rounded-lg transition border border-emerald-500/30 cursor-pointer"
+            >
+              <HelpCircle className="w-3.5 h-3.5" />
+              <span>Panduan Setting IMAP</span>
+              {showGuide ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+            </button>
+          </div>
           <p className="text-xs text-slate-400 mb-6 leading-relaxed">
-            Hubungkan akun eksternal Anda untuk melakukan sinkronisasi log transaksi secara otomatis.
+            Hubungkan akun Gmail Anda untuk melakukan sinkronisasi otomatis notifikasi transaksi dari bank (misal: Livin&apos; by Mandiri).
           </p>
+
+          {showGuide && (
+            <div className="mb-6 p-4 rounded-xl bg-slate-950/60 border border-slate-800 space-y-3 text-xs text-slate-300 animate-fadeIn">
+              <h3 className="font-bold text-white text-sm flex items-center gap-2 text-emerald-400">
+                <ShieldCheck className="w-4 h-4" /> 3 Langkah Mengaktifkan IMAP & App Password:
+              </h3>
+              
+              <div className="space-y-3 pl-1 pt-1">
+                <div className="flex gap-2.5 items-start">
+                  <span className="w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-400 font-bold flex items-center justify-center text-[11px] flex-shrink-0 mt-0.5">1</span>
+                  <div>
+                    <strong className="text-slate-100">Aktifkan IMAP di Pengaturan Gmail:</strong>
+                    <p className="text-slate-400 text-[11px] mt-0.5">
+                      Buka Gmail di browser &rarr; Klik ikon gerigi (Setelan) kanan atas &rarr; <em>Lihat semua setelan</em> &rarr; Masuk ke tab <strong>Penerusan dan POP/IMAP</strong> &rarr; Pilih <strong>Aktifkan IMAP</strong> &rarr; Klik <em>Simpan Perubahan</em> di bagian bawah.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex gap-2.5 items-start">
+                  <span className="w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-400 font-bold flex items-center justify-center text-[11px] flex-shrink-0 mt-0.5">2</span>
+                  <div>
+                    <strong className="text-slate-100">Pastikan Verifikasi 2 Langkah (2FA) Google Aktif:</strong>
+                    <p className="text-slate-400 text-[11px] mt-0.5">
+                      Google mewajibkan Verifikasi 2 Langkah aktif untuk membuat App Password. Cek statusnya di menu Keamanan Akun Google Anda.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex gap-2.5 items-start">
+                  <span className="w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-400 font-bold flex items-center justify-center text-[11px] flex-shrink-0 mt-0.5">3</span>
+                  <div>
+                    <strong className="text-slate-100">Buat Sandi Aplikasi (App Password 16 Digit):</strong>
+                    <p className="text-slate-400 text-[11px] mt-0.5">
+                      Buka link pembuatan sandi aplikasi Google:{' '}
+                      <a 
+                        href="https://myaccount.google.com/apppasswords" 
+                        target="_blank" 
+                        rel="noreferrer"
+                        className="text-emerald-400 underline font-semibold hover:text-emerald-300 inline-flex items-center gap-1"
+                      >
+                        myaccount.google.com/apppasswords <ExternalLink className="w-3 h-3" />
+                      </a>
+                    </p>
+                    <p className="text-slate-400 text-[11px] mt-1">
+                      Ketik nama aplikasi (misal: <strong>Cashflow</strong>) &rarr; Klik <em>Buat</em> &rarr; Salin kode <strong>16 karakter</strong> yang muncul (misal: <code>abcd efgh ijkl mnop</code>) lalu tempelkan ke kolom <strong>Kode Otorisasi (App Password)</strong> di bawah.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-2.5 bg-amber-500/10 border border-amber-500/20 rounded-lg text-[11px] text-amber-300 flex items-center gap-2">
+                <span>💡</span>
+                <span><strong>Catatan Keamanan:</strong> Jangan gunakan kata sandi utama akun Google Anda. Selalu gunakan App Password (16 digit) demi keamanan akun Anda.</span>
+              </div>
+            </div>
+          )}
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
             <div className="flex flex-col gap-1.5">
