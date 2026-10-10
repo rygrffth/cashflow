@@ -2,12 +2,28 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Target, PlusCircle, TrendingUp, RefreshCw, Trash2, ArrowUpRight, ArrowDownLeft, ShieldAlert, Pencil } from 'lucide-react';
+import { 
+  Target, 
+  PlusCircle, 
+  TrendingUp, 
+  RefreshCw, 
+  Trash2, 
+  ArrowUpRight, 
+  ArrowDownLeft, 
+  Pencil, 
+  History, 
+  X, 
+  AlertTriangle, 
+  CheckCircle2, 
+  ShoppingCart,
+  Wallet
+} from 'lucide-react';
 
 export default function BudgetPage() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [tabunganData, setTabunganData] = useState<any[]>([]);
+  const [historyData, setHistoryData] = useState<any[]>([]);
   const [editingTabungan, setEditingTabungan] = useState<any | null>(null);
 
   // Add Target Form States
@@ -38,6 +54,19 @@ export default function BudgetPage() {
   const [txnCatatan, setTxnCatatan] = useState('');
   const [txnLoading, setTxnLoading] = useState(false);
 
+  // Delete Target Modal States
+  const [targetToDelete, setTargetToDelete] = useState<any | null>(null);
+  const [deleteTargetReason, setDeleteTargetReason] = useState('');
+  const [deleteTargetAction, setDeleteTargetAction] = useState<'spend' | 'return_bank' | 'delete_only'>('spend');
+  const [deletingTargetLoading, setDeletingTargetLoading] = useState(false);
+
+  // Delete History Item Modal States
+  const [historyToDelete, setHistoryToDelete] = useState<any | null>(null);
+  const [deleteHistoryReason, setDeleteHistoryReason] = useState('');
+  const [adjustBalanceOnDelete, setAdjustBalanceOnDelete] = useState(true);
+  const [reverseMainTxn, setReverseMainTxn] = useState(true);
+  const [deletingHistoryLoading, setDeletingHistoryLoading] = useState(false);
+
   const fetchTabungan = useCallback(async (isSilent = false) => {
     if (!isSilent) setLoading(true);
     else setRefreshing(true);
@@ -46,8 +75,20 @@ export default function BudgetPage() {
       const { data, error } = await supabase.from('tabungan').select('*').order('id', { ascending: true });
       if (error) throw error;
       setTabunganData(data || []);
-    } catch (e) {
+
+      // Fetch history from transaksi_tabungan
+      const { data: hData, error: hError } = await supabase
+        .from('transaksi_tabungan')
+        .select('*')
+        .order('tanggal', { ascending: false })
+        .order('id', { ascending: false });
+
+      if (!hError && hData) {
+        setHistoryData(hData);
+      }
+    } catch (e: any) {
       console.error(e);
+      setErrorMsg(`Gagal memuat tabungan: ${e.message}`);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -212,22 +253,136 @@ export default function BudgetPage() {
     }
   };
 
-  const handleDelete = async (id: number) => {
-    if (!confirm('Hapus target tabungan ini?')) return;
+  // Handle Target Deletion with Reason & Fund Options
+  const handleConfirmDeleteTarget = async () => {
+    if (!targetToDelete) return;
+    setDeletingTargetLoading(true);
+
     try {
-      const { error } = await supabase.from('tabungan').delete().eq('id', id);
+      const today = new Date();
+      const offset = today.getTimezoneOffset() * 60000;
+      const tglStr = new Date(today.getTime() - offset).toISOString().split('T')[0];
+      const terkumpul = Number(targetToDelete.nominal_terkumpul) || 0;
+
+      // Handle based on action if there is balance
+      if (terkumpul > 0) {
+        if (deleteTargetAction === 'return_bank') {
+          // Return to Bank balance as income
+          await supabase.from('transaksi').insert([{
+            tanggal: tglStr,
+            tipe: 'Pemasukan',
+            kategori: 'Tarik Tabungan',
+            nominal: terkumpul,
+            catatan: `Pengembalian Tabungan: ${targetToDelete.nama}${deleteTargetReason ? ' - ' + deleteTargetReason : ''}`.trim(),
+            status: 'Cleared',
+            tenggat_waktu: '',
+            tanggal_bayar: tglStr,
+            sumber: 'Bank',
+            tabungan_id: targetToDelete.id
+          }]);
+
+          await supabase.from('transaksi_tabungan').insert([{
+            tabungan_id: targetToDelete.id,
+            tanggal: tglStr,
+            nominal: terkumpul,
+            tipe: 'Tarik',
+            catatan: `Kembali ke Bank: ${deleteTargetReason || 'Batal nabung'}`.trim()
+          }]);
+        } else if (deleteTargetAction === 'spend') {
+          // Uang tabungan sudah dibelanjakan (misal beli kulkas)
+          // Catat penarikan di transaksi_tabungan sebagai arsip pencairan
+          await supabase.from('transaksi_tabungan').insert([{
+            tabungan_id: targetToDelete.id,
+            tanggal: tglStr,
+            nominal: terkumpul,
+            tipe: 'Tarik',
+            catatan: deleteTargetReason ? `[Dibelanjakan] ${deleteTargetReason}` : '[Pencairan Selesai]'
+          }]);
+        }
+      }
+
+      // Delete target from tabungan table
+      const { error } = await supabase.from('tabungan').delete().eq('id', targetToDelete.id);
       if (error) throw error;
+
+      setTargetToDelete(null);
+      setDeleteTargetReason('');
       fetchTabungan(true);
+      alert(`✅ Target tabungan "${targetToDelete.nama}" berhasil dihapus.`);
     } catch (e: any) {
       console.error(e);
-      alert(`Gagal menghapus target: ${e.message}`);
+      alert(`❌ Gagal menghapus target: ${e.message}`);
+    } finally {
+      setDeletingTargetLoading(false);
     }
   };
 
-  if (loading) return <div className="text-center text-emerald-400 py-20 animate-pulse">Memuat target tabungan...</div>;
+  // Handle Deleting Specific Item from History
+  const handleConfirmDeleteHistory = async () => {
+    if (!historyToDelete) return;
+    setDeletingHistoryLoading(true);
+
+    try {
+      const targetId = historyToDelete.tabungan_id;
+      const amt = Number(historyToDelete.nominal) || 0;
+      const isSetor = historyToDelete.tipe === 'Setor';
+
+      // 1. Adjust tabungan target balance if option selected
+      if (adjustBalanceOnDelete && targetId) {
+        const target = tabunganData.find(t => t.id === targetId);
+        if (target) {
+          const currentTerkumpul = Number(target.nominal_terkumpul) || 0;
+          // If deleting 'Setor', reduce balance; if deleting 'Tarik', restore balance
+          const newTerkumpul = isSetor ? Math.max(0, currentTerkumpul - amt) : currentTerkumpul + amt;
+          const targetNominal = Number(target.target_nominal) || 0;
+          const newStatus = newTerkumpul >= targetNominal ? 'Selesai' : 'Aktif';
+
+          await supabase.from('tabungan').update({
+            nominal_terkumpul: newTerkumpul,
+            status: newStatus
+          }).eq('id', targetId);
+        }
+      }
+
+      // 2. Delete linked transaction in main transaksi table if needed
+      if (reverseMainTxn && targetId) {
+        try {
+          await supabase.from('transaksi').delete().match({
+            tabungan_id: targetId,
+            nominal: amt,
+            tanggal: historyToDelete.tanggal
+          });
+        } catch (subErr) {
+          console.warn('Failed to clean up main transaksi:', subErr);
+        }
+      }
+
+      // 3. Delete from transaksi_tabungan
+      const { error } = await supabase.from('transaksi_tabungan').delete().eq('id', historyToDelete.id);
+      if (error) throw error;
+
+      setHistoryToDelete(null);
+      setDeleteHistoryReason('');
+      fetchTabungan(true);
+      alert(`✅ Riwayat transaksi tabungan berhasil dihapus.`);
+    } catch (e: any) {
+      console.error(e);
+      alert(`❌ Gagal menghapus riwayat: ${e.message}`);
+    } finally {
+      setDeletingHistoryLoading(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="text-center text-emerald-400 py-20 animate-pulse">
+        Memuat target tabungan...
+      </div>
+    );
+  }
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
       
       {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -235,12 +390,12 @@ export default function BudgetPage() {
           <h1 className="text-2xl font-bold text-white flex items-center gap-2">
             <Target className="w-6 h-6 text-emerald-400" /> Target Budget & Tabungan
           </h1>
-          <p className="text-sm text-slate-400">Kelola target tabungan kamu dan lacak progresnya</p>
+          <p className="text-sm text-slate-400">Kelola target tabungan, mutasi simpanan, dan riwayat pencairan dana</p>
         </div>
         
         <button
           onClick={() => fetchTabungan(true)}
-          className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-sm flex items-center gap-2 transition"
+          className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-sm flex items-center gap-2 transition cursor-pointer"
         >
           <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} /> Refresh
         </button>
@@ -250,6 +405,10 @@ export default function BudgetPage() {
         
         {/* Left Col: Target List */}
         <div className="lg:col-span-2 space-y-4">
+          <h2 className="text-sm font-bold text-slate-200 uppercase tracking-wider flex items-center gap-2">
+            <span>🎯</span> Daftar Target Tabungan ({tabunganData.length})
+          </h2>
+
           {tabunganData.length > 0 ? (
             tabunganData.map(item => {
               const target = Number(item.target_nominal) || 1;
@@ -271,12 +430,24 @@ export default function BudgetPage() {
                       </h3>
                       <p className="text-xs text-slate-400 mt-0.5">Kategori: <span className="text-slate-300 font-semibold">{item.kategori}</span> • Target: <span className="text-emerald-400 font-semibold">{item.tanggal_target || 'Tanpa Tenggat'}</span></p>
                     </div>
-                    <div className="flex gap-2 items-center opacity-0 group-hover:opacity-100 transition">
-                      <button onClick={() => setEditingTabungan(item)} className="text-slate-500 hover:text-emerald-400 transition cursor-pointer">
-                        <Pencil className="w-4 h-4" />
+                    <div className="flex gap-2 items-center">
+                      <button 
+                        onClick={() => setEditingTabungan(item)} 
+                        className="p-1.5 bg-slate-800/80 hover:bg-slate-700 text-slate-400 hover:text-emerald-400 rounded-lg transition cursor-pointer"
+                        title="Edit Target"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
                       </button>
-                      <button onClick={() => handleDelete(item.id)} className="text-slate-500 hover:text-rose-400 transition cursor-pointer">
-                        <Trash2 className="w-4 h-4" />
+                      <button 
+                        onClick={() => {
+                          setTargetToDelete(item);
+                          setDeleteTargetReason('');
+                          setDeleteTargetAction('spend');
+                        }} 
+                        className="p-1.5 bg-slate-800/80 hover:bg-rose-500/20 text-slate-400 hover:text-rose-400 rounded-lg transition cursor-pointer"
+                        title="Hapus / Cairkan Tabungan"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
                       </button>
                     </div>
                   </div>
@@ -305,22 +476,22 @@ export default function BudgetPage() {
                     <span className="text-slate-300">{pct.toFixed(1)}% Terkumpul</span>
                   </div>
 
-                  {/* Setor/Tarik Buttons */}
-                  {item.status !== 'Selesai' && (
-                    <div className="flex gap-2 pt-2 border-t border-slate-800/40">
-                      <button
-                        onClick={() => {
-                          if (isFormOpen && activeForm?.type === 'setor') setActiveForm(null);
-                          else {
-                            setActiveForm({ id: item.id, type: 'setor' });
-                            setTxnNominal('');
-                            setTxnCatatan('');
-                          }
-                        }}
-                        className="flex-1 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 text-xs font-bold rounded-lg border border-emerald-500/20 flex items-center justify-center gap-1 transition"
-                      >
-                        <ArrowUpRight className="w-3.5 h-3.5" /> Nabung (Setor)
-                      </button>
+                  {/* Setor/Tarik Buttons: ALWAYS ACTIVE even if Selesai */}
+                  <div className="flex gap-2 pt-2 border-t border-slate-800/40">
+                    <button
+                      onClick={() => {
+                        if (isFormOpen && activeForm?.type === 'setor') setActiveForm(null);
+                        else {
+                          setActiveForm({ id: item.id, type: 'setor' });
+                          setTxnNominal('');
+                          setTxnCatatan('');
+                        }
+                      }}
+                      className="flex-1 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 text-xs font-bold rounded-lg border border-emerald-500/20 flex items-center justify-center gap-1 transition cursor-pointer"
+                    >
+                      <ArrowUpRight className="w-3.5 h-3.5" /> Nabung (Setor)
+                    </button>
+                    {current > 0 && (
                       <button
                         onClick={() => {
                           if (isFormOpen && activeForm?.type === 'tarik') setActiveForm(null);
@@ -330,12 +501,12 @@ export default function BudgetPage() {
                             setTxnCatatan('');
                           }
                         }}
-                        className="flex-1 py-1.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 text-xs font-bold rounded-lg border border-rose-500/20 flex items-center justify-center gap-1 transition"
+                        className="flex-1 py-1.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 text-xs font-bold rounded-lg border border-rose-500/20 flex items-center justify-center gap-1 transition cursor-pointer"
                       >
-                        <ArrowDownLeft className="w-3.5 h-3.5" /> Tarik
+                        <ArrowDownLeft className="w-3.5 h-3.5" /> Tarik / Pakai Dana
                       </button>
-                    </div>
-                  )}
+                    )}
+                  </div>
 
                   {/* Setor/Tarik Inline Form */}
                   {activeForm && activeForm.id === item.id && (
@@ -344,7 +515,7 @@ export default function BudgetPage() {
                         {activeForm.type === 'setor' ? (
                           <span className="text-emerald-400 flex items-center gap-1">📈 Setor ke {item.nama}</span>
                         ) : (
-                          <span className="text-rose-400 flex items-center gap-1">📉 Tarik dari {item.nama}</span>
+                          <span className="text-rose-400 flex items-center gap-1">📉 Tarik / Gunakan Dana dari {item.nama}</span>
                         )}
                       </h4>
 
@@ -361,7 +532,7 @@ export default function BudgetPage() {
                         </div>
 
                         <div className="flex flex-col gap-1">
-                          <label className="text-[10px] text-slate-400 font-semibold">Sumber Rekening</label>
+                          <label className="text-[10px] text-slate-400 font-semibold">Tujuan / Rekening</label>
                           <select
                             value={txnSumber}
                             onChange={(e) => setTxnSumber(e.target.value as 'Bank' | 'Cash')}
@@ -373,10 +544,10 @@ export default function BudgetPage() {
                         </div>
 
                         <div className="flex flex-col gap-1">
-                          <label className="text-[10px] text-slate-400 font-semibold">Catatan</label>
+                          <label className="text-[10px] text-slate-400 font-semibold">Catatan / Alasan (Opsional)</label>
                           <input
                             type="text"
-                            placeholder="Keterangan..."
+                            placeholder="Misal: Buat beli kulkas, dll..."
                             value={txnCatatan}
                             onChange={(e) => setTxnCatatan(e.target.value)}
                             className="bg-slate-900 border border-slate-700 rounded px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-emerald-500"
@@ -387,14 +558,14 @@ export default function BudgetPage() {
                       <div className="flex justify-end gap-2 pt-2">
                         <button
                           onClick={() => setActiveForm(null)}
-                          className="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-400 rounded text-[11px]"
+                          className="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-400 rounded text-[11px] cursor-pointer"
                         >
                           Batal
                         </button>
                         <button
                           disabled={txnLoading}
                           onClick={() => handleTransaction(item.id, current, target, item.nama)}
-                          className={`px-3 py-1 rounded text-[11px] font-bold text-slate-950 ${activeForm.type === 'setor' ? 'bg-emerald-400 hover:bg-emerald-500' : 'bg-rose-400 hover:bg-rose-500'}`}
+                          className={`px-3 py-1 rounded text-[11px] font-bold text-slate-950 cursor-pointer ${activeForm.type === 'setor' ? 'bg-emerald-400 hover:bg-emerald-500' : 'bg-rose-400 hover:bg-rose-500'}`}
                         >
                           {txnLoading ? 'Menyimpan...' : 'Konfirmasi'}
                         </button>
@@ -431,7 +602,7 @@ export default function BudgetPage() {
                 </p>
               </div>
               <p className="text-[11px] text-slate-500 italic border-t border-slate-800/80 pt-2 mt-2">
-                *Nilai total ini yang menjadi acuan pengurang saldo Dana Operasional Anda di halaman Dashboard.
+                *Total dana yang berhasil disisihkan dan aman tersimpan di pos tabungan Anda.
               </p>
             </div>
           </div>
@@ -547,6 +718,319 @@ export default function BudgetPage() {
 
       </div>
 
+      {/* History Section: Riwayat Transaksi Tabungan */}
+      <div className="glass-card p-6 border-slate-700/50 space-y-4">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-b border-slate-800/80 pb-4">
+          <div>
+            <h2 className="text-lg font-bold text-white flex items-center gap-2">
+              <History className="w-5 h-5 text-emerald-400" /> 📜 Riwayat Transaksi Tabungan
+            </h2>
+            <p className="text-xs text-slate-400">Daftar mutasi setor, tarik, dan pencairan dana tabungan</p>
+          </div>
+          <span className="px-2.5 py-1 bg-slate-800 text-slate-300 text-xs font-semibold rounded-lg">
+            {historyData.length} Catatan Riwayat
+          </span>
+        </div>
+
+        {historyData.length > 0 ? (
+          <div className="overflow-x-auto no-scrollbar">
+            <table className="w-full text-left text-xs">
+              <thead>
+                <tr className="border-b border-slate-800 text-slate-400">
+                  <th className="py-2.5 px-3">Tanggal</th>
+                  <th className="py-2.5 px-3">Target Tabungan</th>
+                  <th className="py-2.5 px-3">Tipe</th>
+                  <th className="py-2.5 px-3">Nominal</th>
+                  <th className="py-2.5 px-3">Catatan / Alasan</th>
+                  <th className="py-2.5 px-3 text-right">Aksi</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800/60">
+                {historyData.map(h => {
+                  const target = tabunganData.find(t => t.id === h.tabungan_id);
+                  const isSetor = h.tipe === 'Setor';
+                  return (
+                    <tr key={h.id} className="hover:bg-slate-800/30 transition">
+                      <td className="py-3 px-3 text-slate-300 whitespace-nowrap">{h.tanggal}</td>
+                      <td className="py-3 px-3 font-semibold text-white whitespace-nowrap">
+                        {target ? target.nama : `Target #${h.tabungan_id}`}
+                      </td>
+                      <td className="py-3 px-3 whitespace-nowrap">
+                        {isSetor ? (
+                          <span className="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[11px] font-bold">
+                            📈 Setor
+                          </span>
+                        ) : (
+                          <span className="px-2 py-0.5 rounded bg-rose-500/10 text-rose-400 border border-rose-500/20 text-[11px] font-bold">
+                            📉 Tarik / Pakai
+                          </span>
+                        )}
+                      </td>
+                      <td className={`py-3 px-3 font-extrabold whitespace-nowrap ${isSetor ? 'text-emerald-400' : 'text-rose-400'}`}>
+                        {isSetor ? '+' : '-'}Rp {Number(h.nominal).toLocaleString('id-ID')}
+                      </td>
+                      <td className="py-3 px-3 text-slate-300 max-w-xs truncate">
+                        {h.catatan || <span className="text-slate-500 italic">Tanpa catatan</span>}
+                      </td>
+                      <td className="py-3 px-3 text-right whitespace-nowrap">
+                        <button
+                          onClick={() => {
+                            setHistoryToDelete(h);
+                            setDeleteHistoryReason('');
+                            setAdjustBalanceOnDelete(true);
+                            setReverseMainTxn(true);
+                          }}
+                          className="p-1.5 text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 rounded transition cursor-pointer"
+                          title="Hapus riwayat ini"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="py-8 text-center text-slate-500 text-xs">
+            Belum ada riwayat transaksi tabungan tercatat.
+          </div>
+        )}
+      </div>
+
+      {/* Delete Target Modal */}
+      {targetToDelete && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fadeIn text-sm">
+          <div className="glass-card max-w-lg w-full p-6 border-slate-700/50 space-y-4">
+            <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+              <h3 className="font-bold text-white flex items-center gap-2 text-rose-400">
+                <Trash2 className="w-4 h-4 text-rose-400" /> Hapus / Tutup Tabungan &ldquo;{targetToDelete.nama}&rdquo;
+              </h3>
+              <button 
+                onClick={() => setTargetToDelete(null)}
+                className="text-slate-400 hover:text-white cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-3 bg-slate-900/80 rounded-xl border border-slate-800 text-xs space-y-1">
+              <div className="flex justify-between text-slate-400">
+                <span>Target:</span>
+                <span className="font-semibold text-slate-200">Rp {Number(targetToDelete.target_nominal).toLocaleString('id-ID')}</span>
+              </div>
+              <div className="flex justify-between text-slate-400">
+                <span>Dana Terkumpul Saat Ini:</span>
+                <span className="font-extrabold text-emerald-400">Rp {Number(targetToDelete.nominal_terkumpul).toLocaleString('id-ID')}</span>
+              </div>
+            </div>
+
+            {/* Input Alasan (Opsional) */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-slate-300">
+                Alasan / Catatan Penggunaan Dana <span className="text-slate-500 font-normal">(Opsional)</span>
+              </label>
+              <input
+                type="text"
+                placeholder="Misal: Buat beli kulkas, ditarik tunai, target batal, dll..."
+                value={deleteTargetReason}
+                onChange={(e) => setDeleteTargetReason(e.target.value)}
+                className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none focus:border-emerald-500 text-xs"
+              />
+              <p className="text-[11px] text-slate-400 italic">
+                *Boleh diisi alasan belanja (misal: buat beli kulkas) atau dibiarkan kosong tanpa alasan.
+              </p>
+            </div>
+
+            {/* Pilihan Tindakan Dana Terkumpul jika > 0 */}
+            {Number(targetToDelete.nominal_terkumpul) > 0 ? (
+              <div className="space-y-2 pt-2 border-t border-slate-800/80">
+                <label className="text-xs font-semibold text-slate-300">
+                  Tindakan untuk Dana Terkumpul (Rp {Number(targetToDelete.nominal_terkumpul).toLocaleString('id-ID')}):
+                </label>
+                
+                <div className="space-y-2">
+                  <label 
+                    onClick={() => setDeleteTargetAction('spend')}
+                    className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition ${deleteTargetAction === 'spend' ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-slate-900/50 border-slate-800 hover:border-slate-700'}`}
+                  >
+                    <input 
+                      type="radio" 
+                      name="deleteAction" 
+                      checked={deleteTargetAction === 'spend'} 
+                      onChange={() => setDeleteTargetAction('spend')}
+                      className="mt-0.5 text-emerald-500" 
+                    />
+                    <div>
+                      <div className="text-xs font-bold text-emerald-400 flex items-center gap-1.5">
+                        <ShoppingCart className="w-3.5 h-3.5" /> Sudah Dibelanjakan / Digunakan
+                      </div>
+                      <p className="text-[11px] text-slate-400 mt-0.5">
+                        Uang tabungan sudah dipakai sesuai kebutuhan (misal beli kulkas). Riwayat penarikan disimpan dan target ditutup.
+                      </p>
+                    </div>
+                  </label>
+
+                  <label 
+                    onClick={() => setDeleteTargetAction('return_bank')}
+                    className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition ${deleteTargetAction === 'return_bank' ? 'bg-blue-500/10 border-blue-500/30' : 'bg-slate-900/50 border-slate-800 hover:border-slate-700'}`}
+                  >
+                    <input 
+                      type="radio" 
+                      name="deleteAction" 
+                      checked={deleteTargetAction === 'return_bank'} 
+                      onChange={() => setDeleteTargetAction('return_bank')}
+                      className="mt-0.5 text-blue-500" 
+                    />
+                    <div>
+                      <div className="text-xs font-bold text-blue-400 flex items-center gap-1.5">
+                        <Wallet className="w-3.5 h-3.5" /> Batalkan & Kembalikan ke Saldo Bank
+                      </div>
+                      <p className="text-[11px] text-slate-400 mt-0.5">
+                        Uang tabungan dikembalikan ke saldo Bank operasional sebagai pemasukan tarik tabungan.
+                      </p>
+                    </div>
+                  </label>
+
+                  <label 
+                    onClick={() => setDeleteTargetAction('delete_only')}
+                    className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition ${deleteTargetAction === 'delete_only' ? 'bg-rose-500/10 border-rose-500/30' : 'bg-slate-900/50 border-slate-800 hover:border-slate-700'}`}
+                  >
+                    <input 
+                      type="radio" 
+                      name="deleteAction" 
+                      checked={deleteTargetAction === 'delete_only'} 
+                      onChange={() => setDeleteTargetAction('delete_only')}
+                      className="mt-0.5 text-rose-500" 
+                    />
+                    <div>
+                      <div className="text-xs font-bold text-rose-400 flex items-center gap-1.5">
+                        <Trash2 className="w-3.5 h-3.5" /> Hapus Bersih Data Target
+                      </div>
+                      <p className="text-[11px] text-slate-400 mt-0.5">
+                        Hapus target dari daftar tanpa mutasi saldo tambahan.
+                      </p>
+                    </div>
+                  </label>
+                </div>
+              </div>
+            ) : (
+              <p className="text-xs text-slate-400 pt-2 border-t border-slate-800">
+                Target ini belum memiliki saldo terkumpul. Target akan langsung dihapus dari sistem.
+              </p>
+            )}
+
+            <div className="flex gap-2 pt-3 justify-end border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => setTargetToDelete(null)}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-bold transition cursor-pointer"
+              >
+                Batal
+              </button>
+              <button
+                disabled={deletingTargetLoading}
+                onClick={handleConfirmDeleteTarget}
+                className="px-4 py-2 bg-rose-500 hover:bg-rose-600 text-white rounded-lg text-xs font-bold transition cursor-pointer"
+              >
+                {deletingTargetLoading ? 'Menghapus...' : 'Konfirmasi Hapus'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete History Item Modal */}
+      {historyToDelete && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fadeIn text-sm">
+          <div className="glass-card max-w-md w-full p-6 border-slate-700/50 space-y-4">
+            <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+              <h3 className="font-bold text-white flex items-center gap-2 text-rose-400">
+                <Trash2 className="w-4 h-4 text-rose-400" /> Hapus Riwayat Transaksi Tabungan
+              </h3>
+              <button 
+                onClick={() => setHistoryToDelete(null)}
+                className="text-slate-400 hover:text-white cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-3 bg-slate-900/80 rounded-xl border border-slate-800 text-xs space-y-1.5">
+              <div className="flex justify-between text-slate-400">
+                <span>Tanggal:</span>
+                <span className="text-slate-200 font-semibold">{historyToDelete.tanggal}</span>
+              </div>
+              <div className="flex justify-between text-slate-400">
+                <span>Tipe & Nominal:</span>
+                <span className={`font-extrabold ${historyToDelete.tipe === 'Setor' ? 'text-emerald-400' : 'text-rose-400'}`}>
+                  {historyToDelete.tipe === 'Setor' ? '📈 Setor' : '📉 Tarik'} Rp {Number(historyToDelete.nominal).toLocaleString('id-ID')}
+                </span>
+              </div>
+              <div className="flex justify-between text-slate-400">
+                <span>Catatan Saat Ini:</span>
+                <span className="text-slate-200 italic">{historyToDelete.catatan || '-'}</span>
+              </div>
+            </div>
+
+            {/* Input Alasan (Opsional) */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-slate-300">
+                Alasan Penghapusan <span className="text-slate-500 font-normal">(Opsional)</span>
+              </label>
+              <input
+                type="text"
+                placeholder="Misal: Salah input nominal, dibatalkan, buat beli kulkas, dll..."
+                value={deleteHistoryReason}
+                onChange={(e) => setDeleteHistoryReason(e.target.value)}
+                className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none focus:border-emerald-500 text-xs"
+              />
+            </div>
+
+            {/* Opsi Penyesuaian Saldo */}
+            <div className="space-y-2 pt-2 border-t border-slate-800 text-xs">
+              <label className="flex items-center gap-2 text-slate-300 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={adjustBalanceOnDelete}
+                  onChange={(e) => setAdjustBalanceOnDelete(e.target.checked)}
+                  className="rounded border-slate-700 text-emerald-500 focus:ring-0"
+                />
+                <span>Sesuaikan saldo terkumpul pada target tabungan terkait</span>
+              </label>
+
+              <label className="flex items-center gap-2 text-slate-300 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={reverseMainTxn}
+                  onChange={(e) => setReverseMainTxn(e.target.checked)}
+                  className="rounded border-slate-700 text-emerald-500 focus:ring-0"
+                />
+                <span>Hapus juga pencatatan transaksi di riwayat transaksi utama</span>
+              </label>
+            </div>
+
+            <div className="flex gap-2 pt-3 justify-end border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => setHistoryToDelete(null)}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-bold transition cursor-pointer"
+              >
+                Batal
+              </button>
+              <button
+                disabled={deletingHistoryLoading}
+                onClick={handleConfirmDeleteHistory}
+                className="px-4 py-2 bg-rose-500 hover:bg-rose-600 text-white rounded-lg text-xs font-bold transition cursor-pointer"
+              >
+                {deletingHistoryLoading ? 'Menghapus...' : 'Konfirmasi Hapus'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Edit Tabungan Modal */}
       {editingTabungan && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fadeIn text-sm">
@@ -557,7 +1041,7 @@ export default function BudgetPage() {
               </h3>
               <button 
                 onClick={() => setEditingTabungan(null)}
-                className="text-slate-400 hover:text-white"
+                className="text-slate-400 hover:text-white cursor-pointer"
               >
                 ✕
               </button>

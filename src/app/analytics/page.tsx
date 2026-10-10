@@ -137,8 +137,8 @@ export default function AnalyticsPage() {
       }
     });
 
-    const totalReal = bankSum + cashSum;
-    const saldoOp = totalReal - tabunganTotal;
+    const totalReal = bankSum + cashSum + tabunganTotal;
+    const saldoOp = bankSum + cashSum;
 
     // Remaining days to salary (robust UTC/midnight calculation)
     let calculatedDays = 1;

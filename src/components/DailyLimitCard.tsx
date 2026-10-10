@@ -23,6 +23,12 @@ export default function DailyLimitCard({ batasHr, outHariHarian, saldoOp, sisaHa
 
   // Determine status message and colors
   const getStatusContent = () => {
+    if (batasHr <= 0 || sisaJatahHariIni < 0) {
+      return {
+        bg: 'bg-rose-500/10 border-rose-500/20 text-rose-400',
+        text: `🔴 PERHATIAN! Budget minus Rp ${Math.abs(sisaJatahHariIni).toLocaleString('id-ID')}. Perlu berhemat atau periksa saldo operasional.`
+      };
+    }
     if (persentase < 30) {
       return {
         bg: 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400',

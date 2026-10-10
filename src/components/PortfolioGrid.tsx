@@ -180,7 +180,7 @@ export default function PortfolioGrid({
               <h3 className="text-lg font-bold text-indigo-300">
                 {formatCurrency(saldoOp, showOp)}
               </h3>
-              <p className="text-[10px] text-slate-400 mt-1">Saldo Aset dikurangi Tabungan</p>
+              <p className="text-[10px] text-slate-400 mt-1">Saldo Bank + Uang Cash siap pakai</p>
             </div>
             <span className="p-2 bg-indigo-500/10 rounded-lg text-indigo-400 border border-indigo-500/20">
               <Briefcase className="w-4 h-4" />

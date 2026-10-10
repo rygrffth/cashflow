@@ -139,12 +139,12 @@ export default function Dashboard() {
       const computedCash = totalInCash - totalOutCash;
       setUangCash(computedCash);
 
-      // Total Aset
-      const computedTotalReal = computedBank + computedCash;
+      // Total Aset (Saldo Bank + Uang Cash + Tabungan)
+      const computedTotalReal = computedBank + computedCash + tabunganSum;
       setTotalAset(computedTotalReal);
 
-      // Dana Operasional
-      const computedOp = computedBank + computedCash - tabunganSum;
+      // Dana Operasional: Saldo Bank + Uang Cash (karena dana tabungan sudah terpotong saat disetor)
+      const computedOp = computedBank + computedCash;
       setSaldoOp(computedOp);
 
       // Get gajian date settings
