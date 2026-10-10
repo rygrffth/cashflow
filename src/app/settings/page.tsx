@@ -2,8 +2,9 @@
 
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Settings, Save, Loader2, CalendarClock, Lock, Unlock, Database, Shuffle, Tags } from 'lucide-react';
+import { Settings, Save, Loader2, CalendarClock, Lock, Unlock, Database, Shuffle, Tags, Download, FileSpreadsheet } from 'lucide-react';
 import { BASE_CATEGORIES } from '@/config/categories';
+import { calculateGajianCycle } from '@/lib/gajianUtils';
 
 export default function SettingsPage() {
   const [loading, setLoading] = useState(true);
@@ -39,6 +40,79 @@ export default function SettingsPage() {
   const [migrating, setMigrating] = useState(false);
   const [migrateSuccess, setMigrateSuccess] = useState('');
   const [migrateError, setMigrateError] = useState('');
+
+  // Backup & Export States
+  const [exporting, setExporting] = useState(false);
+
+  const handleExportJSON = async () => {
+    setExporting(true);
+    try {
+      const [txns, tabungan, piutang, investasi, settings] = await Promise.all([
+        supabase.from('transaksi').select('*'),
+        supabase.from('tabungan').select('*'),
+        supabase.from('piutang').select('*'),
+        supabase.from('investasi').select('*'),
+        supabase.from('settings').select('*'),
+      ]);
+
+      const backupData = {
+        exportDate: new Date().toISOString(),
+        transaksi: txns.data || [],
+        tabungan: tabungan.data || [],
+        piutang: piutang.data || [],
+        investasi: investasi.data || [],
+        settings: settings.data || [],
+      };
+
+      const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `backup_keuangan_${new Date().toISOString().split('T')[0]}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err: any) {
+      alert('Gagal mengekspor data: ' + (err.message || 'Error'));
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const handleExportCSV = async () => {
+    setExporting(true);
+    try {
+      const { data: txns, error } = await supabase.from('transaksi').select('*').order('tanggal', { ascending: false });
+      if (error) throw error;
+      if (!txns || txns.length === 0) {
+        alert('Tidak ada transaksi untuk diekspor.');
+        return;
+      }
+
+      const headers = ['id', 'tanggal', 'tipe', 'kategori', 'nominal', 'catatan', 'sumber', 'status'];
+      const csvRows = [headers.join(',')];
+
+      for (const t of txns) {
+        const values = headers.map(h => {
+          const val = t[h] ?? '';
+          const escaped = String(val).replace(/"/g, '""');
+          return `"${escaped}"`;
+        });
+        csvRows.push(values.join(','));
+      }
+
+      const blob = new Blob([csvRows.join('\n')], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `transaksi_keuangan_${new Date().toISOString().split('T')[0]}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err: any) {
+      alert('Gagal mengekspor CSV: ' + (err.message || 'Error'));
+    } finally {
+      setExporting(false);
+    }
+  };
 
   const handleMigrate = async () => {
     if (!sourceCategory || !targetCategory) {
@@ -324,6 +398,36 @@ export default function SettingsPage() {
               />
             </div>
 
+            {/* Live Preview Siklus Gajian Dinamis */}
+            {tanggalGajian && (() => {
+              const preview = calculateGajianCycle(tanggalGajian);
+              return (
+                <div className="bg-slate-950/70 border border-slate-800 rounded-xl p-3.5 text-xs space-y-1.5">
+                  <div className="flex justify-between items-center text-slate-300">
+                    <span className="text-slate-400">Target Siklus Aktif:</span>
+                    <span className="font-bold text-emerald-400">{preview.targetDateFormatted}</span>
+                  </div>
+                  <div className="flex justify-between items-center text-slate-300">
+                    <span className="text-slate-400">Sisa Hari ke Gajian:</span>
+                    <span className="font-bold text-pink-400">{preview.daysRemaining} Hari</span>
+                  </div>
+                  <div className="flex justify-between items-center text-slate-300">
+                    <span className="text-slate-400">Patokan Tanggal:</span>
+                    <span className="font-semibold text-slate-300">Setiap tanggal {preview.dayOfMonth}</span>
+                  </div>
+                  {preview.isPastRolledOver ? (
+                    <p className="text-[11px] text-amber-400/90 pt-1.5 border-t border-slate-800/80">
+                      🔄 Tanggal yang tersimpan sudah terlewat, sistem otomatis mengunci target ke siklus bulan berikutnya. Anda tetap bebas mengubah tanggal ini kapan saja.
+                    </p>
+                  ) : (
+                    <p className="text-[11px] text-slate-400 pt-1.5 border-t border-slate-800/80">
+                      💡 Anda tetap bebas mengubah tanggal ini kapan saja sesuai jadwal gajian aktual.
+                    </p>
+                  )}
+                </div>
+              );
+            })()}
+
             <button
               type="submit"
               disabled={saving}
@@ -533,6 +637,36 @@ export default function SettingsPage() {
                 Migrasikan Kategori
               </>
             )}
+          </button>
+        </div>
+      </div>
+
+      {/* Ekspor & Backup Data Card */}
+      <div className="glass-card p-6 border-slate-700/50">
+        <h2 className="text-lg font-bold text-slate-100 flex items-center gap-2 mb-2">
+          <Database className="w-5 h-5 text-emerald-400" /> Ekspor & Backup Data
+        </h2>
+        <p className="text-xs text-slate-400 mb-6">
+          Unduh salinan cadangan data keuangan Anda untuk keperluan arsip offline atau pembukaan di Excel/Spreadsheet.
+        </p>
+
+        <div className="flex flex-wrap gap-4">
+          <button
+            onClick={handleExportCSV}
+            disabled={exporting}
+            className="flex items-center gap-2 px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-emerald-400 rounded-lg font-bold text-xs border border-slate-700 transition"
+          >
+            {exporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileSpreadsheet className="w-4 h-4" />}
+            Ekspor Transaksi (CSV / Excel)
+          </button>
+
+          <button
+            onClick={handleExportJSON}
+            disabled={exporting}
+            className="flex items-center gap-2 px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-indigo-400 rounded-lg font-bold text-xs border border-slate-700 transition"
+          >
+            {exporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+            Backup Lengkap (JSON Database)
           </button>
         </div>
       </div>

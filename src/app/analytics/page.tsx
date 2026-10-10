@@ -2,9 +2,9 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
-import { 
-  BarChart3, RefreshCw, Calendar, Filter, TrendingUp, 
-  ArrowUpRight, ArrowDownLeft, Landmark, Wallet, HelpCircle, 
+import {
+  BarChart3, RefreshCw, Calendar, Filter, TrendingUp,
+  ArrowUpRight, ArrowDownLeft, Landmark, Wallet, HelpCircle,
   ChevronRight, CalendarDays, AlertTriangle, CheckCircle2, AlertCircle,
   Activity, Target
 } from 'lucide-react';
@@ -13,12 +13,16 @@ import {
   Line, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ReferenceLine,
   AreaChart, Area
 } from 'recharts';
+import { getWIBDateString, parseDateParts } from '@/lib/dateUtils';
+import { calculateGajianCycle } from '@/lib/gajianUtils';
+import { computeFinancialBalances } from '@/lib/balanceUtils';
 
 export default function AnalyticsPage() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [transactions, setTransactions] = useState<any[]>([]);
   const [tabunganTotal, setTabunganTotal] = useState(0);
+  const [investasiTotal, setInvestasiTotal] = useState(0);
   const [gajianDate, setGajianDate] = useState('2026-05-17'); // Default date string format
   const [categoryBudgets, setCategoryBudgets] = useState<Record<string, number>>({});
 
@@ -30,9 +34,9 @@ export default function AnalyticsPage() {
   const [customStart, setCustomStart] = useState(() => {
     const d = new Date();
     d.setDate(d.getDate() - 30);
-    return d.toISOString().split('T')[0];
+    return getWIBDateString(d);
   });
-  const [customEnd, setCustomEnd] = useState(() => new Date().toISOString().split('T')[0]);
+  const [customEnd, setCustomEnd] = useState(() => getWIBDateString());
 
   // Laporan Filter States
   const [laporanMode, setLaporanMode] = useState<'minggu' | 'bulan' | 'custom'>('bulan');
@@ -41,9 +45,9 @@ export default function AnalyticsPage() {
   const [laporanCustomStart, setLaporanCustomStart] = useState(() => {
     const d = new Date();
     d.setDate(d.getDate() - 30);
-    return d.toISOString().split('T')[0];
+    return getWIBDateString(d);
   });
-  const [laporanCustomEnd, setLaporanCustomEnd] = useState(() => new Date().toISOString().split('T')[0]);
+  const [laporanCustomEnd, setLaporanCustomEnd] = useState(() => getWIBDateString());
 
   // Hydration safety flag
   const [isMounted, setIsMounted] = useState(false);
@@ -74,12 +78,17 @@ export default function AnalyticsPage() {
       if (txnErr) throw txnErr;
       setTransactions(txnData || []);
 
-      // 2. Fetch tabungan to calculate operational limit
+      // 2. Fetch tabungan
       const { data: tabunganData } = await supabase.from('tabungan').select('nominal_terkumpul');
       const totalTabungan = (tabunganData || []).reduce((sum, item) => sum + Number(item.nominal_terkumpul), 0);
       setTabunganTotal(totalTabungan);
 
-      // 3. Fetch setting gajian & excluded categories
+      // 3. Fetch investasi
+      const { data: invData } = await supabase.from('investasi').select('*');
+      const totalInv = (invData || []).reduce((sum, item) => sum + Number(item.nominal_sekarang ?? item.nominal_modal), 0);
+      setInvestasiTotal(totalInv);
+
+      // 4. Fetch setting gajian & excluded categories
       const { data: settingData } = await supabase.from('settings').select('*');
       if (settingData && settingData.length > 0) {
         const found = settingData.find(s => s.key === 'tanggal_gajian');
@@ -117,46 +126,23 @@ export default function AnalyticsPage() {
 
   // Date limit logic (Batas Harian calculation)
   const stats = useMemo(() => {
-    // Current local details
-    const now = new Date();
-    const todayStr = now.toISOString().split('T')[0];
+    // Current WIB details
+    const todayStr = getWIBDateString();
 
-    // Compute Bank and Cash balances
-    let bankSum = 0;
-    let cashSum = 0;
-    transactions.forEach(t => {
-      if (t.status === 'Cleared') {
-        const nom = Number(t.nominal) || 0;
-        if (t.tipe === 'Pemasukan') {
-          if (t.sumber === 'Bank') bankSum += nom;
-          else if (t.sumber === 'Cash') cashSum += nom;
-        } else {
-          if (t.sumber === 'Bank') bankSum -= nom;
-          else if (t.sumber === 'Cash') cashSum -= nom;
-        }
-      }
-    });
+    // Compute Bank and Cash balances using unified formula
+    const balances = computeFinancialBalances(transactions, tabunganTotal, investasiTotal);
+    const bankSum = balances.saldoBank;
+    const cashSum = balances.uangCash;
+    const totalReal = balances.totalAset;
+    const saldoOp = balances.saldoOp;
 
-    const totalReal = bankSum + cashSum + tabunganTotal;
-    const saldoOp = bankSum + cashSum;
-
-    // Remaining days to salary (robust UTC/midnight calculation)
-    let calculatedDays = 1;
-    if (gajianDate) {
-      try {
-        const tDate = new Date(todayStr + 'T00:00:00');
-        const gDate = new Date(gajianDate + 'T00:00:00');
-        const timeDiff = gDate.getTime() - tDate.getTime();
-        calculatedDays = Math.max(Math.ceil(timeDiff / (1000 * 3600 * 24)), 1);
-      } catch (e) {
-        console.error('Error parsing gajianDate in analytics:', e);
-      }
-    }
-    const sisaHari = calculatedDays;
+    // Remaining days to salary (dynamic cycle)
+    const gCycle = calculateGajianCycle(gajianDate, todayStr);
+    const sisaHari = gCycle.daysRemaining;
     const batasHr = Math.max(0, Math.floor(saldoOp / sisaHari));
 
-    return { bankSum, cashSum, totalReal, saldoOp, sisaHari, batasHr, todayStr };
-  }, [transactions, tabunganTotal, gajianDate]);
+    return { bankSum, cashSum, totalReal, saldoOp, sisaHari, batasHr, todayStr, targetGajianFormatted: gCycle.targetDateFormatted };
+  }, [transactions, tabunganTotal, investasiTotal, gajianDate]);
 
   // Financial Health Score & Category Budget Actuals Computations
   const monthlyStats = useMemo(() => {
@@ -187,12 +173,12 @@ export default function AnalyticsPage() {
       }
     });
 
-    const savingsRate = monthlyIncome > 0 
-      ? ((monthlyIncome - monthlyExpense) / monthlyIncome) * 100 
+    const savingsRate = monthlyIncome > 0
+      ? ((monthlyIncome - monthlyExpense) / monthlyIncome) * 100
       : (monthlyExpense > 0 ? -100 : 0);
 
-    const expenseRatio = monthlyIncome > 0 
-      ? (monthlyExpense / monthlyIncome) * 100 
+    const expenseRatio = monthlyIncome > 0
+      ? (monthlyExpense / monthlyIncome) * 100
       : (monthlyExpense > 0 ? 100 : 0);
 
     const thirtyDaysAgo = new Date();
@@ -304,7 +290,7 @@ export default function AnalyticsPage() {
   // Period ranges mapping for Charts
   const chartFilteredData = useMemo(() => {
     const today = new Date();
-    today.setHours(0,0,0,0);
+    today.setHours(0, 0, 0, 0);
     let startLimit = new Date();
     let endLimit = new Date();
 
@@ -331,8 +317,8 @@ export default function AnalyticsPage() {
       endLimit = new Date(8640000000000000);
     }
 
-    startLimit.setHours(0,0,0,0);
-    endLimit.setHours(23,59,59,999);
+    startLimit.setHours(0, 0, 0, 0);
+    endLimit.setHours(23, 59, 59, 999);
 
     return transactions.filter(t => {
       const d = new Date(t.tanggal);
@@ -343,7 +329,7 @@ export default function AnalyticsPage() {
   // 1. Chart: Daily spending trend (Bank vs Cash stacked + Total Line)
   const dailyTrendChartData = useMemo(() => {
     const map: Record<string, { date: string; Bank: number; Cash: number; Total: number }> = {};
-    
+
     chartFilteredData.forEach(t => {
       if (t.tipe === 'Pengeluaran' && !EXCLUDE_FROM_LIMIT.includes(t.kategori)) {
         const dStr = t.tanggal;
@@ -357,7 +343,7 @@ export default function AnalyticsPage() {
       }
     });
 
-    return Object.values(map).sort((a,b) => a.date.localeCompare(b.date));
+    return Object.values(map).sort((a, b) => a.date.localeCompare(b.date));
   }, [chartFilteredData, EXCLUDE_FROM_LIMIT]);
 
   // 2. Chart: Category distribution donut & top list
@@ -372,7 +358,7 @@ export default function AnalyticsPage() {
     });
 
     const colors = [
-      '#10B981', '#3B82F6', '#F59E0B', '#EF4444', '#8B5CF6', 
+      '#10B981', '#3B82F6', '#F59E0B', '#EF4444', '#8B5CF6',
       '#EC4899', '#06B6D4', '#14B8A6', '#F43F5E', '#10B981'
     ];
 
@@ -443,38 +429,38 @@ export default function AnalyticsPage() {
       kategori: kat,
       'Bulan Lalu': mapLast[kat] || 0,
       'Bulan Ini': mapThis[kat] || 0
-    })).sort((a,b) => b['Bulan Ini'] - a['Bulan Ini']);
+    })).sort((a, b) => b['Bulan Ini'] - a['Bulan Ini']);
   }, [transactions, EXCLUDE_FROM_LIMIT]);
 
   // 5. Chart: Daily Cumulative Balance Trend (Bank + Cash)
   const dailyBalanceChartData = useMemo(() => {
     const map: Record<string, number> = {};
-    
+
     // Sort all transactions by date ascending
     const sortedAllTxns = [...transactions]
       .filter(t => t.status === 'Cleared') // only cleared transactions affect balance
       .sort((a, b) => a.tanggal.localeCompare(b.tanggal));
-    
+
     sortedAllTxns.forEach(t => {
       const dStr = t.tanggal;
       const amt = Number(t.nominal) - (Number(t.titipan) || 0);
       const change = t.tipe === 'Pemasukan' ? amt : -amt;
       map[dStr] = (map[dStr] || 0) + change;
     });
-    
+
     // Get all sorted dates
     const sortedDates = Object.keys(map).sort();
-    
+
     // Calculate cumulative sum
     let cumulative = 0;
     const cumulativeData = sortedDates.map(date => {
       cumulative += map[date];
       return { date, Saldo: cumulative };
     });
-    
+
     // Filter the cumulative data to match the selected range
     const today = new Date();
-    today.setHours(0,0,0,0);
+    today.setHours(0, 0, 0, 0);
     let startLimit = new Date(0);
     let endLimit = new Date(8640000000000000);
 
@@ -496,9 +482,9 @@ export default function AnalyticsPage() {
       startLimit = new Date(customStart);
       endLimit = new Date(customEnd);
     }
-    
-    startLimit.setHours(0,0,0,0);
-    endLimit.setHours(23,59,59,999);
+
+    startLimit.setHours(0, 0, 0, 0);
+    endLimit.setHours(23, 59, 59, 999);
 
     return cumulativeData.filter(d => {
       const dateObj = new Date(d.date);
@@ -509,10 +495,10 @@ export default function AnalyticsPage() {
   // 6. Proyeksi & Prediksi Saldo saat Gajian (Rata-rata 7 Hari)
   const prediksiGajian = useMemo(() => {
     const today = new Date();
-    today.setHours(0,0,0,0);
+    today.setHours(0, 0, 0, 0);
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(today.getDate() - 6);
-    sevenDaysAgo.setHours(0,0,0,0);
+    sevenDaysAgo.setHours(0, 0, 0, 0);
 
     const sevenDaysTxns = transactions.filter(t => {
       if (t.tipe !== 'Pengeluaran' || t.status !== 'Cleared') return false;
@@ -547,7 +533,7 @@ export default function AnalyticsPage() {
       start = new Date(startMonday);
       end = new Date(startMonday);
       end.setDate(end.getDate() + 6);
-      label = `Minggu ${selectedMingguOffset === 0 ? 'Ini' : `${selectedMingguOffset} Lalu`} (${start.toLocaleDateString('id-ID', {day: 'numeric', month: 'short'})} - ${end.toLocaleDateString('id-ID', {day: 'numeric', month: 'short'})})`;
+      label = `Minggu ${selectedMingguOffset === 0 ? 'Ini' : `${selectedMingguOffset} Lalu`} (${start.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })} - ${end.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })})`;
     } else if (laporanMode === 'bulan') {
       const targetMonth = today.getMonth() - selectedBulanOffset;
       const targetYear = today.getFullYear();
@@ -557,11 +543,11 @@ export default function AnalyticsPage() {
     } else {
       start = new Date(laporanCustomStart);
       end = new Date(laporanCustomEnd);
-      label = `${start.toLocaleDateString('id-ID', {day: 'numeric', month: 'short'})} - ${end.toLocaleDateString('id-ID', {day: 'numeric', month: 'short', year: 'numeric'})}`;
+      label = `${start.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })} - ${end.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}`;
     }
 
-    start.setHours(0,0,0,0);
-    end.setHours(23,59,59,999);
+    start.setHours(0, 0, 0, 0);
+    end.setHours(23, 59, 59, 999);
     return { start, end, label };
   }, [laporanMode, selectedBulanOffset, selectedMingguOffset, laporanCustomStart, laporanCustomEnd]);
 
@@ -616,7 +602,7 @@ export default function AnalyticsPage() {
       endSunday.setDate(endSunday.getDate() + 6);
       options.push({
         value: i,
-        label: `Minggu ${i === 0 ? 'Ini' : `${i} Lalu`} (${startMonday.toLocaleDateString('id-ID', {day: 'numeric', month: 'short'})} - ${endSunday.toLocaleDateString('id-ID', {day: 'numeric', month: 'short'})})`
+        label: `Minggu ${i === 0 ? 'Ini' : `${i} Lalu`} (${startMonday.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })} - ${endSunday.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })})`
       });
     }
     return options;
@@ -626,7 +612,7 @@ export default function AnalyticsPage() {
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
-      
+
       {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
@@ -635,7 +621,7 @@ export default function AnalyticsPage() {
           </h1>
           <p className="text-sm text-slate-400">Pantau grafik tren arus kas dan laporan pengeluaran Anda.</p>
         </div>
-        
+
         <div className="flex items-center gap-2">
           {/* Tab Switcher */}
           <div className="bg-slate-900 border border-slate-800 p-1 rounded-xl flex">
@@ -713,7 +699,7 @@ export default function AnalyticsPage() {
 
           {/* Financial Health Score & Category Budgets Overview */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            
+
             {/* Financial Health Score Card */}
             <div className="glass-card p-5 border-slate-700/50 flex flex-col justify-between space-y-4">
               <div>
@@ -741,10 +727,9 @@ export default function AnalyticsPage() {
                     <p className="text-[10px] text-slate-400 font-semibold">Savings Rate (Ideal &gt;20%)</p>
                     <p className="font-bold text-slate-200">{monthlyStats.savingsRate.toFixed(1)}%</p>
                   </div>
-                  <span className={`text-[10px] font-black px-2 py-0.5 rounded font-mono ${
-                    monthlyStats.savingsGrade === 'A' || monthlyStats.savingsGrade === 'B' ? 'bg-emerald-500/10 text-emerald-400' : 
-                    monthlyStats.savingsGrade === 'C' ? 'bg-amber-500/10 text-amber-400' : 'bg-rose-500/10 text-rose-450'
-                  }`}>
+                  <span className={`text-[10px] font-black px-2 py-0.5 rounded font-mono ${monthlyStats.savingsGrade === 'A' || monthlyStats.savingsGrade === 'B' ? 'bg-emerald-500/10 text-emerald-400' :
+                      monthlyStats.savingsGrade === 'C' ? 'bg-amber-500/10 text-amber-400' : 'bg-rose-500/10 text-rose-450'
+                    }`}>
                     {monthlyStats.savingsGrade}
                   </span>
                 </div>
@@ -755,10 +740,9 @@ export default function AnalyticsPage() {
                     <p className="text-[10px] text-slate-400 font-semibold">Rasio Pengeluaran (Ideal &lt;70%)</p>
                     <p className="font-bold text-slate-200">{monthlyStats.expenseRatio.toFixed(1)}%</p>
                   </div>
-                  <span className={`text-[10px] font-black px-2 py-0.5 rounded font-mono ${
-                    monthlyStats.expenseGrade === 'A' || monthlyStats.expenseGrade === 'B' ? 'bg-emerald-500/10 text-emerald-400' : 
-                    monthlyStats.expenseGrade === 'C' ? 'bg-amber-500/10 text-amber-400' : 'bg-rose-500/10 text-rose-450'
-                  }`}>
+                  <span className={`text-[10px] font-black px-2 py-0.5 rounded font-mono ${monthlyStats.expenseGrade === 'A' || monthlyStats.expenseGrade === 'B' ? 'bg-emerald-500/10 text-emerald-400' :
+                      monthlyStats.expenseGrade === 'C' ? 'bg-amber-500/10 text-amber-400' : 'bg-rose-500/10 text-rose-450'
+                    }`}>
                     {monthlyStats.expenseGrade}
                   </span>
                 </div>
@@ -769,10 +753,9 @@ export default function AnalyticsPage() {
                     <p className="text-[10px] text-slate-400 font-semibold">Dana Darurat (Ideal &gt;3 bulan)</p>
                     <p className="font-bold text-slate-200">{monthlyStats.emergencyFundMonths.toFixed(2)} bln</p>
                   </div>
-                  <span className={`text-[10px] font-black px-2 py-0.5 rounded font-mono ${
-                    monthlyStats.emergencyGrade === 'A' || monthlyStats.emergencyGrade === 'B' ? 'bg-emerald-500/10 text-emerald-400' : 
-                    monthlyStats.emergencyGrade === 'C' ? 'bg-amber-500/10 text-amber-400' : 'bg-rose-500/10 text-rose-450'
-                  }`}>
+                  <span className={`text-[10px] font-black px-2 py-0.5 rounded font-mono ${monthlyStats.emergencyGrade === 'A' || monthlyStats.emergencyGrade === 'B' ? 'bg-emerald-500/10 text-emerald-400' :
+                      monthlyStats.emergencyGrade === 'C' ? 'bg-amber-500/10 text-amber-400' : 'bg-rose-500/10 text-rose-450'
+                    }`}>
                     {monthlyStats.emergencyGrade}
                   </span>
                 </div>
@@ -783,10 +766,9 @@ export default function AnalyticsPage() {
                     <p className="text-[10px] text-slate-400 font-semibold">Aset di Piutang (Ideal &lt;20%)</p>
                     <p className="font-bold text-slate-200">{monthlyStats.piutangRatio.toFixed(1)}%</p>
                   </div>
-                  <span className={`text-[10px] font-black px-2 py-0.5 rounded font-mono ${
-                    monthlyStats.piutangGrade === 'A' || monthlyStats.piutangGrade === 'B' ? 'bg-emerald-500/10 text-emerald-400' : 
-                    monthlyStats.piutangGrade === 'C' ? 'bg-amber-500/10 text-amber-400' : 'bg-rose-500/10 text-rose-450'
-                  }`}>
+                  <span className={`text-[10px] font-black px-2 py-0.5 rounded font-mono ${monthlyStats.piutangGrade === 'A' || monthlyStats.piutangGrade === 'B' ? 'bg-emerald-500/10 text-emerald-400' :
+                      monthlyStats.piutangGrade === 'C' ? 'bg-amber-500/10 text-amber-400' : 'bg-rose-500/10 text-rose-450'
+                    }`}>
                     {monthlyStats.piutangGrade}
                   </span>
                 </div>
@@ -822,10 +804,10 @@ export default function AnalyticsPage() {
                             Rp {actual.toLocaleString('id-ID')} / <span className="text-slate-500">Rp {budget.toLocaleString('id-ID')}</span>
                           </span>
                         </div>
-                        
+
                         {/* Progress Bar Container */}
                         <div className="w-full bg-slate-900 border border-slate-850 h-2.5 rounded-full overflow-hidden">
-                          <div 
+                          <div
                             className={`h-full rounded-full transition-all duration-500 ${progressColor}`}
                             style={{ width: `${pct}%` }}
                           />
@@ -846,8 +828,8 @@ export default function AnalyticsPage() {
                 ) : (
                   <div className="flex-1 flex flex-col items-center justify-center text-center p-6 space-y-2">
                     <p className="text-slate-500 text-xs italic">Belum ada anggaran kategori yang dikonfigurasi.</p>
-                    <a 
-                      href="/settings" 
+                    <a
+                      href="/settings"
                       className="text-[11px] font-bold text-emerald-400 hover:text-emerald-300 hover:underline transition"
                     >
                       Atur Anggaran Bulanan Kategori di Pengaturan &rarr;
@@ -861,12 +843,12 @@ export default function AnalyticsPage() {
 
           {/* Grid Layout Charts */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            
+
             {/* Chart 1: Daily Spending (Composed Chart) */}
             <div className="glass-card p-5 border-slate-700/50 space-y-3">
               <h3 className="text-sm font-bold text-slate-200">📈 Tren Pengeluaran Harian (Bank vs Cash)</h3>
               <p className="text-[10px] text-slate-400">Pengeluaran harian vs batas harian jatah jajan (Rp {stats.batasHr.toLocaleString('id-ID')})</p>
-              
+
               <div className="h-72 w-full pt-4">
                 {isMounted && dailyTrendChartData.length > 0 ? (
                   <ResponsiveContainer width="100%" height="100%">
@@ -874,8 +856,8 @@ export default function AnalyticsPage() {
                       <CartesianGrid strokeDasharray="3 3" stroke="#1E293B" />
                       <XAxis dataKey="date" stroke="#94A3B8" fontSize={9} tickLine={false} />
                       <YAxis stroke="#94A3B8" fontSize={9} tickLine={false} tickFormatter={(val) => `Rp ${val / 1000}k`} />
-                      <Tooltip 
-                        contentStyle={{ backgroundColor: '#0F172A', borderColor: '#334155', borderRadius: '12px' }} 
+                      <Tooltip
+                        contentStyle={{ backgroundColor: '#0F172A', borderColor: '#334155', borderRadius: '12px' }}
                         labelStyle={{ color: '#E2E8F0', fontWeight: 'bold', fontSize: '11px' }}
                         itemStyle={{ fontSize: '11px' }}
                         formatter={(val: any) => [`Rp ${Number(val || 0).toLocaleString('id-ID')}`]}
@@ -885,11 +867,11 @@ export default function AnalyticsPage() {
                       <Bar dataKey="Cash" stackId="a" fill="#10B981" radius={[2, 2, 0, 0]} />
                       <Line type="monotone" dataKey="Total" stroke="#F59E0B" strokeWidth={2.5} dot={{ r: 4 }} />
                       {stats.batasHr > 0 && (
-                        <ReferenceLine 
-                          y={stats.batasHr} 
-                          stroke="#EF4444" 
-                          strokeDasharray="4 4" 
-                          label={{ value: `Limit: Rp ${stats.batasHr.toLocaleString('id-ID')}`, fill: '#EF4444', fontSize: 8, position: 'insideTopRight' }} 
+                        <ReferenceLine
+                          y={stats.batasHr}
+                          stroke="#EF4444"
+                          strokeDasharray="4 4"
+                          label={{ value: `Limit: Rp ${stats.batasHr.toLocaleString('id-ID')}`, fill: '#EF4444', fontSize: 8, position: 'insideTopRight' }}
                         />
                       )}
                     </ComposedChart>
@@ -937,7 +919,7 @@ export default function AnalyticsPage() {
                     <div className="absolute text-center">
                       <p className="text-[10px] text-slate-400 uppercase font-semibold">Total Spending</p>
                       <p className="text-xs font-black text-white">
-                        Rp {categoryChartData.reduce((s,c) => s + c.value, 0).toLocaleString('id-ID')}
+                        Rp {categoryChartData.reduce((s, c) => s + c.value, 0).toLocaleString('id-ID')}
                       </p>
                     </div>
                   )}
@@ -1026,7 +1008,7 @@ export default function AnalyticsPage() {
                 <h3 className="text-sm font-bold text-slate-200">📊 Status Dana Operasional (Gauge)</h3>
                 <p className="text-[10px] text-slate-400">Rasio saldo operasional (siap pakai) terhadap total aset riil</p>
               </div>
-              
+
               {(() => {
                 const totalReal = stats.totalReal;
                 const saldoOp = stats.saldoOp;
@@ -1046,30 +1028,30 @@ export default function AnalyticsPage() {
                         </linearGradient>
                       </defs>
                       {/* Track */}
-                      <path 
-                        d="M 20 90 A 80 80 0 0 1 180 90" 
-                        fill="none" 
-                        strokeWidth="12" 
-                        strokeLinecap="round" 
+                      <path
+                        d="M 20 90 A 80 80 0 0 1 180 90"
+                        fill="none"
+                        strokeWidth="12"
+                        strokeLinecap="round"
                         className="stroke-slate-200 dark:stroke-slate-800"
                       />
                       {/* Active fill */}
-                      <path 
-                        d="M 20 90 A 80 80 0 0 1 180 90" 
-                        fill="none" 
-                        stroke="url(#gauge-gradient)" 
-                        strokeWidth="12" 
-                        strokeDasharray={`${fillLength} 502.6`} 
-                        strokeLinecap="round" 
+                      <path
+                        d="M 20 90 A 80 80 0 0 1 180 90"
+                        fill="none"
+                        stroke="url(#gauge-gradient)"
+                        strokeWidth="12"
+                        strokeDasharray={`${fillLength} 502.6`}
+                        strokeLinecap="round"
                       />
                       {/* Pointer */}
-                      <line 
-                        x1="100" 
-                        y1="90" 
-                        x2="40" 
-                        y2="90" 
-                        strokeWidth="3.5" 
-                        strokeLinecap="round" 
+                      <line
+                        x1="100"
+                        y1="90"
+                        x2="40"
+                        y2="90"
+                        strokeWidth="3.5"
+                        strokeLinecap="round"
                         transform={`rotate(${pct * 180}, 100, 90)`}
                         className="stroke-slate-800 dark:stroke-slate-100 transition-transform duration-700 ease-out"
                       />
@@ -1094,22 +1076,22 @@ export default function AnalyticsPage() {
             <div className="glass-card p-5 border-slate-700/50 space-y-3">
               <h3 className="text-sm font-bold text-slate-200">📈 Tren Akumulasi Saldo (Bank + Cash)</h3>
               <p className="text-[10px] text-slate-400">Pergerakan total saldo operasional riil dari waktu ke waktu</p>
-              
+
               <div className="h-64 w-full pt-4">
                 {isMounted && dailyBalanceChartData.length > 0 ? (
                   <ResponsiveContainer width="100%" height="100%">
                     <AreaChart data={dailyBalanceChartData}>
                       <defs>
                         <linearGradient id="balance-glow" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#10B981" stopOpacity={0.25}/>
-                          <stop offset="95%" stopColor="#10B981" stopOpacity={0}/>
+                          <stop offset="5%" stopColor="#10B981" stopOpacity={0.25} />
+                          <stop offset="95%" stopColor="#10B981" stopOpacity={0} />
                         </linearGradient>
                       </defs>
                       <CartesianGrid strokeDasharray="3 3" stroke="#1E293B" />
                       <XAxis dataKey="date" stroke="#94A3B8" fontSize={9} tickLine={false} />
                       <YAxis stroke="#94A3B8" fontSize={9} tickLine={false} tickFormatter={(val) => `Rp ${val / 1000}k`} />
-                      <Tooltip 
-                        contentStyle={{ backgroundColor: '#0F172A', borderColor: '#334155', borderRadius: '12px' }} 
+                      <Tooltip
+                        contentStyle={{ backgroundColor: '#0F172A', borderColor: '#334155', borderRadius: '12px' }}
                         labelStyle={{ color: '#E2E8F0', fontWeight: 'bold', fontSize: '11px' }}
                         itemStyle={{ fontSize: '11px' }}
                         formatter={(val: any) => [`Rp ${Number(val || 0).toLocaleString('id-ID')}`]}
@@ -1130,10 +1112,10 @@ export default function AnalyticsPage() {
       ) : (
         // 📋 LAPORAN RINGKAS TAB
         <div className="space-y-6">
-          
+
           {/* Laporan Config Filter */}
           <div className="glass-card p-5 border-slate-700/50 flex flex-col md:flex-row gap-5 items-center">
-            
+
             <div className="flex items-center gap-3 w-full md:w-auto">
               <CalendarDays className="w-5 h-5 text-emerald-400 flex-shrink-0" />
               <div className="flex bg-slate-900 border border-slate-800 p-0.5 rounded-lg">
@@ -1209,7 +1191,7 @@ export default function AnalyticsPage() {
             )}
 
             <div className="flex-1"></div>
-            
+
             <span className="text-xs bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-3 py-1 rounded-full font-bold">
               📂 Periode: {reportPeriodLimits.label}
             </span>
@@ -1217,7 +1199,7 @@ export default function AnalyticsPage() {
 
           {/* Laporan Statistics Dashboard */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            
+
             {/* Total Pemasukan */}
             <div className="glass-card p-5 border-slate-700/50 flex flex-col justify-between">
               <div>
@@ -1269,7 +1251,7 @@ export default function AnalyticsPage() {
             <h3 className="font-bold text-slate-200 flex items-center gap-2">
               <span>🔮</span> Prediksi Saldo saat Gajian
             </h3>
-            
+
             <p className="text-xs text-slate-400">
               Kalkulasi didasarkan pada rata-rata pengeluaran 7 hari terakhir (<strong>Rp {Math.round(prediksiGajian.avg7Days).toLocaleString('id-ID')}/hari</strong>) dengan sisa <strong>{stats.sisaHari} hari</strong> menuju tanggal gajian berikutnya.
             </p>
@@ -1315,7 +1297,7 @@ export default function AnalyticsPage() {
             <h3 className="font-bold text-slate-200 flex items-center gap-2">
               <span>💡</span> Insights & Analisis Finansial
             </h3>
-            
+
             <div className="space-y-2 text-slate-300 text-xs leading-relaxed">
               <div className="flex gap-2 items-start">
                 <ChevronRight className="w-4 h-4 text-emerald-400 mt-0.5 flex-shrink-0" />

@@ -17,18 +17,12 @@ export default function DailyLimitCard({ batasHr, outHariHarian, saldoOp, sisaHa
   const sisaHariBesok = Math.max(sisaHari - 1, 1);
   const realLimitBesok = sisaHari > 1 ? saldoOp / sisaHariBesok : saldoOp;
   const selisihLimit = realLimitBesok - batasHr;
-  
+
   // Clamped percentage for progress bar width
   const clampedPercent = Math.max(0, Math.min(persentase, 100));
 
   // Determine status message and colors
   const getStatusContent = () => {
-    if (batasHr <= 0 || sisaJatahHariIni < 0) {
-      return {
-        bg: 'bg-rose-500/10 border-rose-500/20 text-rose-400',
-        text: `🔴 PERHATIAN! Budget minus Rp ${Math.abs(sisaJatahHariIni).toLocaleString('id-ID')}. Perlu berhemat atau periksa saldo operasional.`
-      };
-    }
     if (persentase < 30) {
       return {
         bg: 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400',

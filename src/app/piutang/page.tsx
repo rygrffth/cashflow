@@ -3,6 +3,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { HandCoins, RefreshCw, CheckCircle, Clock, PlusCircle, Calendar, AlertTriangle, ShieldAlert, Pencil, Trash2 } from 'lucide-react';
+import CurrencyInput from '@/components/CurrencyInput';
+import { getWIBDateString } from '@/lib/dateUtils';
 
 export default function PiutangPage() {
   const [loading, setLoading] = useState(true);
@@ -30,10 +32,6 @@ export default function PiutangPage() {
   const [sumberKembali, setSumberKembali] = useState<'Bank' | 'Cash'>('Bank');
   const [editingPiutang, setEditingPiutang] = useState<any | null>(null);
 
-  // Bulk Delete States
-  const [selectedPiutangIds, setSelectedPiutangIds] = useState<number[]>([]);
-  const [isBulkDeletingPiutang, setIsBulkDeletingPiutang] = useState(false);
-
   const fetchPiutang = useCallback(async (isSilent = false) => {
     if (!isSilent) setLoading(true);
     else setRefreshing(true);
@@ -42,7 +40,7 @@ export default function PiutangPage() {
     try {
       // Table piutang does not have a "tanggal" column, order by created_at instead
       const { data, error } = await supabase.from('piutang').select('*').order('created_at', { ascending: false });
-      
+
       if (error) {
         if (error.code === '42P01') {
           throw new Error('Tabel piutang belum dibuat di Supabase.');
@@ -75,9 +73,7 @@ export default function PiutangPage() {
     setFormSuccess('');
 
     try {
-      const today = new Date();
-      const offset = today.getTimezoneOffset() * 60000;
-      const todayStr = new Date(today.getTime() - offset).toISOString().split('T')[0];
+      const todayStr = getWIBDateString();
       const parsedNominal = Number(nominal);
 
       // 1. Insert to 'piutang' table (Lowercase keys, omit non-existent 'tanggal' and 'sumber' columns)
@@ -132,9 +128,7 @@ export default function PiutangPage() {
     if (!lunasTarget) return;
 
     try {
-      const today = new Date();
-      const offset = today.getTimezoneOffset() * 60000;
-      const todayStr = new Date(today.getTime() - offset).toISOString().split('T')[0];
+      const todayStr = getWIBDateString();
 
       // 1. Update piutang status to Lunas (Omit 'sumber' since it doesn't exist in piutang table)
       const { error: piutangErr } = await supabase
@@ -196,34 +190,14 @@ export default function PiutangPage() {
 
   const handleDelete = async (id: number) => {
     if (!confirm('Hapus piutang ini secara permanen? (Tindakan ini tidak mencatat log transaksi)')) return;
-    
+
     try {
       const { error } = await supabase.from('piutang').delete().eq('id', id);
       if (error) throw error;
-      setSelectedPiutangIds(prev => prev.filter(item => item !== id));
       fetchPiutang(true);
     } catch (err: any) {
       console.error(err);
       alert(`Gagal menghapus: ${err.message}`);
-    }
-  };
-
-  const handleBulkDeletePiutang = async () => {
-    if (selectedPiutangIds.length === 0) return;
-    if (!confirm(`Hapus ${selectedPiutangIds.length} data piutang terpilih secara permanen?`)) return;
-
-    setIsBulkDeletingPiutang(true);
-    try {
-      const { error } = await supabase.from('piutang').delete().in('id', selectedPiutangIds);
-      if (error) throw error;
-      alert(`✅ Berhasil menghapus ${selectedPiutangIds.length} data piutang terpilih!`);
-      setSelectedPiutangIds([]);
-      fetchPiutang(true);
-    } catch (err: any) {
-      console.error(err);
-      alert(`Gagal menghapus data massal: ${err.message}`);
-    } finally {
-      setIsBulkDeletingPiutang(false);
     }
   };
 
@@ -261,7 +235,7 @@ export default function PiutangPage() {
   const isOverdue = (tenggatStr: string) => {
     if (!tenggatStr) return false;
     const today = new Date();
-    today.setHours(0,0,0,0);
+    today.setHours(0, 0, 0, 0);
     const due = new Date(tenggatStr);
     return due < today;
   };
@@ -272,7 +246,7 @@ export default function PiutangPage() {
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
-      
+
       {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
@@ -281,7 +255,7 @@ export default function PiutangPage() {
           </h1>
           <p className="text-sm text-slate-400">Daftar uang Anda yang dipinjam atau dipegang orang lain.</p>
         </div>
-        
+
         <button
           onClick={() => fetchPiutang(true)}
           className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-sm flex items-center gap-2 transition"
@@ -297,9 +271,9 @@ export default function PiutangPage() {
         </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          
+
           <div className="lg:col-span-2 space-y-6">
-            
+
             {overdueCount > 0 && (
               <div className="p-4 bg-rose-500/10 border border-rose-500/30 rounded-xl flex items-center gap-3 text-rose-400 text-xs font-bold animate-pulse">
                 <AlertTriangle className="w-5 h-5 flex-shrink-0" />
@@ -309,41 +283,10 @@ export default function PiutangPage() {
 
             {/* Active Piutang */}
             <div className="glass-card p-5 border-slate-700/50">
-              <div className="flex flex-wrap justify-between items-center gap-2 mb-4">
-                <h3 className="font-bold text-lg text-emerald-400 flex items-center gap-2">
-                  <Clock className="w-5 h-5" /> Piutang Aktif (Belum Lunas)
-                </h3>
-                {activePiutang.length > 0 && (
-                  <div className="flex items-center gap-2">
-                    <label className="flex items-center gap-1.5 text-xs text-slate-400 cursor-pointer select-none">
-                      <input
-                        type="checkbox"
-                        checked={activePiutang.length > 0 && activePiutang.every(p => selectedPiutangIds.includes(p.id))}
-                        onChange={(e) => {
-                          const activeIds = activePiutang.map(p => p.id);
-                          if (e.target.checked) {
-                            setSelectedPiutangIds(prev => Array.from(new Set([...prev, ...activeIds])));
-                          } else {
-                            setSelectedPiutangIds(prev => prev.filter(id => !activeIds.includes(id)));
-                          }
-                        }}
-                        className="accent-emerald-500 rounded border-slate-700 cursor-pointer"
-                      />
-                      <span>Pilih Semua</span>
-                    </label>
-                    {activePiutang.some(p => selectedPiutangIds.includes(p.id)) && (
-                      <button
-                        onClick={handleBulkDeletePiutang}
-                        disabled={isBulkDeletingPiutang}
-                        className="px-2.5 py-1 bg-rose-600 hover:bg-rose-700 text-white rounded text-[11px] font-bold flex items-center gap-1 transition cursor-pointer"
-                      >
-                        <Trash2 className="w-3 h-3" /> Hapus Terpilih
-                      </button>
-                    )}
-                  </div>
-                )}
-              </div>
-              
+              <h3 className="font-bold text-lg text-emerald-400 mb-4 flex items-center gap-2">
+                <Clock className="w-5 h-5" /> Piutang Aktif (Belum Lunas)
+              </h3>
+
               <div className="space-y-3">
                 {activePiutang.length > 0 ? (
                   activePiutang.map(p => {
@@ -355,51 +298,40 @@ export default function PiutangPage() {
                     const overdue = isOverdue(pTenggat);
                     return (
                       <div key={p.id} className="p-4 bg-slate-900/60 rounded-xl border border-slate-800/80 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
-                        <div className="flex items-start gap-3">
-                          <input
-                            type="checkbox"
-                            checked={selectedPiutangIds.includes(p.id)}
-                            onChange={(e) => {
-                              if (e.target.checked) setSelectedPiutangIds(prev => [...prev, p.id]);
-                              else setSelectedPiutangIds(prev => prev.filter(id => id !== p.id));
-                            }}
-                            className="mt-1 accent-emerald-500 rounded border-slate-700 cursor-pointer w-4 h-4"
-                          />
-                          <div>
-                            <p className="font-bold text-slate-100 flex items-center gap-2">
-                              {pNama}
-                              {overdue && <span className="px-1.5 py-0.5 bg-rose-500/20 text-rose-400 text-[8px] rounded uppercase font-black">Overdue</span>}
-                            </p>
-                            <p className="text-[11px] text-slate-400 mt-1">
-                              Dicatat: {pTanggal} • Deadline: <span className={overdue ? 'text-rose-400 font-bold' : 'text-slate-300 font-semibold'}>{pTenggat}</span>
-                            </p>
-                            {pCatatan && <p className="text-[10px] text-slate-500 italic mt-1">&ldquo;{pCatatan}&rdquo;</p>}
-                          </div>
+                        <div>
+                          <p className="font-bold text-slate-100 flex items-center gap-2">
+                            {pNama}
+                            {overdue && <span className="px-1.5 py-0.5 bg-rose-500/20 text-rose-400 text-[8px] rounded uppercase font-black">Overdue</span>}
+                          </p>
+                          <p className="text-[11px] text-slate-400 mt-1">
+                            Dicatat: {pTanggal} • Deadline: <span className={overdue ? 'text-rose-400 font-bold' : 'text-slate-300 font-semibold'}>{pTenggat}</span>
+                          </p>
+                          {pCatatan && <p className="text-[10px] text-slate-500 italic mt-1">&ldquo;{pCatatan}&rdquo;</p>}
                         </div>
                         <div className="flex flex-row sm:flex-col items-center sm:items-end justify-between sm:justify-center gap-2">
                           <p className="font-black text-amber-400">Rp {Number(pNominal).toLocaleString('id-ID')}</p>
                           <div className="flex gap-1.5">
-                            <button 
+                            <button
                               onClick={() => setLunasTarget(p)}
                               className="px-2 py-1 bg-emerald-500 hover:bg-emerald-600 text-slate-950 text-[10px] font-extrabold rounded transition cursor-pointer"
                             >
                               Lunas
                             </button>
-                            <button 
+                            <button
                               onClick={() => setEditingPiutang(p)}
                               title="Edit"
                               className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px] font-bold rounded transition cursor-pointer"
                             >
                               ✏️
                             </button>
-                            <button 
+                            <button
                               onClick={() => handleExtend(p.id, pTenggat)}
                               title="Perpanjang 7 hari"
                               className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px] font-bold rounded transition cursor-pointer"
                             >
                               ⏳+
                             </button>
-                            <button 
+                            <button
                               onClick={() => handleDelete(p.id)}
                               className="px-2 py-1 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 text-[10px] font-bold rounded transition cursor-pointer"
                             >
@@ -418,41 +350,10 @@ export default function PiutangPage() {
 
             {/* History Piutang */}
             <div className="glass-card p-5 border-slate-700/50">
-              <div className="flex flex-wrap justify-between items-center gap-2 mb-4">
-                <h3 className="font-bold text-lg text-slate-300 flex items-center gap-2">
-                  <CheckCircle className="w-5 h-5" /> Riwayat Lunas
-                </h3>
-                {historyPiutang.length > 0 && (
-                  <div className="flex items-center gap-2">
-                    <label className="flex items-center gap-1.5 text-xs text-slate-400 cursor-pointer select-none">
-                      <input
-                        type="checkbox"
-                        checked={historyPiutang.length > 0 && historyPiutang.every(p => selectedPiutangIds.includes(p.id))}
-                        onChange={(e) => {
-                          const histIds = historyPiutang.map(p => p.id);
-                          if (e.target.checked) {
-                            setSelectedPiutangIds(prev => Array.from(new Set([...prev, ...histIds])));
-                          } else {
-                            setSelectedPiutangIds(prev => prev.filter(id => !histIds.includes(id)));
-                          }
-                        }}
-                        className="accent-emerald-500 rounded border-slate-700 cursor-pointer"
-                      />
-                      <span>Pilih Semua</span>
-                    </label>
-                    {historyPiutang.some(p => selectedPiutangIds.includes(p.id)) && (
-                      <button
-                        onClick={handleBulkDeletePiutang}
-                        disabled={isBulkDeletingPiutang}
-                        className="px-2.5 py-1 bg-rose-600 hover:bg-rose-700 text-white rounded text-[11px] font-bold flex items-center gap-1 transition cursor-pointer"
-                      >
-                        <Trash2 className="w-3 h-3" /> Hapus Terpilih
-                      </button>
-                    )}
-                  </div>
-                )}
-              </div>
-              
+              <h3 className="font-bold text-lg text-slate-300 mb-4 flex items-center gap-2">
+                <CheckCircle className="w-5 h-5" /> Riwayat Lunas
+              </h3>
+
               <div className="space-y-3">
                 {historyPiutang.length > 0 ? (
                   historyPiutang.slice(0, 10).map(p => {
@@ -462,32 +363,21 @@ export default function PiutangPage() {
                     const pNominal = p.nominal || p.Nominal || 0;
                     return (
                       <div key={p.id} className="p-3 bg-slate-900/30 rounded-xl border border-slate-800 flex justify-between items-center opacity-70 group hover:opacity-100 transition">
-                        <div className="flex items-center gap-3">
-                          <input
-                            type="checkbox"
-                            checked={selectedPiutangIds.includes(p.id)}
-                            onChange={(e) => {
-                              if (e.target.checked) setSelectedPiutangIds(prev => [...prev, p.id]);
-                              else setSelectedPiutangIds(prev => prev.filter(id => id !== p.id));
-                            }}
-                            className="accent-emerald-500 rounded border-slate-700 cursor-pointer w-4 h-4"
-                          />
-                          <div>
-                            <p className="font-bold text-slate-300 line-through">{pNama}</p>
-                            <p className="text-[10px] text-slate-500">Lunas pada: {pTanggalLunas} {pSumber ? `(Masuk ke ${pSumber})` : ''}</p>
-                          </div>
+                        <div>
+                          <p className="font-bold text-slate-300 line-through">{pNama}</p>
+                          <p className="text-[10px] text-slate-500">Lunas pada: {pTanggalLunas} {pSumber ? `(Masuk ke ${pSumber})` : ''}</p>
                         </div>
                         <div className="flex items-center gap-3">
                           <p className="font-bold text-emerald-400/70">Rp {Number(pNominal).toLocaleString('id-ID')}</p>
                           <div className="flex gap-1">
-                            <button 
+                            <button
                               onClick={() => setEditingPiutang(p)}
                               title="Edit"
                               className="p-1 hover:bg-slate-800 rounded text-slate-400 hover:text-emerald-400 transition cursor-pointer text-xs"
                             >
                               ✏️
                             </button>
-                            <button 
+                            <button
                               onClick={() => handleDelete(p.id)}
                               title="Hapus"
                               className="p-1 hover:bg-slate-800 rounded text-slate-400 hover:text-rose-400 transition cursor-pointer text-xs"
@@ -504,11 +394,11 @@ export default function PiutangPage() {
                 )}
               </div>
             </div>
-            
+
           </div>
 
           <div className="space-y-4">
-            
+
             {/* Summary */}
             <div className="glass-card p-5 border-amber-500/30 bg-slate-900/10">
               <h3 className="text-sm font-bold text-amber-400 mb-2">Total Piutang</h3>
@@ -542,12 +432,11 @@ export default function PiutangPage() {
 
                 <div className="flex flex-col gap-1">
                   <label className="text-[10px] font-semibold text-slate-400">Nominal (Rp)</label>
-                  <input
-                    type="number"
-                    placeholder="Nominal..."
+                  <CurrencyInput
+                    placeholder="0"
                     value={nominal}
-                    onChange={e => setNominal(e.target.value)}
-                    className="bg-slate-900 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-emerald-500 text-xs font-bold"
+                    onChangeValue={val => setNominal(val)}
+                    className="bg-slate-900 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-emerald-500 text-xs font-bold w-full"
                     required
                   />
                 </div>
@@ -596,9 +485,9 @@ export default function PiutangPage() {
                 </button>
               </form>
             </div>
-            
+
           </div>
-          
+
         </div>
       )}
 
@@ -649,7 +538,7 @@ export default function PiutangPage() {
               <h3 className="font-bold text-white flex items-center gap-2">
                 <Pencil className="w-4 h-4 text-emerald-400" /> Edit Data Piutang
               </h3>
-              <button 
+              <button
                 onClick={() => setEditingPiutang(null)}
                 className="text-slate-400 hover:text-white"
               >
@@ -663,7 +552,7 @@ export default function PiutangPage() {
                 <input
                   type="text"
                   value={editingPiutang.nama}
-                  onChange={e => setEditingPiutang({...editingPiutang, nama: e.target.value})}
+                  onChange={e => setEditingPiutang({ ...editingPiutang, nama: e.target.value })}
                   className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none focus:border-emerald-500 text-xs"
                   required
                 />
@@ -674,7 +563,7 @@ export default function PiutangPage() {
                 <input
                   type="number"
                   value={editingPiutang.nominal}
-                  onChange={e => setEditingPiutang({...editingPiutang, nominal: e.target.value})}
+                  onChange={e => setEditingPiutang({ ...editingPiutang, nominal: e.target.value })}
                   className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none focus:border-emerald-500 text-xs"
                   required
                 />
@@ -685,7 +574,7 @@ export default function PiutangPage() {
                   <label className="text-xs font-semibold text-slate-400">Status</label>
                   <select
                     value={editingPiutang.status}
-                    onChange={e => setEditingPiutang({...editingPiutang, status: e.target.value, tanggal_lunas: e.target.value === 'Lunas' ? new Date().toISOString().split('T')[0] : null})}
+                    onChange={e => setEditingPiutang({ ...editingPiutang, status: e.target.value, tanggal_lunas: e.target.value === 'Lunas' ? new Date().toISOString().split('T')[0] : null })}
                     className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none focus:border-emerald-500 text-xs"
                   >
                     <option value="Belum Lunas">Belum Lunas</option>
@@ -698,7 +587,7 @@ export default function PiutangPage() {
                   <input
                     type="date"
                     value={editingPiutang.tenggat || ''}
-                    onChange={e => setEditingPiutang({...editingPiutang, tenggat: e.target.value})}
+                    onChange={e => setEditingPiutang({ ...editingPiutang, tenggat: e.target.value })}
                     onClick={(e) => (e.target as any).showPicker()}
                     className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none focus:border-emerald-500 text-xs cursor-pointer"
                   />
@@ -711,7 +600,7 @@ export default function PiutangPage() {
                   <input
                     type="date"
                     value={editingPiutang.tanggal_lunas || ''}
-                    onChange={e => setEditingPiutang({...editingPiutang, tanggal_lunas: e.target.value})}
+                    onChange={e => setEditingPiutang({ ...editingPiutang, tanggal_lunas: e.target.value })}
                     onClick={(e) => (e.target as any).showPicker()}
                     className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none focus:border-emerald-500 text-xs cursor-pointer"
                   />
@@ -723,7 +612,7 @@ export default function PiutangPage() {
                 <input
                   type="text"
                   value={editingPiutang.catatan || ''}
-                  onChange={e => setEditingPiutang({...editingPiutang, catatan: e.target.value})}
+                  onChange={e => setEditingPiutang({ ...editingPiutang, catatan: e.target.value })}
                   className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none focus:border-emerald-500 text-xs"
                 />
               </div>

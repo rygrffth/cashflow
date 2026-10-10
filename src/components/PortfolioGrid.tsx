@@ -11,6 +11,7 @@ interface PortfolioProps {
   saldoOp: number;
   batasHr: number;
   sisaHari: number;
+  targetGajianFormatted?: string;
   isRealMode: boolean;
   secretCode: string;
   setSecretCode: (val: string) => void;
@@ -26,6 +27,7 @@ export default function PortfolioGrid({
   saldoOp,
   batasHr,
   sisaHari,
+  targetGajianFormatted,
   isRealMode,
   secretCode,
   setSecretCode,
@@ -180,7 +182,7 @@ export default function PortfolioGrid({
               <h3 className="text-lg font-bold text-indigo-300">
                 {formatCurrency(saldoOp, showOp)}
               </h3>
-              <p className="text-[10px] text-slate-400 mt-1">Saldo Bank + Uang Cash siap pakai</p>
+              <p className="text-[10px] text-slate-400 mt-1">Saldo Aset dikurangi Tabungan</p>
             </div>
             <span className="p-2 bg-indigo-500/10 rounded-lg text-indigo-400 border border-indigo-500/20">
               <Briefcase className="w-4 h-4" />
@@ -220,7 +222,9 @@ export default function PortfolioGrid({
               <h3 className="text-lg font-bold text-pink-400">
                 {sisaHari} Hari
               </h3>
-              <p className="text-[10px] text-slate-400 mt-1">Hari tersisa menuju gajian berikutnya</p>
+              <p className="text-[10px] text-slate-400 mt-1">
+                {targetGajianFormatted ? `🎯 Target: ${targetGajianFormatted}` : 'Hari tersisa menuju gajian berikutnya'}
+              </p>
             </div>
             <span className="p-2 bg-pink-500/10 rounded-lg text-pink-400 border border-pink-500/20">
               <Calendar className="w-4 h-4" />

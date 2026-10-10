@@ -3,23 +3,19 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { CalendarRange, PlusCircle, RefreshCw, Trash2, CheckCircle, AlertCircle, Clock, Pencil } from 'lucide-react';
+import CurrencyInput from '@/components/CurrencyInput';
+import { getWIBDateString } from '@/lib/dateUtils';
 
 export default function SettlementPage() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [settlements, setSettlements] = useState<any[]>([]);
   const [editingSettle, setEditingSettle] = useState<any | null>(null);
-  const [selectedSettlementIds, setSelectedSettlementIds] = useState<number[]>([]);
-  const [isBulkDeletingSettle, setIsBulkDeletingSettle] = useState(false);
 
   // Add Settlement Form States
   const [catatan, setCatatan] = useState('');
   const [nominal, setNominal] = useState<string>('');
-  const [tenggat, setTenggat] = useState(() => {
-    const today = new Date();
-    const offset = today.getTimezoneOffset() * 60000;
-    return new Date(today.getTime() - offset).toISOString().split('T')[0];
-  });
+  const [tenggat, setTenggat] = useState(() => getWIBDateString());
   const [sumber, setSumber] = useState<'Bank' | 'Cash'>('Bank');
   const [formLoading, setFormLoading] = useState(false);
   const [formError, setFormError] = useState('');
@@ -63,9 +59,7 @@ export default function SettlementPage() {
     setFormSuccess('');
 
     try {
-      const today = new Date();
-      const offset = today.getTimezoneOffset() * 60000;
-      const todayStr = new Date(today.getTime() - offset).toISOString().split('T')[0];
+      const todayStr = getWIBDateString();
 
       const newSettleObj = {
         tanggal: todayStr,
@@ -98,9 +92,7 @@ export default function SettlementPage() {
     if (!confirm(`Tandai tagihan "${desc}" sudah lunas dibayar?`)) return;
 
     try {
-      const today = new Date();
-      const offset = today.getTimezoneOffset() * 60000;
-      const todayStr = new Date(today.getTime() - offset).toISOString().split('T')[0];
+      const todayStr = getWIBDateString();
 
       const { error } = await supabase
         .from('transaksi')
@@ -111,7 +103,7 @@ export default function SettlementPage() {
         .eq('id', id);
 
       if (error) throw error;
-      
+
       alert(`🎉 Tagihan "${desc}" berhasil dilunasi!`);
       fetchSettlements(true);
     } catch (err: any) {
@@ -126,30 +118,10 @@ export default function SettlementPage() {
     try {
       const { error } = await supabase.from('transaksi').delete().eq('id', id);
       if (error) throw error;
-      setSelectedSettlementIds(prev => prev.filter(item => item !== id));
       fetchSettlements(true);
     } catch (err: any) {
       console.error(err);
       alert(`Gagal menghapus tagihan: ${err.message}`);
-    }
-  };
-
-  const handleBulkDeleteSettle = async () => {
-    if (selectedSettlementIds.length === 0) return;
-    if (!confirm(`Hapus ${selectedSettlementIds.length} tagihan terjadwal terpilih secara permanen?`)) return;
-
-    setIsBulkDeletingSettle(true);
-    try {
-      const { error } = await supabase.from('transaksi').delete().in('id', selectedSettlementIds);
-      if (error) throw error;
-      alert(`✅ Berhasil menghapus ${selectedSettlementIds.length} tagihan terpilih!`);
-      setSelectedSettlementIds([]);
-      fetchSettlements(true);
-    } catch (err: any) {
-      console.error(err);
-      alert(`Gagal menghapus tagihan massal: ${err.message}`);
-    } finally {
-      setIsBulkDeletingSettle(false);
     }
   };
 
@@ -193,7 +165,7 @@ export default function SettlementPage() {
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
-      
+
       {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
@@ -202,7 +174,7 @@ export default function SettlementPage() {
           </h1>
           <p className="text-sm text-slate-400">Kelola pembayaran masa depan (Cicilan, Tagihan, CC) yang telah dijadwalkan.</p>
         </div>
-        
+
         <button
           onClick={() => fetchSettlements(true)}
           className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-sm flex items-center gap-2 transition"
@@ -212,10 +184,10 @@ export default function SettlementPage() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        
+
         {/* Left Column: Settlement List */}
         <div className="lg:col-span-2 space-y-4">
-          
+
           {overdueCount > 0 && (
             <div className="p-4 bg-rose-500/10 border border-rose-500/30 rounded-xl flex items-center gap-3 text-rose-400 text-xs font-bold animate-pulse">
               <AlertCircle className="w-5 h-5 flex-shrink-0" />
@@ -224,67 +196,29 @@ export default function SettlementPage() {
           )}
 
           <div className="glass-card p-5 border-slate-700/50">
-            <div className="flex flex-wrap justify-between items-center gap-2 mb-4">
-              <h3 className="font-bold text-lg text-slate-200 flex items-center gap-2">
-                <Clock className="w-5 h-5 text-emerald-400" /> Daftar Tunggu Pembayaran
-              </h3>
-              {settlements.length > 0 && (
-                <div className="flex items-center gap-2">
-                  <label className="flex items-center gap-1.5 text-xs text-slate-400 cursor-pointer select-none">
-                    <input
-                      type="checkbox"
-                      checked={settlements.length > 0 && selectedSettlementIds.length === settlements.length}
-                      onChange={(e) => {
-                        if (e.target.checked) setSelectedSettlementIds(settlements.map(s => s.id));
-                        else setSelectedSettlementIds([]);
-                      }}
-                      className="accent-emerald-500 rounded border-slate-700 cursor-pointer"
-                    />
-                    <span>Pilih Semua</span>
-                  </label>
-                  {selectedSettlementIds.length > 0 && (
-                    <button
-                      onClick={handleBulkDeleteSettle}
-                      disabled={isBulkDeletingSettle}
-                      className="px-2.5 py-1 bg-rose-600 hover:bg-rose-700 text-white rounded text-[11px] font-bold flex items-center gap-1 transition cursor-pointer"
-                    >
-                      <Trash2 className="w-3 h-3" /> Hapus Terpilih ({selectedSettlementIds.length})
-                    </button>
-                  )}
-                </div>
-              )}
-            </div>
-            
+            <h3 className="font-bold text-lg text-slate-200 mb-4 flex items-center gap-2">
+              <Clock className="w-5 h-5 text-emerald-400" /> Daftar Tunggu Pembayaran
+            </h3>
+
             <div className="space-y-3">
               {settlements.length > 0 ? (
                 settlements.map(item => {
                   const overdue = isOverdue(item.tenggat_waktu);
                   return (
                     <div key={item.id} className="p-4 bg-slate-900/60 rounded-xl border border-slate-800/80 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
-                      <div className="flex items-start gap-3">
-                        <input
-                          type="checkbox"
-                          checked={selectedSettlementIds.includes(item.id)}
-                          onChange={(e) => {
-                            if (e.target.checked) setSelectedSettlementIds(prev => [...prev, item.id]);
-                            else setSelectedSettlementIds(prev => prev.filter(id => id !== item.id));
-                          }}
-                          className="mt-1 accent-emerald-500 rounded border-slate-700 cursor-pointer w-4 h-4"
-                        />
-                        <div>
-                          <p className="font-bold text-slate-100 flex items-center gap-2">
-                            {item.catatan}
-                            {overdue && <span className="px-1.5 py-0.5 bg-rose-500/20 text-rose-400 text-[8px] rounded uppercase font-black">Jatuh Tempo</span>}
-                          </p>
-                          <p className="text-[11px] text-slate-400 mt-1">
-                            Sumber Dana: <span className="text-slate-300 font-semibold">{item.sumber}</span> • Input: {item.tanggal}
-                          </p>
-                          <p className={`text-[11px] font-semibold mt-0.5 ${overdue ? 'text-rose-400' : 'text-slate-300'}`}>
-                            Due Date: {item.tenggat_waktu || '-'}
-                          </p>
-                        </div>
+                      <div>
+                        <p className="font-bold text-slate-100 flex items-center gap-2">
+                          {item.catatan}
+                          {overdue && <span className="px-1.5 py-0.5 bg-rose-500/20 text-rose-400 text-[8px] rounded uppercase font-black">Jatuh Tempo</span>}
+                        </p>
+                        <p className="text-[11px] text-slate-400 mt-1">
+                          Sumber Dana: <span className="text-slate-300 font-semibold">{item.sumber}</span> • Input: {item.tanggal}
+                        </p>
+                        <p className={`text-[11px] font-semibold mt-0.5 ${overdue ? 'text-rose-400' : 'text-slate-300'}`}>
+                          Due Date: {item.tenggat_waktu || '-'}
+                        </p>
                       </div>
-                      
+
                       <div className="flex flex-row sm:flex-col items-center sm:items-end justify-between sm:justify-center gap-2">
                         <p className="font-black text-rose-400">Rp {Number(item.nominal).toLocaleString('id-ID')}</p>
                         <div className="flex gap-2">
@@ -324,7 +258,7 @@ export default function SettlementPage() {
 
         {/* Right Column: Summary & Add Form */}
         <div className="space-y-4">
-          
+
           {/* Summary Card */}
           <div className="glass-card p-5 border-amber-500/30 bg-gradient-to-br from-slate-900/40 via-amber-950/5 to-slate-900/40">
             <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">⏳ TOTAL TAGIHAN PENDING</h3>
@@ -356,12 +290,11 @@ export default function SettlementPage() {
 
               <div className="flex flex-col gap-1">
                 <label className="text-[10px] font-semibold text-slate-400">Nominal Tagihan (Rp)</label>
-                <input
-                  type="number"
-                  placeholder="Nominal..."
+                <CurrencyInput
+                  placeholder="0"
                   value={nominal}
-                  onChange={e => setNominal(e.target.value)}
-                  className="bg-slate-900 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-emerald-500 text-xs font-bold"
+                  onChangeValue={val => setNominal(val)}
+                  className="bg-slate-900 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-emerald-500 text-xs font-bold w-full"
                   required
                 />
               </div>
@@ -401,92 +334,92 @@ export default function SettlementPage() {
             </form>
           </div>
 
-      </div>
+        </div>
 
-      {/* Edit Scheduled Settlement Modal */}
-      {editingSettle && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fadeIn text-sm">
-          <div className="glass-card max-w-md w-full p-6 border-slate-700/50 space-y-4">
-            <div className="flex justify-between items-center border-b border-slate-800 pb-3">
-              <h3 className="font-bold text-white flex items-center gap-2">
-                <Pencil className="w-4.5 h-4.5 text-emerald-400" /> Edit Tagihan Terjadwal
-              </h3>
-              <button 
-                onClick={() => setEditingSettle(null)}
-                className="text-slate-400 hover:text-white"
-              >
-                ✕
-              </button>
-            </div>
-
-            <form onSubmit={handleUpdateSettle} className="space-y-4">
-              <div className="flex flex-col gap-1">
-                <label className="text-xs font-semibold text-slate-400">Catatan Tagihan</label>
-                <input
-                  type="text"
-                  value={editingSettle.catatan}
-                  onChange={e => setEditingSettle({...editingSettle, catatan: e.target.value})}
-                  className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none focus:border-emerald-500 text-xs"
-                  required
-                />
+        {/* Edit Scheduled Settlement Modal */}
+        {editingSettle && (
+          <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fadeIn text-sm">
+            <div className="glass-card max-w-md w-full p-6 border-slate-700/50 space-y-4">
+              <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+                <h3 className="font-bold text-white flex items-center gap-2">
+                  <Pencil className="w-4.5 h-4.5 text-emerald-400" /> Edit Tagihan Terjadwal
+                </h3>
+                <button
+                  onClick={() => setEditingSettle(null)}
+                  className="text-slate-400 hover:text-white"
+                >
+                  ✕
+                </button>
               </div>
 
-              <div className="flex flex-col gap-1">
-                <label className="text-xs font-semibold text-slate-400">Nominal (Rp)</label>
-                <input
-                  type="number"
-                  value={editingSettle.nominal}
-                  onChange={e => setEditingSettle({...editingSettle, nominal: e.target.value})}
-                  className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none focus:border-emerald-500 text-xs"
-                  required
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
+              <form onSubmit={handleUpdateSettle} className="space-y-4">
                 <div className="flex flex-col gap-1">
-                  <label className="text-xs font-semibold text-slate-400">Sumber Dana</label>
-                  <select
-                    value={editingSettle.sumber}
-                    onChange={e => setEditingSettle({...editingSettle, sumber: e.target.value})}
-                    className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none focus:border-emerald-500 text-xs"
-                  >
-                    <option value="Bank">Bank / ATM</option>
-                    <option value="Cash">Uang Cash</option>
-                  </select>
-                </div>
-
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs font-semibold text-slate-400">Jatuh Tempo</label>
+                  <label className="text-xs font-semibold text-slate-400">Catatan Tagihan</label>
                   <input
-                    type="date"
-                    value={editingSettle.tenggat_waktu || ''}
-                    onChange={e => setEditingSettle({...editingSettle, tenggat_waktu: e.target.value})}
-                    onClick={(e) => (e.target as any).showPicker()}
-                    className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none focus:border-emerald-500 text-xs cursor-pointer"
+                    type="text"
+                    value={editingSettle.catatan}
+                    onChange={e => setEditingSettle({ ...editingSettle, catatan: e.target.value })}
+                    className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none focus:border-emerald-500 text-xs"
+                    required
                   />
                 </div>
-              </div>
 
-              <div className="flex gap-2 pt-2 justify-end">
-                <button
-                  type="button"
-                  onClick={() => setEditingSettle(null)}
-                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-bold transition cursor-pointer"
-                >
-                  Batal
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-slate-950 rounded-lg text-xs font-black transition cursor-pointer"
-                >
-                  Simpan Perubahan
-                </button>
-              </div>
-            </form>
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-semibold text-slate-400">Nominal (Rp)</label>
+                  <input
+                    type="number"
+                    value={editingSettle.nominal}
+                    onChange={e => setEditingSettle({ ...editingSettle, nominal: e.target.value })}
+                    className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none focus:border-emerald-500 text-xs"
+                    required
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="flex flex-col gap-1">
+                    <label className="text-xs font-semibold text-slate-400">Sumber Dana</label>
+                    <select
+                      value={editingSettle.sumber}
+                      onChange={e => setEditingSettle({ ...editingSettle, sumber: e.target.value })}
+                      className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none focus:border-emerald-500 text-xs"
+                    >
+                      <option value="Bank">Bank / ATM</option>
+                      <option value="Cash">Uang Cash</option>
+                    </select>
+                  </div>
+
+                  <div className="flex flex-col gap-1">
+                    <label className="text-xs font-semibold text-slate-400">Jatuh Tempo</label>
+                    <input
+                      type="date"
+                      value={editingSettle.tenggat_waktu || ''}
+                      onChange={e => setEditingSettle({ ...editingSettle, tenggat_waktu: e.target.value })}
+                      onClick={(e) => (e.target as any).showPicker()}
+                      className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none focus:border-emerald-500 text-xs cursor-pointer"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex gap-2 pt-2 justify-end">
+                  <button
+                    type="button"
+                    onClick={() => setEditingSettle(null)}
+                    className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-bold transition cursor-pointer"
+                  >
+                    Batal
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-slate-950 rounded-lg text-xs font-black transition cursor-pointer"
+                  >
+                    Simpan Perubahan
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
-  </div>
   );
 }

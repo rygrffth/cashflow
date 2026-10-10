@@ -7,7 +7,10 @@ import { JAJAN_CATEGORIES } from '@/config/categories';
 import DailyLimitCard from '@/components/DailyLimitCard';
 import JajanSimulator from '@/components/JajanSimulator';
 import TransactionForm from '@/components/TransactionForm';
-import { RefreshCw, Clock, Landmark, Wallet, ListTodo, Lock, Unlock, Pencil, Trash2 } from 'lucide-react';
+import { RefreshCw, Clock, Landmark, Wallet, ListTodo, Lock, Unlock, Pencil, Trash2, Target, TrendingUp } from 'lucide-react';
+import { getWIBDateString, parseDateParts } from '@/lib/dateUtils';
+import { calculateGajianCycle } from '@/lib/gajianUtils';
+import { computeFinancialBalances } from '@/lib/balanceUtils';
 
 export default function Dashboard() {
   // Loading & Data States
@@ -19,19 +22,23 @@ export default function Dashboard() {
   const [saldoBank, setSaldoBank] = useState(0);
   const [uangCash, setUangCash] = useState(0);
   const [tabungan, setTabungan] = useState(0);
+  const [totalInvestasi, setTotalInvestasi] = useState(0);
   const [totalAset, setTotalAset] = useState(0);
   const [saldoOp, setSaldoOp] = useState(0);
   const [batasHr, setBatasHr] = useState(0);
   const [sisaHari, setSisaHari] = useState(1);
+  const [targetGajianFormatted, setTargetGajianFormatted] = useState('');
   const [outHariHarian, setOutHariHarian] = useState(0);
   const [piutangCount, setPiutangCount] = useState(0);
   const [piutangSum, setPiutangSum] = useState(0);
 
+  // Category Budgets Tracking State
+  const [categoryBudgets, setCategoryBudgets] = useState<Record<string, number>>({});
+  const [monthlySpendMap, setMonthlySpendMap] = useState<Record<string, number>>({});
+
   // Lists State
   const [todayTransactions, setTodayTransactions] = useState<any[]>([]);
   const [editingTxn, setEditingTxn] = useState<any | null>(null);
-  const [selectedTodayIds, setSelectedTodayIds] = useState<number[]>([]);
-  const [isBulkDeletingToday, setIsBulkDeletingToday] = useState(false);
 
   // Secret Mode State
   const [secretCode, setSecretCode] = useState('');
@@ -61,14 +68,6 @@ export default function Dashboard() {
     return () => clearInterval(interval);
   }, []);
 
-  // WIB timezone calculation helper
-  const getWIBDateString = () => {
-    const d = new Date();
-    // Convert to UTC+7 (WIB) by adding 7 hours to the UTC timestamp
-    const wib = new Date(d.getTime() + (3600000 * 7));
-    return wib.toISOString().split('T')[0];
-  };
-
   // Centralized Data Fetcher
   const fetchData = useCallback(async (isSilent = false) => {
     if (!isSilent) setLoading(true);
@@ -81,7 +80,7 @@ export default function Dashboard() {
       const { data: txns, error: txError } = await supabase
         .from('transaksi')
         .select('*');
-      
+
       if (txError) throw txError;
 
       // 2. Fetch Tabungan (from table 'tabungan')
@@ -105,75 +104,71 @@ export default function Dashboard() {
 
       if (piutangError) throw piutangError;
 
+      // 5. Fetch Investasi (from table 'investasi')
+      const { data: investasiData } = await supabase
+        .from('investasi')
+        .select('*');
+
       const activePiutang = (piutangData || []).filter(p => (p.status || p.Status) === 'Belum Lunas');
       setPiutangCount(activePiutang.length);
       setPiutangSum(activePiutang.reduce((s, i) => s + Number(i.nominal || i.Nominal || 0), 0));
 
-      // --- CALCULATIONS (Mirroring pub.py Python logic exactly) ---
-
+      // --- CALCULATIONS ---
       // Tabungan / Real Darurat
       const tabunganSum = (savingData || []).reduce((acc, curr) => acc + (Number(curr.nominal_terkumpul) || 0), 0);
       setTabungan(tabunganSum);
 
-      // Saldo Bank (Incomes - active Expenses)
+      // Investasi (Nilai sekarang atau modal)
+      const investasiSum = (investasiData || []).reduce((acc, curr) => acc + (Number(curr.nominal_sekarang ?? curr.nominal_modal) || 0), 0);
+      setTotalInvestasi(investasiSum);
+
+      // Saldo Finansial Terpusat (Bank, Cash, Total Aset termasuk Investasi & Tabungan, Saldo Op)
       const allTxns = txns || [];
-      
-      const totalInBank = allTxns
-        .filter(t => t.tipe === 'Pemasukan' && t.sumber === 'Bank')
-        .reduce((acc, curr) => acc + (Number(curr.nominal) || 0), 0);
-      
-      const totalOutBank = allTxns
-        .filter(t => t.tipe === 'Pengeluaran' && t.sumber === 'Bank' && !(t.kategori === 'Scheduled Settlement' && t.status === 'Pending'))
-        .reduce((acc, curr) => acc + (Number(curr.nominal) || 0), 0);
+      const balances = computeFinancialBalances(allTxns, tabunganSum, investasiSum);
+      setSaldoBank(balances.saldoBank);
+      setUangCash(balances.uangCash);
+      setTotalAset(balances.totalAset);
+      setSaldoOp(balances.saldoOp);
 
-      const computedBank = totalInBank - totalOutBank;
-      setSaldoBank(computedBank);
-
-      // Saldo Cash (Incomes - active Expenses)
-      const totalInCash = allTxns
-        .filter(t => t.tipe === 'Pemasukan' && t.sumber === 'Cash')
-        .reduce((acc, curr) => acc + (Number(curr.nominal) || 0), 0);
-      
-      const totalOutCash = allTxns
-        .filter(t => t.tipe === 'Pengeluaran' && t.sumber === 'Cash' && !(t.kategori === 'Scheduled Settlement' && t.status === 'Pending'))
-        .reduce((acc, curr) => acc + (Number(curr.nominal) || 0), 0);
-
-      const computedCash = totalInCash - totalOutCash;
-      setUangCash(computedCash);
-
-      // Total Aset (Saldo Bank + Uang Cash + Tabungan)
-      const computedTotalReal = computedBank + computedCash + tabunganSum;
-      setTotalAset(computedTotalReal);
-
-      // Dana Operasional: Saldo Bank + Uang Cash (karena dana tabungan sudah terpotong saat disetor)
-      const computedOp = computedBank + computedCash;
-      setSaldoOp(computedOp);
-
-      // Get gajian date settings
+      // Siklus Gajian Dinamis (Otomatis bergulir bulanan jika tanggal terlewat, bebas diubah di Settings)
       const gajianSet = (settingsData || []).find(s => s.key === 'tanggal_gajian');
-      let calculatedDays = 1;
-
-      if (gajianSet && gajianSet.value) {
-        try {
-          const tDate = new Date(todayWIB + 'T00:00:00');
-          const gDate = new Date(gajianSet.value + 'T00:00:00');
-          const timeDiff = gDate.getTime() - tDate.getTime();
-          calculatedDays = Math.max(Math.ceil(timeDiff / (1000 * 3600 * 24)), 1);
-        } catch (e) {
-          console.error('Error calculating days remaining:', e);
-        }
-      }
-      setSisaHari(calculatedDays);
+      const cycleResult = calculateGajianCycle(gajianSet?.value, todayWIB);
+      setSisaHari(cycleResult.daysRemaining);
+      setTargetGajianFormatted(cycleResult.targetDateFormatted);
 
       // Limit Harian
-      const computedBatasHr = computedOp / calculatedDays;
+      const computedBatasHr = Math.max(0, Math.floor(balances.saldoOp / cycleResult.daysRemaining));
       setBatasHr(computedBatasHr);
+
+      // Category Budgets from settings
+      const budgetSet = (settingsData || []).find(s => s.key === 'category_budgets');
+      if (budgetSet && budgetSet.value) {
+        try {
+          setCategoryBudgets(JSON.parse(budgetSet.value));
+        } catch (e) {
+          console.error('Error parsing category_budgets:', e);
+        }
+      }
+
+      // Hitung pengeluaran bulanan per kategori untuk progress bar budget
+      const { year: curY, month: curM } = parseDateParts(todayWIB);
+      const catSpend: Record<string, number> = {};
+      allTxns.forEach(t => {
+        if (t.tipe === 'Pengeluaran' && t.tanggal && !(t.kategori === 'Scheduled Settlement' && t.status === 'Pending')) {
+          const p = parseDateParts(t.tanggal);
+          if (p.year === curY && p.month === curM) {
+            const net = Number(t.nominal) - (Number(t.titipan) || 0);
+            catSpend[t.kategori] = (catSpend[t.kategori] || 0) + net;
+          }
+        }
+      });
+      setMonthlySpendMap(catSpend);
 
       // Out Hari Harian (Makan & Bensin spent today, active)
       const jajanCategories = JAJAN_CATEGORIES;
-      
+
       const todayJajanSum = allTxns
-        .filter(t => 
+        .filter(t =>
           t.tipe === 'Pengeluaran' &&
           !(t.kategori === 'Scheduled Settlement' && t.status === 'Pending') &&
           jajanCategories.includes(t.kategori) &&
@@ -183,14 +178,14 @@ export default function Dashboard() {
           const net = Number(curr.nominal) - (Number(curr.titipan) || 0);
           return acc + net;
         }, 0);
-      
+
       setOutHariHarian(todayJajanSum);
 
       // Today's transaction log (filter current date, sort newest)
       const filteredTodayLogs = allTxns
         .filter(t => t.tanggal === todayWIB)
         .sort((a, b) => b.id - a.id); // Assuming serial incrementing IDs
-      
+
       setTodayTransactions(filteredTodayLogs);
 
     } catch (error) {
@@ -211,30 +206,10 @@ export default function Dashboard() {
     try {
       const { error } = await supabase.from('transaksi').delete().eq('id', id);
       if (error) throw error;
-      setSelectedTodayIds(prev => prev.filter(item => item !== id));
       fetchData(true);
     } catch (e: any) {
       console.error(e);
       alert(`Gagal menghapus transaksi: ${e.message}`);
-    }
-  };
-
-  const handleBulkDeleteToday = async () => {
-    if (selectedTodayIds.length === 0) return;
-    if (!confirm(`Hapus ${selectedTodayIds.length} transaksi terpilih hari ini secara permanen?`)) return;
-
-    setIsBulkDeletingToday(true);
-    try {
-      const { error } = await supabase.from('transaksi').delete().in('id', selectedTodayIds);
-      if (error) throw error;
-      alert(`✅ Berhasil menghapus ${selectedTodayIds.length} transaksi terpilih!`);
-      setSelectedTodayIds([]);
-      fetchData(true);
-    } catch (e: any) {
-      console.error(e);
-      alert(`Gagal menghapus transaksi massal: ${e.message}`);
-    } finally {
-      setIsBulkDeletingToday(false);
     }
   };
 
@@ -328,6 +303,7 @@ export default function Dashboard() {
             saldoOp={saldoOp}
             batasHr={batasHr}
             sisaHari={sisaHari}
+            targetGajianFormatted={targetGajianFormatted}
             isRealMode={isRealMode}
             secretCode={secretCode}
             setSecretCode={setSecretCode}
@@ -350,6 +326,56 @@ export default function Dashboard() {
             piutangCount={piutangCount}
             piutangSum={piutangSum}
           />
+
+          {/* Visual Progress Budget Bulanan per Kategori */}
+          {Object.keys(categoryBudgets).length > 0 && (
+            <div className="glass-card p-6 border-slate-700/50 space-y-4">
+              <div className="flex justify-between items-center">
+                <h3 className="text-sm font-bold text-emerald-400 flex items-center gap-2">
+                  <Target className="w-4 h-4" /> 🎯 Budget Kategori Bulan Ini
+                </h3>
+                <span className="text-[11px] text-slate-400 font-medium">Realisasi vs Target Anggaran</span>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
+                {Object.entries(categoryBudgets).map(([cat, budgetNominal]) => {
+                  const spent = monthlySpendMap[cat] || 0;
+                  const bNom = Number(budgetNominal) || 0;
+                  const pct = bNom > 0 ? (spent / bNom) * 100 : 0;
+                  const clampedPct = Math.min(pct, 100);
+                  const sisa = bNom - spent;
+                  const isOver = sisa < 0;
+
+                  return (
+                    <div key={cat} className="p-3 bg-slate-900/60 border border-slate-800 rounded-xl space-y-2">
+                      <div className="flex justify-between items-center text-xs">
+                        <span className="font-bold text-slate-200">{cat}</span>
+                        <span className={`text-[11px] font-bold ${isOver ? 'text-rose-400' : 'text-slate-400'}`}>
+                          {pct.toFixed(0)}%
+                        </span>
+                      </div>
+
+                      <div className="w-full bg-slate-800 rounded-full h-2 overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all duration-500 ${
+                            pct > 100 ? 'bg-rose-500' : pct > 80 ? 'bg-amber-500' : 'bg-emerald-500'
+                          }`}
+                          style={{ width: `${clampedPct}%` }}
+                        />
+                      </div>
+
+                      <div className="flex justify-between items-center text-[10px] text-slate-400">
+                        <span>Terpakai: Rp {spent.toLocaleString('id-ID')}</span>
+                        <span className={isOver ? 'text-rose-400 font-semibold' : 'text-slate-400'}>
+                          {isOver ? `Lebih Rp ${Math.abs(sisa).toLocaleString('id-ID')}` : `Sisa Rp ${sisa.toLocaleString('id-ID')}`}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Right 1 Column: Form and Logs */}
@@ -363,36 +389,9 @@ export default function Dashboard() {
 
           {/* Today's Transactions Log */}
           <div className="glass-card p-6 border-slate-700/40 space-y-4">
-            <div className="flex flex-wrap justify-between items-center gap-2">
-              <h3 className="text-sm font-bold text-emerald-400 flex items-center gap-2">
-                <ListTodo className="w-4 h-4" /> 📋 Transaksi Hari Ini
-              </h3>
-              {todayTransactions.length > 0 && (
-                <div className="flex items-center gap-2">
-                  <label className="flex items-center gap-1.5 text-[11px] text-slate-400 cursor-pointer select-none">
-                    <input
-                      type="checkbox"
-                      checked={todayTransactions.length > 0 && selectedTodayIds.length === todayTransactions.length}
-                      onChange={(e) => {
-                        if (e.target.checked) setSelectedTodayIds(todayTransactions.map(t => t.id));
-                        else setSelectedTodayIds([]);
-                      }}
-                      className="accent-emerald-500 rounded border-slate-700 cursor-pointer"
-                    />
-                    <span>Pilih Semua</span>
-                  </label>
-                  {selectedTodayIds.length > 0 && (
-                    <button
-                      onClick={handleBulkDeleteToday}
-                      disabled={isBulkDeletingToday}
-                      className="px-2.5 py-1 bg-rose-600 hover:bg-rose-700 text-white rounded-md text-[11px] font-bold flex items-center gap-1 transition cursor-pointer"
-                    >
-                      <Trash2 className="w-3 h-3" /> Hapus ({selectedTodayIds.length})
-                    </button>
-                  )}
-                </div>
-              )}
-            </div>
+            <h3 className="text-sm font-bold text-emerald-400 flex items-center gap-2">
+              <ListTodo className="w-4 h-4" /> 📋 Transaksi Hari Ini
+            </h3>
 
             {todayTransactions.length > 0 ? (
               <div className="space-y-3 max-h-[300px] overflow-y-auto pr-1 no-scrollbar">
@@ -401,28 +400,17 @@ export default function Dashboard() {
                     key={t.id || Math.random()}
                     className="p-3 bg-slate-950/40 border border-slate-900 rounded-xl flex justify-between items-center text-xs tracking-wide"
                   >
-                    <div className="flex items-center gap-2.5">
-                      <input
-                        type="checkbox"
-                        checked={selectedTodayIds.includes(t.id)}
-                        onChange={(e) => {
-                          if (e.target.checked) setSelectedTodayIds(prev => [...prev, t.id]);
-                          else setSelectedTodayIds(prev => prev.filter(id => id !== t.id));
-                        }}
-                        className="accent-emerald-500 rounded border-slate-700 cursor-pointer w-3.5 h-3.5"
-                      />
-                      <div>
-                        <p className="font-bold text-slate-200">{t.catatan || t.kategori}</p>
-                        <div className="flex gap-2 items-center mt-1 text-[10px] text-slate-400">
-                          <span className="px-1.5 py-0.5 bg-slate-800 rounded font-semibold text-slate-300">
-                            {t.kategori}
-                          </span>
-                          <span>•</span>
-                          <span className="flex items-center gap-0.5">
-                            {t.sumber === 'Bank' ? <Landmark className="w-2.5 h-2.5" /> : <Wallet className="w-2.5 h-2.5" />}
-                            {t.sumber}
-                          </span>
-                        </div>
+                    <div>
+                      <p className="font-bold text-slate-200">{t.catatan || t.kategori}</p>
+                      <div className="flex gap-2 items-center mt-1 text-[10px] text-slate-400">
+                        <span className="px-1.5 py-0.5 bg-slate-800 rounded font-semibold text-slate-300">
+                          {t.kategori}
+                        </span>
+                        <span>•</span>
+                        <span className="flex items-center gap-0.5">
+                          {t.sumber === 'Bank' ? <Landmark className="w-2.5 h-2.5" /> : <Wallet className="w-2.5 h-2.5" />}
+                          {t.sumber}
+                        </span>
                       </div>
                     </div>
 
@@ -476,7 +464,7 @@ export default function Dashboard() {
               <h3 className="font-bold text-white flex items-center gap-2">
                 <Pencil className="w-4 h-4 text-emerald-400" /> Edit Transaksi
               </h3>
-              <button 
+              <button
                 onClick={() => setEditingTxn(null)}
                 className="text-slate-400 hover:text-white text-sm"
               >
@@ -490,7 +478,7 @@ export default function Dashboard() {
                 <input
                   type="date"
                   value={editingTxn.tanggal}
-                  onChange={e => setEditingTxn({...editingTxn, tanggal: e.target.value})}
+                  onChange={e => setEditingTxn({ ...editingTxn, tanggal: e.target.value })}
                   onClick={(e) => (e.target as any).showPicker()}
                   className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none focus:border-emerald-500 text-xs"
                   required
@@ -502,7 +490,7 @@ export default function Dashboard() {
                   <label className="text-xs font-semibold text-slate-400">Tipe</label>
                   <select
                     value={editingTxn.tipe}
-                    onChange={e => setEditingTxn({...editingTxn, tipe: e.target.value})}
+                    onChange={e => setEditingTxn({ ...editingTxn, tipe: e.target.value })}
                     className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none focus:border-emerald-500 text-xs"
                   >
                     <option value="Pengeluaran">Pengeluaran</option>
@@ -514,7 +502,7 @@ export default function Dashboard() {
                   <label className="text-xs font-semibold text-slate-400">Sumber</label>
                   <select
                     value={editingTxn.sumber}
-                    onChange={e => setEditingTxn({...editingTxn, sumber: e.target.value})}
+                    onChange={e => setEditingTxn({ ...editingTxn, sumber: e.target.value })}
                     className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none focus:border-emerald-500 text-xs"
                   >
                     <option value="Bank">Bank</option>
@@ -528,7 +516,7 @@ export default function Dashboard() {
                 <input
                   type="text"
                   value={editingTxn.kategori}
-                  onChange={e => setEditingTxn({...editingTxn, kategori: e.target.value})}
+                  onChange={e => setEditingTxn({ ...editingTxn, kategori: e.target.value })}
                   className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none focus:border-emerald-500 text-xs"
                   required
                 />
@@ -539,7 +527,7 @@ export default function Dashboard() {
                 <input
                   type="number"
                   value={editingTxn.nominal}
-                  onChange={e => setEditingTxn({...editingTxn, nominal: e.target.value})}
+                  onChange={e => setEditingTxn({ ...editingTxn, nominal: e.target.value })}
                   className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none focus:border-emerald-500 text-xs"
                   required
                 />
@@ -550,7 +538,7 @@ export default function Dashboard() {
                 <input
                   type="text"
                   value={editingTxn.catatan || ''}
-                  onChange={e => setEditingTxn({...editingTxn, catatan: e.target.value})}
+                  onChange={e => setEditingTxn({ ...editingTxn, catatan: e.target.value })}
                   className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none focus:border-emerald-500 text-xs"
                 />
               </div>

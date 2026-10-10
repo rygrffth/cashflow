@@ -3,13 +3,13 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { KATEGORI_HISTORY_OPTIONS as KATEGORI_OPTIONS } from '@/config/categories';
-import { RefreshCw, Trash2, Calendar, Filter, Download, History, Pencil, X } from 'lucide-react';
+import { RefreshCw, Trash2, Calendar, Filter, Download, History } from 'lucide-react';
 
 export default function HistoryPage() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [transactions, setTransactions] = useState<any[]>([]);
-  
+
   // Filter states
   const [filterType, setFilterType] = useState('Semua');
   const [filterMonth, setFilterMonth] = useState(() => new Date().toISOString().split('T')[0].substring(0, 7)); // YYYY-MM
@@ -18,7 +18,6 @@ export default function HistoryPage() {
   const [isEditMode, setIsEditMode] = useState(false);
   const [editedTransactions, setEditedTransactions] = useState<Record<number, any>>({});
   const [isSavingMassal, setIsSavingMassal] = useState(false);
-  const [editingTxn, setEditingTxn] = useState<any | null>(null);
 
   // Bulk Delete States
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
@@ -53,8 +52,45 @@ export default function HistoryPage() {
 
   const handleDelete = async (id: number) => {
     if (!confirm('Hapus transaksi ini secara permanen?')) return;
-    
+
     try {
+      // 1. Check if linked to tabungan_id and sync balance
+      const targetTxn = transactions.find(t => t.id === id);
+      if (targetTxn && targetTxn.tabungan_id) {
+        try {
+          const { data: targetTabungan } = await supabase
+            .from('tabungan')
+            .select('*')
+            .eq('id', targetTxn.tabungan_id)
+            .single();
+
+          if (targetTabungan) {
+            const curTerkumpul = Number(targetTabungan.nominal_terkumpul) || 0;
+            const nom = Number(targetTxn.nominal) || 0;
+            const isSetor = targetTxn.kategori === 'Menabung' || targetTxn.tipe === 'Pengeluaran';
+            const newTerkumpul = isSetor ? Math.max(0, curTerkumpul - nom) : curTerkumpul + nom;
+            const newStatus = newTerkumpul >= Number(targetTabungan.target_nominal) ? 'Selesai' : 'Aktif';
+
+            await supabase.from('tabungan').update({
+              nominal_terkumpul: newTerkumpul,
+              status: newStatus
+            }).eq('id', targetTxn.tabungan_id);
+
+            try {
+              await supabase.from('transaksi_tabungan').delete().match({
+                tabungan_id: targetTxn.tabungan_id,
+                nominal: nom,
+                tanggal: targetTxn.tanggal
+              });
+            } catch (subErr) {
+              // ignore sub table
+            }
+          }
+        } catch (syncErr) {
+          console.warn('Tabungan sync skipped:', syncErr);
+        }
+      }
+
       const { error } = await supabase.from('transaksi').delete().eq('id', id);
       if (error) throw error;
       setSelectedIds(prev => prev.filter(selectedId => selectedId !== id));
@@ -62,38 +98,6 @@ export default function HistoryPage() {
     } catch (e) {
       console.error(e);
       alert('Gagal menghapus transaksi');
-    }
-  };
-
-  const handleUpdateTxn = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editingTxn) return;
-    try {
-      const parsedNominal = Number(editingTxn.nominal);
-      if (isNaN(parsedNominal) || parsedNominal <= 0) {
-        alert('Nominal harus lebih dari 0.');
-        return;
-      }
-
-      const { error } = await supabase
-        .from('transaksi')
-        .update({
-          tanggal: editingTxn.tanggal,
-          tipe: editingTxn.tipe,
-          kategori: editingTxn.kategori,
-          nominal: parsedNominal,
-          catatan: editingTxn.catatan,
-          sumber: editingTxn.sumber,
-        })
-        .eq('id', editingTxn.id);
-
-      if (error) throw error;
-      setEditingTxn(null);
-      fetchHistory(true);
-      alert('✅ Transaksi berhasil diperbarui!');
-    } catch (e: any) {
-      console.error(e);
-      alert(`Gagal memperbarui transaksi: ${e.message}`);
     }
   };
 
@@ -123,7 +127,7 @@ export default function HistoryPage() {
       const promises = ids.map(async (idStr) => {
         const id = Number(idStr);
         const updatedData = editedTransactions[id];
-        
+
         // Validation
         const parsedNominal = Number(updatedData.nominal);
         if (isNaN(parsedNominal) || parsedNominal <= 0) {
@@ -163,16 +167,43 @@ export default function HistoryPage() {
       alert("Silakan ketik 'KONFIRMASI' untuk memvalidasi penghapusan.");
       return;
     }
-    
+
     setIsDeletingMassal(true);
     try {
+      // 1. Sync tabungan for any linked transactions in selectedIds
+      const txnsToSync = transactions.filter(t => selectedIds.includes(t.id) && t.tabungan_id);
+      for (const tx of txnsToSync) {
+        try {
+          const { data: targetTabungan } = await supabase
+            .from('tabungan')
+            .select('*')
+            .eq('id', tx.tabungan_id)
+            .single();
+
+          if (targetTabungan) {
+            const curTerkumpul = Number(targetTabungan.nominal_terkumpul) || 0;
+            const nom = Number(tx.nominal) || 0;
+            const isSetor = tx.kategori === 'Menabung' || tx.tipe === 'Pengeluaran';
+            const newTerkumpul = isSetor ? Math.max(0, curTerkumpul - nom) : curTerkumpul + nom;
+            const newStatus = newTerkumpul >= Number(targetTabungan.target_nominal) ? 'Selesai' : 'Aktif';
+
+            await supabase.from('tabungan').update({
+              nominal_terkumpul: newTerkumpul,
+              status: newStatus
+            }).eq('id', tx.tabungan_id);
+          }
+        } catch (syncErr) {
+          console.warn('Tabungan bulk sync skipped:', syncErr);
+        }
+      }
+
       const { error } = await supabase
         .from('transaksi')
         .delete()
         .in('id', selectedIds);
-        
+
       if (error) throw error;
-      
+
       alert(`✅ Berhasil menghapus ${selectedIds.length} transaksi!`);
       setSelectedIds([]);
       setIsDeleteModalOpen(false);
@@ -191,7 +222,7 @@ export default function HistoryPage() {
       alert("Tidak ada data untuk diekspor.");
       return;
     }
-    
+
     const headers = ["Tanggal", "Tipe", "Kategori", "Catatan", "Sumber", "Nominal"];
     const rows = filteredData.map(t => [
       t.tanggal || '',
@@ -201,12 +232,12 @@ export default function HistoryPage() {
       t.sumber || '',
       t.nominal || 0
     ]);
-    
+
     const csvContent = [
       headers.join(','),
       ...rows.map(r => r.map(val => `"${val}"`).join(','))
     ].join('\n');
-    
+
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
@@ -234,7 +265,7 @@ export default function HistoryPage() {
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
-      
+
       {/* Datalist for autocomplete category */}
       <datalist id="kategori-list">
         {KATEGORI_OPTIONS.map(opt => (
@@ -250,7 +281,7 @@ export default function HistoryPage() {
           </h1>
           <p className="text-sm text-slate-400">Log semua pemasukan dan pengeluaran Anda.</p>
         </div>
-        
+
         <button
           onClick={() => fetchHistory(true)}
           disabled={refreshing}
@@ -283,9 +314,9 @@ export default function HistoryPage() {
         <div className="flex flex-wrap items-center gap-4 w-full lg:w-auto">
           <div className="flex items-center gap-2 w-full sm:w-auto">
             <Calendar className="w-4 h-4 text-slate-400" />
-            <input 
-              type="month" 
-              value={filterMonth} 
+            <input
+              type="month"
+              value={filterMonth}
               onChange={e => setFilterMonth(e.target.value)}
               onClick={(e) => (e.target as any).showPicker()}
               className="bg-slate-900 border border-slate-700 rounded px-3 py-1.5 text-sm text-white focus:border-emerald-500 outline-none w-full sm:w-40 cursor-pointer"
@@ -293,7 +324,7 @@ export default function HistoryPage() {
           </div>
           <div className="flex items-center gap-2 w-full sm:w-auto">
             <Filter className="w-4 h-4 text-slate-400" />
-            <select 
+            <select
               value={filterType}
               onChange={e => setFilterType(e.target.value)}
               className="bg-slate-900 border border-slate-700 rounded px-3 py-1.5 text-sm text-white focus:border-emerald-500 outline-none w-full sm:w-40"
@@ -309,7 +340,7 @@ export default function HistoryPage() {
 
         <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto justify-end">
           {/* Export CSV */}
-          <button 
+          <button
             onClick={handleExportCSV}
             className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs flex items-center gap-2 w-full sm:w-auto justify-center cursor-pointer transition"
           >
@@ -390,7 +421,7 @@ export default function HistoryPage() {
                 filteredData.map(t => {
                   const isRowEdited = !!editedTransactions[t.id];
                   const rowData = editedTransactions[t.id] || t;
-                  
+
                   return (
                     <tr key={t.id} className="border-b border-slate-800 hover:bg-slate-800/30">
                       {/* Checkbox column */}
@@ -499,24 +530,14 @@ export default function HistoryPage() {
 
                       {/* Aksi */}
                       <td className="px-4 py-3 text-center">
-                        <div className="flex items-center justify-center gap-1">
-                          <button 
-                            onClick={() => setEditingTxn({ ...t })}
-                            disabled={isEditMode}
-                            className="p-1.5 text-slate-500 hover:text-emerald-400 hover:bg-emerald-500/10 rounded-md transition disabled:opacity-30 disabled:hover:bg-transparent cursor-pointer"
-                            title="Edit Transaksi"
-                          >
-                            <Pencil className="w-4 h-4" />
-                          </button>
-                          <button 
-                            onClick={() => handleDelete(t.id)}
-                            disabled={isEditMode}
-                            className="p-1.5 text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-md transition disabled:opacity-30 disabled:hover:bg-transparent cursor-pointer"
-                            title="Hapus"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
+                        <button
+                          onClick={() => handleDelete(t.id)}
+                          disabled={isEditMode}
+                          className="p-1.5 text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-md transition disabled:opacity-30 disabled:hover:bg-transparent"
+                          title="Hapus"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
                       </td>
                     </tr>
                   );
@@ -573,113 +594,6 @@ export default function HistoryPage() {
                 Batal
               </button>
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* Modal Edit Transaksi Individual */}
-      {editingTxn && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4 animate-fadeIn text-sm">
-          <div className="glass-card max-w-md w-full p-6 border-slate-700/60 space-y-4">
-            <div className="flex justify-between items-center border-b border-slate-800 pb-3">
-              <h3 className="font-bold text-white flex items-center gap-2">
-                <Pencil className="w-4 h-4 text-emerald-400" /> Edit Transaksi
-              </h3>
-              <button 
-                onClick={() => setEditingTxn(null)}
-                className="text-slate-400 hover:text-white cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <form onSubmit={handleUpdateTxn} className="space-y-4">
-              <div className="flex flex-col gap-1">
-                <label className="text-xs font-semibold text-slate-400">Tanggal</label>
-                <input
-                  type="date"
-                  value={editingTxn.tanggal}
-                  onChange={e => setEditingTxn({ ...editingTxn, tanggal: e.target.value })}
-                  onClick={(e) => (e.target as any).showPicker()}
-                  className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none focus:border-emerald-500 text-xs cursor-pointer"
-                  required
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs font-semibold text-slate-400">Tipe</label>
-                  <select
-                    value={editingTxn.tipe}
-                    onChange={e => setEditingTxn({ ...editingTxn, tipe: e.target.value })}
-                    className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none focus:border-emerald-500 text-xs"
-                  >
-                    <option value="Pengeluaran">Pengeluaran</option>
-                    <option value="Pemasukan">Pemasukan</option>
-                  </select>
-                </div>
-
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs font-semibold text-slate-400">Sumber Rekening</label>
-                  <select
-                    value={editingTxn.sumber}
-                    onChange={e => setEditingTxn({ ...editingTxn, sumber: e.target.value })}
-                    className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none focus:border-emerald-500 text-xs"
-                  >
-                    <option value="Bank">Bank</option>
-                    <option value="Cash">Cash</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="flex flex-col gap-1">
-                <label className="text-xs font-semibold text-slate-400">Kategori</label>
-                <input
-                  type="text"
-                  list="kategori-list"
-                  value={editingTxn.kategori}
-                  onChange={e => setEditingTxn({ ...editingTxn, kategori: e.target.value })}
-                  className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none focus:border-emerald-500 text-xs"
-                  required
-                />
-              </div>
-
-              <div className="flex flex-col gap-1">
-                <label className="text-xs font-semibold text-slate-400">Nominal (Rp)</label>
-                <input
-                  type="number"
-                  value={editingTxn.nominal}
-                  onChange={e => setEditingTxn({ ...editingTxn, nominal: e.target.value })}
-                  className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none focus:border-emerald-500 text-xs font-bold"
-                  required
-                />
-              </div>
-
-              <div className="flex flex-col gap-1">
-                <label className="text-xs font-semibold text-slate-400">Catatan</label>
-                <textarea
-                  value={editingTxn.catatan || ''}
-                  onChange={e => setEditingTxn({ ...editingTxn, catatan: e.target.value })}
-                  className="bg-slate-900 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-emerald-500 text-xs min-h-[50px] resize-none"
-                />
-              </div>
-
-              <div className="flex gap-2 pt-2 justify-end">
-                <button
-                  type="button"
-                  onClick={() => setEditingTxn(null)}
-                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-bold transition cursor-pointer"
-                >
-                  Batal
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-slate-950 rounded-lg text-xs font-black transition cursor-pointer"
-                >
-                  Simpan Perubahan
-                </button>
-              </div>
-            </form>
           </div>
         </div>
       )}
