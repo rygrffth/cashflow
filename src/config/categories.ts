@@ -1,5 +1,9 @@
 // Source of truth for categories in the application
 export const BASE_CATEGORIES = [
+  "Gaji",
+  "Bonus / THR",
+  "Side Income / Freelance",
+  "Rejeki / Hadiah",
   "Makan",
   "Bensin / Mobilitas",
   "Ninis",
@@ -17,6 +21,38 @@ export const BASE_CATEGORIES = [
   "Investasi"
 ];
 
+// Specific categories for Income (Pemasukan)
+export const PEMASUKAN_CATEGORIES = [
+  "Gaji",
+  "Bonus / THR",
+  "Side Income / Freelance",
+  "Rejeki / Hadiah",
+  "Penyesuaian",
+  "Titipan / Jastip",
+  "Piutang Kembali",
+  "Investasi",
+  "Lainnya (Ketik Manual...)"
+];
+
+// Specific categories for Expense (Pengeluaran)
+export const PENGELUARAN_CATEGORIES = [
+  "Makan",
+  "Bensin / Mobilitas",
+  "Ninis",
+  "Kos",
+  "Hiburan",
+  "Kebutuhan Lab / Magang",
+  "Bulanan",
+  "SPay",
+  "Belanja Dapur",
+  "Penyesuaian",
+  "Scheduled Settlement",
+  "Titipan / Jastip",
+  "Piutang",
+  "Investasi",
+  "Lainnya (Ketik Manual...)"
+];
+
 // Categories counted towards daily spending limit
 export const JAJAN_CATEGORIES = [
   "Makan",
@@ -24,7 +60,7 @@ export const JAJAN_CATEGORIES = [
   "Ninis"
 ];
 
-// Dropdown options for Transaction Input Form
+// General dropdown options (fallback)
 export const KATEGORI_OPTIONS = [
   ...BASE_CATEGORIES,
   "Lainnya (Ketik Manual...)"

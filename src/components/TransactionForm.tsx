@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { PlusCircle, Calendar, Tag, CreditCard, PenTool, CheckCircle, Loader2, ChevronDown, ChevronUp } from 'lucide-react';
-import { KATEGORI_OPTIONS } from '@/config/categories';
+import { KATEGORI_OPTIONS, PEMASUKAN_CATEGORIES, PENGELUARAN_CATEGORIES } from '@/config/categories';
 
 interface FormProps {
   saldoBank: number;
@@ -26,7 +26,7 @@ export default function TransactionForm({ saldoBank, uangCash, onSuccess }: Form
   });
   const [tipe, setTipe] = useState<'Pengeluaran' | 'Pemasukan' | 'Transfer'>('Pengeluaran');
   const [sumber, setSumber] = useState<'Bank' | 'Cash'>('Bank');
-  const [kategori, setKategori] = useState(KATEGORI_OPTIONS[0]);
+  const [kategori, setKategori] = useState('Makan');
   const [customKategori, setCustomKategori] = useState('');
   const [nominal, setNominal] = useState<string>('');
   const [catatan, setCatatan] = useState('');
@@ -199,6 +199,7 @@ export default function TransactionForm({ saldoBank, uangCash, onSuccess }: Form
       setNominal('');
       setCatatan('');
       setCustomKategori('');
+      setKategori(tipe === 'Pemasukan' ? 'Gaji' : 'Makan');
       setTenggatWaktu('');
       setStatus('Cleared');
       setTitBank('');
@@ -266,6 +267,10 @@ export default function TransactionForm({ saldoBank, uangCash, onSuccess }: Form
                 setTipe(newTipe);
                 if (newTipe === 'Transfer') {
                   setKategori('Transfer Aset');
+                } else if (newTipe === 'Pemasukan') {
+                  setKategori('Gaji');
+                } else {
+                  setKategori('Makan');
                 }
               }}
               className="bg-slate-900/60 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-emerald-500 text-sm h-[38px]"
@@ -315,7 +320,7 @@ export default function TransactionForm({ saldoBank, uangCash, onSuccess }: Form
                 onChange={(e) => setKategori(e.target.value)}
                 className="bg-slate-900/60 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-emerald-500 text-sm h-[38px]"
               >
-                {KATEGORI_OPTIONS.map((opt) => (
+                {(tipe === 'Pemasukan' ? PEMASUKAN_CATEGORIES : PENGELUARAN_CATEGORIES).map((opt) => (
                   <option key={opt} value={opt}>{opt}</option>
                 ))}
               </select>
