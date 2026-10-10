@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase';
 import { Settings, Save, Loader2, CalendarClock, Lock, Unlock, Database, Shuffle, Tags, Download, FileSpreadsheet } from 'lucide-react';
 import { BASE_CATEGORIES } from '@/config/categories';
 import { calculateGajianCycle } from '@/lib/gajianUtils';
+import CurrencyInput from '@/components/CurrencyInput';
 
 export default function SettingsPage() {
   const [loading, setLoading] = useState(true);
@@ -544,20 +545,19 @@ export default function SettingsPage() {
                 return (
                   <div key={cat} className="flex justify-between items-center gap-4">
                     <span className="text-slate-300 font-medium truncate">{cat}</span>
-                    <div className="relative flex-shrink-0 w-36">
-                      <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[10px] text-slate-500 font-bold">Rp</span>
-                      <input
-                        type="number"
+                    <div className="flex-shrink-0 w-36">
+                      <CurrencyInput
+                        prefix="Rp"
                         placeholder="Unlimited"
                         value={currentVal}
-                        onChange={(e) => {
-                          const val = e.target.value === '' ? 0 : Math.max(0, parseInt(e.target.value));
+                        onChangeValue={(val) => {
+                          const num = val === '' ? 0 : Number(val);
                           setCategoryBudgets({
                             ...categoryBudgets,
-                            [cat]: val
+                            [cat]: num
                           });
                         }}
-                        className="bg-slate-900 border border-slate-750 rounded px-2 py-1 pl-8 text-right text-white focus:outline-none focus:border-emerald-500 text-xs w-full font-mono"
+                        className="bg-slate-900 border border-slate-750 rounded px-2 py-1 text-right text-white focus:outline-none focus:border-emerald-500 text-xs w-full font-mono font-bold"
                       />
                     </div>
                   </div>

@@ -545,21 +545,21 @@ export default function InvestasiPage() {
 
               <div className="space-y-1">
                 <label className="text-slate-400 font-semibold">Modal Awal</label>
-                <input
-                  type="number"
+                <CurrencyInput
+                  placeholder="0"
                   value={editModal}
-                  onChange={(e) => setEditModal(e.target.value)}
-                  className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 w-full text-white focus:outline-none focus:border-emerald-500 font-mono"
+                  onChangeValue={(val) => setEditModal(val)}
+                  className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 w-full text-white focus:outline-none focus:border-emerald-500 font-mono font-bold"
                 />
               </div>
 
               <div className="space-y-1">
                 <label className="text-slate-400 font-semibold">Nilai Sekarang</label>
-                <input
-                  type="number"
+                <CurrencyInput
+                  placeholder="0"
                   value={editSekarang}
-                  onChange={(e) => setEditSekarang(e.target.value)}
-                  className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 w-full text-white focus:outline-none focus:border-emerald-500 font-mono"
+                  onChangeValue={(val) => setEditSekarang(val)}
+                  className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 w-full text-white focus:outline-none focus:border-emerald-500 font-mono font-bold"
                 />
               </div>
 

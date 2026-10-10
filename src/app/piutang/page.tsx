@@ -560,11 +560,11 @@ export default function PiutangPage() {
 
               <div className="flex flex-col gap-1">
                 <label className="text-xs font-semibold text-slate-400">Nominal (Rp)</label>
-                <input
-                  type="number"
+                <CurrencyInput
+                  placeholder="0"
                   value={editingPiutang.nominal}
-                  onChange={e => setEditingPiutang({ ...editingPiutang, nominal: e.target.value })}
-                  className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none focus:border-emerald-500 text-xs"
+                  onChangeValue={val => setEditingPiutang({ ...editingPiutang, nominal: val })}
+                  className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none focus:border-emerald-500 text-xs w-full font-bold"
                   required
                 />
               </div>

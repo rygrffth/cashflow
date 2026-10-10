@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { HelpCircle, AlertCircle, Info, Sparkles, TrendingUp, TrendingDown, Minus } from 'lucide-react';
+import CurrencyInput from '@/components/CurrencyInput';
 
 interface SimulatorProps {
   saldoOp: number;
@@ -60,14 +61,13 @@ export default function JajanSimulator({
             </label>
             
             {/* Number Input Box */}
-            <input
-              type="number"
+            <CurrencyInput
               value={simulasiJajan}
-              onChange={(e) => {
-                const val = Math.max(0, Math.min(Number(e.target.value), maxSimulasi));
-                setSimulasiJajan(val);
+              onChangeValue={(val) => {
+                const numeric = Number(val) || 0;
+                const clamped = Math.max(0, Math.min(numeric, maxSimulasi));
+                setSimulasiJajan(clamped);
               }}
-              step={5000}
               className="bg-slate-900/60 border border-slate-700 rounded-lg px-4 py-2.5 text-white font-bold focus:outline-none focus:border-emerald-500 transition-colors w-full"
             />
             

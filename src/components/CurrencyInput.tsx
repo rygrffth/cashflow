@@ -5,7 +5,7 @@ import React from 'react';
 interface CurrencyInputProps extends Omit<React.InputHTMLAttributes<HTMLInputElement>, 'onChange' | 'value'> {
   value: string | number;
   onChangeValue: (rawValue: string) => void;
-  prefix?: string;
+  prefix?: string | null;
 }
 
 export default function CurrencyInput({
@@ -28,23 +28,25 @@ export default function CurrencyInput({
     const inputVal = e.target.value;
     // Extract only digits
     const rawDigits = inputVal.replace(/\D/g, '');
-    onChangeValue(rawDigits);
+    // Sanitize leading zeros unless it's just '0'
+    const sanitized = rawDigits ? String(Number(rawDigits)) : '';
+    onChangeValue(sanitized);
   };
 
   return (
     <div className="relative flex items-center w-full">
-      {prefix && (
+      {prefix ? (
         <span className="absolute left-3 text-xs font-semibold text-slate-400 pointer-events-none select-none">
           {prefix}
         </span>
-      )}
+      ) : null}
       <input
         type="text"
         inputMode="numeric"
         value={formatDisplay(value)}
         onChange={handleChange}
         placeholder={placeholder}
-        className={`${prefix ? 'pl-9' : 'pl-3'} ${className}`}
+        className={`${prefix ? 'pl-8' : 'px-3'} ${className}`}
         {...rest}
       />
     </div>

@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase';
 import { RefreshCw, CheckCircle, Loader2 } from 'lucide-react';
 
 import { KATEGORI_SYNC_OPTIONS as CATEGORIES } from '@/config/categories';
+import CurrencyInput from '@/components/CurrencyInput';
 
 export default function SyncPage() {
   const [successMsg, setSuccessMsg] = useState('');
@@ -307,11 +308,12 @@ export default function SyncPage() {
                           </select>
                         </td>
                         <td className="p-3">
-                          <input
-                            type="number"
+                          <CurrencyInput
+                            prefix=""
+                            placeholder="0"
                             value={row.nominal}
-                            onChange={e => handleUpdateRow(idx, 'nominal', e.target.value)}
-                            className="bg-slate-900 border border-slate-800 rounded px-2 py-1 text-white text-xs w-[100px] font-semibold focus:outline-none focus:border-emerald-500"
+                            onChangeValue={val => handleUpdateRow(idx, 'nominal', val)}
+                            className="bg-slate-900 border border-slate-800 rounded px-2 py-1 text-white text-xs w-[110px] font-semibold focus:outline-none focus:border-emerald-500"
                           />
                         </td>
                         <td className="p-3">

@@ -481,22 +481,20 @@ export default function TransactionForm({ saldoBank, uangCash, onSuccess }: Form
                 <div className="grid grid-cols-2 gap-3">
                   <div className="flex flex-col gap-1">
                     <label className="text-[10px] text-slate-400">Nominal Talangan Bank (Rp)</label>
-                    <input
-                      type="number"
+                    <CurrencyInput
                       placeholder="0"
                       value={titBank}
-                      onChange={(e) => setTitBank(e.target.value)}
-                      className="bg-slate-900 border border-slate-700 rounded px-2 py-1.5 text-white focus:outline-none focus:border-emerald-500"
+                      onChangeValue={(val) => setTitBank(val)}
+                      className="bg-slate-900 border border-slate-700 rounded px-2 py-1.5 text-white focus:outline-none focus:border-emerald-500 w-full text-xs font-bold"
                     />
                   </div>
                   <div className="flex flex-col gap-1">
                     <label className="text-[10px] text-slate-400">Nominal Talangan Cash (Rp)</label>
-                    <input
-                      type="number"
+                    <CurrencyInput
                       placeholder="0"
                       value={titCash}
-                      onChange={(e) => setTitCash(e.target.value)}
-                      className="bg-slate-900 border border-slate-700 rounded px-2 py-1.5 text-white focus:outline-none focus:border-emerald-500"
+                      onChangeValue={(val) => setTitCash(val)}
+                      className="bg-slate-900 border border-slate-700 rounded px-2 py-1.5 text-white focus:outline-none focus:border-emerald-500 w-full text-xs font-bold"
                     />
                   </div>
                 </div>

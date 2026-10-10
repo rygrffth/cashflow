@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { KATEGORI_HISTORY_OPTIONS as KATEGORI_OPTIONS } from '@/config/categories';
 import { RefreshCw, Trash2, Calendar, Filter, Download, History, Search, CreditCard, Tag } from 'lucide-react';
+import CurrencyInput from '@/components/CurrencyInput';
 
 export default function HistoryPage() {
   const [loading, setLoading] = useState(true);
@@ -642,11 +643,12 @@ export default function HistoryPage() {
                               <option value="Pengeluaran">Out</option>
                               <option value="Pemasukan">In</option>
                             </select>
-                            <input
-                              type="number"
+                            <CurrencyInput
+                              prefix=""
+                              placeholder="0"
                               value={rowData.nominal}
-                              onChange={(e) => handleCellChange(t.id, 'nominal', e.target.value)}
-                              className="bg-slate-900 border border-slate-700 rounded px-2.5 py-1 text-xs text-white text-right focus:border-emerald-500 outline-none w-28"
+                              onChangeValue={(val) => handleCellChange(t.id, 'nominal', val)}
+                              className="bg-slate-900 border border-slate-700 rounded px-2.5 py-1 text-xs text-white text-right focus:border-emerald-500 outline-none w-28 font-bold"
                             />
                           </div>
                         ) : (

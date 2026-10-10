@@ -168,9 +168,9 @@ export default function Sidebar() {
           })}
         </nav>
 
-        {/* Sidebar Footer (Theme Toggler & Collapse Button on Desktop) */}
+        {/* Sidebar Footer (Theme Toggler & Collapse Button) */}
         <div className={`
-          hidden md:flex flex-col gap-2 p-3 border-t border-[color:var(--card-border)] transition-all duration-300
+          flex flex-col gap-2 p-3 border-t border-[color:var(--card-border)] transition-all duration-300 pb-[max(1rem,env(safe-area-inset-bottom))]
           ${isMounted && isCollapsed ? 'items-center' : 'items-stretch'}
         `}>
           {/* Theme Toggle Button */}
@@ -178,7 +178,7 @@ export default function Sidebar() {
             onClick={toggleTheme}
             title={isCollapsed ? (theme === 'dark' ? 'Mode Terang' : 'Mode Gelap') : undefined}
             className={`
-              flex items-center rounded-xl text-xs sm:text-sm font-semibold text-slate-400 hover:text-slate-200 hover:bg-slate-850/50 border border-transparent transition-all cursor-pointer bg-slate-900/25
+              flex items-center rounded-xl text-xs sm:text-sm font-semibold text-slate-300 hover:text-white hover:bg-slate-800/60 border border-slate-700/40 transition-all cursor-pointer bg-slate-900/40
               ${isMounted && isCollapsed ? 'justify-center h-10 w-10' : 'px-4 py-2.5 gap-3'}
             `}
           >
@@ -195,12 +195,12 @@ export default function Sidebar() {
             )}
           </button>
 
-          {/* Collapse Toggle Button */}
+          {/* Desktop Collapse Toggle Button */}
           <button
             onClick={toggleCollapse}
             title={isCollapsed ? 'Perluas Menu' : 'Ciutkan Menu'}
             className={`
-              flex items-center rounded-xl text-xs sm:text-sm font-semibold text-slate-450 hover:text-white hover:bg-slate-850/50 border border-transparent transition-all cursor-pointer
+              hidden md:flex items-center rounded-xl text-xs sm:text-sm font-semibold text-slate-450 hover:text-white hover:bg-slate-850/50 border border-transparent transition-all cursor-pointer
               ${isMounted && isCollapsed ? 'justify-center h-10 w-10' : 'px-4 py-2.5 gap-3'}
             `}
           >
@@ -213,8 +213,90 @@ export default function Sidebar() {
               </>
             )}
           </button>
+
+          {/* Mobile Close Button at Bottom of Drawer */}
+          <button
+            onClick={() => setIsOpen(false)}
+            className="md:hidden flex items-center justify-center gap-2 px-4 py-2 text-xs font-bold text-slate-400 hover:text-white hover:bg-slate-800/40 rounded-xl transition cursor-pointer"
+          >
+            <X className="w-4 h-4" />
+            <span>Tutup Menu</span>
+          </button>
         </div>
       </aside>
+
+      {/* 📱 Mobile Floating Bottom Dock (Ergonomic for iPhone 13 & one-handed thumb reach) */}
+      <nav 
+        aria-label="Mobile Bottom Navigation"
+        className="md:hidden fixed bottom-3 inset-x-3 z-40 bg-slate-900/90 dark:bg-slate-950/90 backdrop-blur-xl border border-slate-700/60 shadow-[0_10px_25px_rgba(0,0,0,0.5)] rounded-2xl px-2 py-1.5 flex items-center justify-around mb-[env(safe-area-inset-bottom,0px)]"
+      >
+        <Link
+          href="/"
+          className={`flex flex-col items-center justify-center py-1 px-2.5 rounded-xl text-[10px] font-bold transition-all ${
+            normalizePath(pathname) === '/' 
+              ? 'text-emerald-400 bg-emerald-500/15' 
+              : 'text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          <LayoutDashboard className="w-5 h-5 mb-0.5" />
+          <span>Dashboard</span>
+        </Link>
+
+        <Link
+          href="/history"
+          className={`flex flex-col items-center justify-center py-1 px-2.5 rounded-xl text-[10px] font-bold transition-all ${
+            normalizePath(pathname) === '/history' 
+              ? 'text-emerald-400 bg-emerald-500/15' 
+              : 'text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          <History className="w-5 h-5 mb-0.5" />
+          <span>Riwayat</span>
+        </Link>
+
+        <Link
+          href="/budget"
+          className={`flex flex-col items-center justify-center py-1 px-2.5 rounded-xl text-[10px] font-bold transition-all ${
+            normalizePath(pathname) === '/budget' 
+              ? 'text-emerald-400 bg-emerald-500/15' 
+              : 'text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          <Target className="w-5 h-5 mb-0.5" />
+          <span>Tabungan</span>
+        </Link>
+
+        {/* 🌓 Quick Theme Toggle right at thumb */}
+        <button
+          onClick={toggleTheme}
+          className="flex flex-col items-center justify-center py-1 px-2.5 rounded-xl text-[10px] font-bold text-slate-400 hover:text-slate-200 transition-all cursor-pointer"
+          title={theme === 'dark' ? 'Mode Terang' : 'Mode Gelap'}
+        >
+          {theme === 'dark' ? (
+            <>
+              <Sun className="w-5 h-5 mb-0.5 text-amber-400" />
+              <span className="text-amber-400">Terang</span>
+            </>
+          ) : (
+            <>
+              <Moon className="w-5 h-5 mb-0.5 text-indigo-400" />
+              <span className="text-indigo-400">Gelap</span>
+            </>
+          )}
+        </button>
+
+        {/* ☰ Full Menu / Sidebar Drawer Trigger */}
+        <button
+          onClick={() => setIsOpen(true)}
+          className={`flex flex-col items-center justify-center py-1 px-2.5 rounded-xl text-[10px] font-bold transition-all cursor-pointer ${
+            isOpen ? 'text-emerald-400 bg-emerald-500/15' : 'text-slate-400 hover:text-slate-200'
+          }`}
+          title="Buka Menu Lengkap"
+        >
+          <Menu className="w-5 h-5 mb-0.5" />
+          <span>Menu</span>
+        </button>
+      </nav>
     </>
   );
 }

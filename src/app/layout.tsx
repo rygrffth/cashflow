@@ -68,7 +68,7 @@ export default function RootLayout({
         <RegisterSW />
         <Sidebar />
         <div className="flex-1 min-w-0 main-content-wrapper">
-          <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+          <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 pb-28 md:pb-6">
             {children}
           </main>
         </div>
