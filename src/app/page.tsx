@@ -36,6 +36,7 @@ export default function Dashboard() {
   // Category Budgets Tracking State
   const [categoryBudgets, setCategoryBudgets] = useState<Record<string, number>>({});
   const [monthlySpendMap, setMonthlySpendMap] = useState<Record<string, number>>({});
+  const [excludeCategories, setExcludeCategories] = useState<string[]>([]);
 
   // Lists State
   const [todayTransactions, setTodayTransactions] = useState<any[]>([]);
@@ -165,14 +166,47 @@ export default function Dashboard() {
       });
       setMonthlySpendMap(catSpend);
 
-      // Out Hari Harian (Makan & Bensin spent today, active)
-      const jajanCategories = JAJAN_CATEGORIES;
+      // Excluded Categories from settings (Filter Kategori Operational)
+      const excludeSet = (settingsData || []).find(s => s.key === 'exclude_categories');
+      let excludedCats: string[] = [];
+      if (excludeSet && excludeSet.value) {
+        try {
+          excludedCats = JSON.parse(excludeSet.value);
+          setExcludeCategories(excludedCats);
+        } catch (e) {
+          console.error('Error parsing exclude_categories:', e);
+        }
+      }
+
+      // Out Hari Harian (Jajan Hari Ini yang dihitung ke Limit Harian)
+      // Menghormati pengaturan Filter Kategori Operational (excludedCats)
+      const isCountedInDailyLimit = (kat: string) => {
+        // Jika dicentang di Settings (dikecualikan), PASTI TIDAK DIHITUNG
+        if (excludedCats.includes(kat)) return false;
+
+        // Kategori non-harian bawaan
+        const nonDailySystem = [
+          'Kos',
+          'Investasi',
+          'Transfer Aset',
+          'Scheduled Settlement',
+          'Penyesuaian',
+          'Menabung',
+          'Tarik Tabungan',
+          'Piutang',
+          'Piutang Kembali'
+        ];
+        if (nonDailySystem.includes(kat)) return false;
+
+        // Kategori jajan harian aktif
+        return JAJAN_CATEGORIES.includes(kat);
+      };
 
       const todayJajanSum = allTxns
         .filter(t =>
           t.tipe === 'Pengeluaran' &&
           !(t.kategori === 'Scheduled Settlement' && t.status === 'Pending') &&
-          jajanCategories.includes(t.kategori) &&
+          isCountedInDailyLimit(t.kategori) &&
           t.tanggal === todayWIB
         )
         .reduce((acc, curr) => {
@@ -467,24 +501,34 @@ export default function Dashboard() {
 
             {todayTransactions.length > 0 ? (
               <div className="space-y-3 max-h-[300px] overflow-y-auto pr-1 no-scrollbar">
-                {todayTransactions.map((t) => (
-                  <div
-                    key={t.id || Math.random()}
-                    className="p-3 bg-slate-950/40 border border-slate-900 rounded-xl flex justify-between items-center text-xs tracking-wide"
-                  >
-                    <div>
-                      <p className="font-bold text-slate-200">{t.catatan || t.kategori}</p>
-                      <div className="flex gap-2 items-center mt-1 text-[10px] text-slate-400">
-                        <span className="px-1.5 py-0.5 bg-slate-800 rounded font-semibold text-slate-300">
-                          {t.kategori}
-                        </span>
-                        <span>•</span>
-                        <span className="flex items-center gap-0.5">
-                          {t.sumber === 'Bank' ? <Landmark className="w-2.5 h-2.5" /> : <Wallet className="w-2.5 h-2.5" />}
-                          {t.sumber}
-                        </span>
+                {todayTransactions.map((t) => {
+                  const isExcludedFromLimit = excludeCategories.includes(t.kategori) || !JAJAN_CATEGORIES.includes(t.kategori);
+                  return (
+                    <div
+                      key={t.id || Math.random()}
+                      className="p-3 bg-slate-950/40 border border-slate-900 rounded-xl flex justify-between items-center text-xs tracking-wide"
+                    >
+                      <div>
+                        <p className="font-bold text-slate-200">{t.catatan || t.kategori}</p>
+                        <div className="flex flex-wrap gap-2 items-center mt-1 text-[10px] text-slate-400">
+                          <span className="px-1.5 py-0.5 bg-slate-800 rounded font-semibold text-slate-300">
+                            {t.kategori}
+                          </span>
+                          <span>•</span>
+                          <span className="flex items-center gap-0.5">
+                            {t.sumber === 'Bank' ? <Landmark className="w-2.5 h-2.5" /> : <Wallet className="w-2.5 h-2.5" />}
+                            {t.sumber}
+                          </span>
+                          {t.tipe === 'Pengeluaran' && isExcludedFromLimit && (
+                            <>
+                              <span>•</span>
+                              <span className="text-[9px] text-amber-400 bg-amber-500/10 border border-amber-500/20 px-1.5 py-0.5 rounded font-medium">
+                                Dikecualikan dari Limit
+                              </span>
+                            </>
+                          )}
+                        </div>
                       </div>
-                    </div>
 
                     <div className="flex items-center gap-3">
                       <div className="text-right">
