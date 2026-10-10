@@ -127,11 +127,40 @@ export default function HistoryPage() {
       const promises = ids.map(async (idStr) => {
         const id = Number(idStr);
         const updatedData = editedTransactions[id];
+        const oldTx = transactions.find(t => t.id === id);
 
         // Validation
         const parsedNominal = Number(updatedData.nominal);
         if (isNaN(parsedNominal) || parsedNominal <= 0) {
           throw new Error(`Nominal untuk transaksi "${updatedData.catatan || updatedData.kategori}" tidak valid.`);
+        }
+
+        const oldNominal = Number(oldTx?.nominal || 0);
+        const nominalDiff = parsedNominal - oldNominal;
+
+        // Sinkron penuh ke target tabungan jika transaksi terkait dengan tabungan
+        if (oldTx && oldTx.tabungan_id && nominalDiff !== 0) {
+          try {
+            const { data: targetTabungan } = await supabase
+              .from('tabungan')
+              .select('*')
+              .eq('id', oldTx.tabungan_id)
+              .single();
+
+            if (targetTabungan) {
+              const curTerkumpul = Number(targetTabungan.nominal_terkumpul) || 0;
+              const isSetor = (updatedData.kategori || oldTx.kategori) === 'Menabung' || (updatedData.tipe || oldTx.tipe) === 'Pengeluaran';
+              const newTerkumpul = isSetor ? Math.max(0, curTerkumpul + nominalDiff) : Math.max(0, curTerkumpul - nominalDiff);
+              const newStatus = newTerkumpul >= Number(targetTabungan.target_nominal) ? 'Selesai' : 'Aktif';
+
+              await supabase.from('tabungan').update({
+                nominal_terkumpul: newTerkumpul,
+                status: newStatus
+              }).eq('id', oldTx.tabungan_id);
+            }
+          } catch (syncErr) {
+            console.warn('Tabungan sync error on edit:', syncErr);
+          }
         }
 
         const { error } = await supabase

@@ -10,6 +10,8 @@ export default function BudgetPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [tabunganData, setTabunganData] = useState<any[]>([]);
   const [editingTabungan, setEditingTabungan] = useState<any | null>(null);
+  const [originalTerkumpul, setOriginalTerkumpul] = useState<number>(0);
+  const [syncSource, setSyncSource] = useState<'Bank' | 'Cash' | 'none'>('Bank');
 
   // Add Target Form States
   const [nama, setNama] = useState('');
@@ -196,23 +198,67 @@ export default function BudgetPage() {
     e.preventDefault();
     if (!editingTabungan) return;
     try {
+      const newTerkumpul = Number(editingTabungan.nominal_terkumpul) || 0;
+      const targetNom = Number(editingTabungan.target_nominal) || 0;
+      const diff = newTerkumpul - originalTerkumpul;
+
+      // Sinkron penuh ke saldo operasional jika nominal terkumpul berubah
+      if (diff !== 0 && syncSource !== 'none') {
+        const today = new Date();
+        const offset = today.getTimezoneOffset() * 60000;
+        const todayStr = new Date(today.getTime() - offset).toISOString().split('T')[0];
+
+        if (diff > 0) {
+          // Tabungan bertambah: potong saldo operasional dari sumber pilihan
+          await supabase.from('transaksi').insert([{
+            tanggal: todayStr,
+            tipe: 'Pengeluaran',
+            kategori: 'Menabung',
+            nominal: diff,
+            catatan: `Penyesuaian Tambah Tabungan: ${editingTabungan.nama}`.trim(),
+            status: 'Cleared',
+            tenggat_waktu: '',
+            tanggal_bayar: todayStr,
+            sumber: syncSource,
+            tabungan_id: editingTabungan.id
+          }]);
+        } else {
+          // Tabungan berkurang: kembalikan ke saldo operasional pilihan
+          await supabase.from('transaksi').insert([{
+            tanggal: todayStr,
+            tipe: 'Pemasukan',
+            kategori: 'Tarik Tabungan',
+            nominal: Math.abs(diff),
+            catatan: `Penyesuaian Pengurangan Tabungan: ${editingTabungan.nama}`.trim(),
+            status: 'Cleared',
+            tenggat_waktu: '',
+            tanggal_bayar: todayStr,
+            sumber: syncSource,
+            tabungan_id: editingTabungan.id
+          }]);
+        }
+      }
+
+      const newStatus = newTerkumpul >= targetNom ? 'Selesai' : 'Aktif';
+
       const { error } = await supabase
         .from('tabungan')
         .update({
           nama: editingTabungan.nama,
-          target_nominal: Number(editingTabungan.target_nominal),
-          nominal_terkumpul: Number(editingTabungan.nominal_terkumpul),
+          target_nominal: targetNom,
+          nominal_terkumpul: newTerkumpul,
           tanggal_mulai: editingTabungan.tanggal_mulai,
           tanggal_target: editingTabungan.tanggal_target,
           kategori: editingTabungan.kategori,
           catatan: editingTabungan.catatan,
-          status: editingTabungan.status
+          status: newStatus
         })
         .eq('id', editingTabungan.id);
 
       if (error) throw error;
       setEditingTabungan(null);
       fetchTabungan(true);
+      alert('✅ Target tabungan & saldo operasional berhasil disinkronkan!');
     } catch (err: any) {
       console.error(err);
       alert(`Gagal memperbarui target tabungan: ${err.message}`);
@@ -279,7 +325,14 @@ export default function BudgetPage() {
                       <p className="text-xs text-slate-400 mt-0.5">Kategori: <span className="text-slate-300 font-semibold">{item.kategori}</span> • Target: <span className="text-emerald-400 font-semibold">{item.tanggal_target || 'Tanpa Tenggat'}</span></p>
                     </div>
                     <div className="flex gap-2 items-center opacity-0 group-hover:opacity-100 transition">
-                      <button onClick={() => setEditingTabungan(item)} className="text-slate-500 hover:text-emerald-400 transition cursor-pointer">
+                      <button 
+                        onClick={() => {
+                          setEditingTabungan(item);
+                          setOriginalTerkumpul(Number(item.nominal_terkumpul) || 0);
+                          setSyncSource('Bank');
+                        }} 
+                        className="text-slate-500 hover:text-emerald-400 transition cursor-pointer"
+                      >
                         <Pencil className="w-4 h-4" />
                       </button>
                       <button onClick={() => handleDelete(item.id)} className="text-slate-500 hover:text-rose-400 transition cursor-pointer">
@@ -608,26 +661,84 @@ export default function BudgetPage() {
               <div className="grid grid-cols-2 gap-3">
                 <div className="flex flex-col gap-1">
                   <label className="text-xs font-semibold text-slate-400">Target Nominal (Rp)</label>
-                  <input
-                    type="number"
+                  <CurrencyInput
+                    placeholder="0"
                     value={editingTabungan.target_nominal}
-                    onChange={e => setEditingTabungan({ ...editingTabungan, target_nominal: e.target.value })}
-                    className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none focus:border-emerald-500 text-xs"
+                    onChangeValue={val => setEditingTabungan({ ...editingTabungan, target_nominal: val })}
+                    className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none focus:border-emerald-500 text-xs w-full"
                     required
                   />
                 </div>
 
                 <div className="flex flex-col gap-1">
                   <label className="text-xs font-semibold text-slate-400">Terkumpul (Rp)</label>
-                  <input
-                    type="number"
+                  <CurrencyInput
+                    placeholder="0"
                     value={editingTabungan.nominal_terkumpul}
-                    onChange={e => setEditingTabungan({ ...editingTabungan, nominal_terkumpul: e.target.value })}
-                    className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none focus:border-emerald-500 text-xs"
+                    onChangeValue={val => setEditingTabungan({ ...editingTabungan, nominal_terkumpul: val })}
+                    className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none focus:border-emerald-500 text-xs w-full font-bold"
                     required
                   />
                 </div>
               </div>
+
+              {/* Pilihan Sumber Penyesuaian Saldo jika Terkumpul Berubah */}
+              {Number(editingTabungan.nominal_terkumpul) !== originalTerkumpul && (() => {
+                const diff = (Number(editingTabungan.nominal_terkumpul) || 0) - originalTerkumpul;
+                return (
+                  <div className="p-3 bg-emerald-950/30 border border-emerald-500/30 rounded-xl space-y-2 animate-fadeIn">
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="font-bold text-emerald-400">
+                        {diff > 0 
+                          ? `📈 Penambahan Tabungan: +Rp ${diff.toLocaleString('id-ID')}`
+                          : `📉 Pengurangan Tabungan: -Rp ${Math.abs(diff).toLocaleString('id-ID')}`
+                        }
+                      </span>
+                    </div>
+                    <label className="text-[11px] text-slate-300 font-semibold block">
+                      {diff > 0 
+                        ? '💸 Uang tambahan ini diambil/dipotong dari rekening mana?' 
+                        : '💰 Uang pengurangan ini dikembalikan ke rekening mana?'
+                      }
+                    </label>
+                    <div className="grid grid-cols-3 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setSyncSource('Bank')}
+                        className={`py-1.5 px-2 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1 border cursor-pointer ${
+                          syncSource === 'Bank'
+                            ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.3)]'
+                            : 'bg-slate-900 text-slate-300 border-slate-700 hover:bg-slate-800'
+                        }`}
+                      >
+                        🏦 Bank
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSyncSource('Cash')}
+                        className={`py-1.5 px-2 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1 border cursor-pointer ${
+                          syncSource === 'Cash'
+                            ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.3)]'
+                            : 'bg-slate-900 text-slate-300 border-slate-700 hover:bg-slate-800'
+                        }`}
+                      >
+                        💵 Cash
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSyncSource('none')}
+                        className={`py-1.5 px-2 rounded-lg text-[10px] font-bold transition flex items-center justify-center gap-1 border cursor-pointer ${
+                          syncSource === 'none'
+                            ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-[0_0_10px_rgba(245,158,11,0.3)]'
+                            : 'bg-slate-900 text-slate-400 border-slate-700 hover:bg-slate-800'
+                        }`}
+                      >
+                        ⚙️ Tanpa Ubah Saldo
+                      </button>
+                    </div>
+                  </div>
+                );
+              })()}
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="flex flex-col gap-1">

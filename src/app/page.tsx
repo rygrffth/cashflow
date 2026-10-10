@@ -11,6 +11,7 @@ import { RefreshCw, Clock, Landmark, Wallet, ListTodo, Lock, Unlock, Pencil, Tra
 import { getWIBDateString, parseDateParts } from '@/lib/dateUtils';
 import { calculateGajianCycle } from '@/lib/gajianUtils';
 import { computeFinancialBalances } from '@/lib/balanceUtils';
+import CurrencyInput from '@/components/CurrencyInput';
 
 export default function Dashboard() {
   // Loading & Data States
@@ -217,13 +218,39 @@ export default function Dashboard() {
     e.preventDefault();
     if (!editingTxn) return;
     try {
+      const oldTxn = todayTransactions.find(t => t.id === editingTxn.id);
+      const newNominal = Number(editingTxn.nominal);
+      const oldNominal = Number(oldTxn?.nominal || 0);
+      const nominalDiff = newNominal - oldNominal;
+
+      // Sinkron penuh ke target tabungan jika transaksi ini bertipe tabungan
+      if (editingTxn.tabungan_id && nominalDiff !== 0) {
+        const { data: targetTabungan } = await supabase
+          .from('tabungan')
+          .select('*')
+          .eq('id', editingTxn.tabungan_id)
+          .single();
+
+        if (targetTabungan) {
+          const curTerkumpul = Number(targetTabungan.nominal_terkumpul) || 0;
+          const isSetor = editingTxn.kategori === 'Menabung' || editingTxn.tipe === 'Pengeluaran';
+          const newTerkumpul = isSetor ? Math.max(0, curTerkumpul + nominalDiff) : Math.max(0, curTerkumpul - nominalDiff);
+          const newStatus = newTerkumpul >= Number(targetTabungan.target_nominal) ? 'Selesai' : 'Aktif';
+
+          await supabase.from('tabungan').update({
+            nominal_terkumpul: newTerkumpul,
+            status: newStatus
+          }).eq('id', editingTxn.tabungan_id);
+        }
+      }
+
       const { error } = await supabase
         .from('transaksi')
         .update({
           tanggal: editingTxn.tanggal,
           tipe: editingTxn.tipe,
           kategori: editingTxn.kategori,
-          nominal: Number(editingTxn.nominal),
+          nominal: newNominal,
           catatan: editingTxn.catatan,
           sumber: editingTxn.sumber,
           status: editingTxn.status,
@@ -234,6 +261,7 @@ export default function Dashboard() {
       if (error) throw error;
       setEditingTxn(null);
       fetchData(true);
+      alert('✅ Transaksi & saldo tabungan berhasil disinkronkan!');
     } catch (e: any) {
       console.error(e);
       alert(`Gagal memperbarui transaksi: ${e.message}`);
@@ -524,11 +552,11 @@ export default function Dashboard() {
 
               <div className="flex flex-col gap-1">
                 <label className="text-xs font-semibold text-slate-400">Nominal (Rp)</label>
-                <input
-                  type="number"
+                <CurrencyInput
+                  placeholder="0"
                   value={editingTxn.nominal}
-                  onChange={e => setEditingTxn({ ...editingTxn, nominal: e.target.value })}
-                  className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none focus:border-emerald-500 text-xs"
+                  onChangeValue={val => setEditingTxn({ ...editingTxn, nominal: val })}
+                  className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none focus:border-emerald-500 text-xs w-full font-bold"
                   required
                 />
               </div>
