@@ -152,15 +152,26 @@ function parseTransaction(body: string, subject: string) {
   let penerima = isBNI ? 'BNI Transaction' : 'Mandiri Transaction';
 
   if (isBNI) {
+    const isLifeGoals = /Life\s*Goals/i.test(body) || /Life\s*Goals/i.test(subject);
     const isQRIS = /bayar\s*pakai\s*QRIS|Jenis\s*transaksi\s*QRIS/i.test(body);
-    const bniPenerimaMatch = body.match(/Penerima\s+([\w\s,.\-&'/()]+?)(?:\s+\w+,\s*\d{5},\s*ID|\s+Sumber\s*dana)/i)
-      || body.match(/Penerima\s+([\w\s,.\-&'/()]{2,60}?)(?:\s+Sumber|\s+Tanggal|\s+Detail)/i);
 
-    if (bniPenerimaMatch) {
-      const namaMerchant = bniPenerimaMatch[1].trim();
-      penerima = isQRIS ? `QRIS: ${namaMerchant}` : namaMerchant;
-    } else if (isQRIS) {
-      penerima = 'QRIS wondr BNI';
+    if (isLifeGoals) {
+      const lifeGoalsMatch = body.match(/Rekening\s*Life\s*Goals\s+([A-Za-z0-9\s,.\-&'/()]+?)(?:\s+\d{8,}|\s+Sumber\s*dana)/i);
+      if (lifeGoalsMatch) {
+        penerima = `Setoran Life Goals: ${lifeGoalsMatch[1].trim()}`;
+      } else {
+        penerima = 'Setoran Life Goals (BNI)';
+      }
+    } else {
+      const bniPenerimaMatch = body.match(/Penerima\s+([\w\s,.\-&'/()]+?)(?:\s+\w+,\s*\d{5},\s*ID|\s+Sumber\s*dana)/i)
+        || body.match(/Penerima\s+([\w\s,.\-&'/()]{2,60}?)(?:\s+Sumber|\s+Tanggal|\s+Detail)/i);
+
+      if (bniPenerimaMatch) {
+        const namaMerchant = bniPenerimaMatch[1].trim();
+        penerima = isQRIS ? `QRIS: ${namaMerchant}` : namaMerchant;
+      } else if (isQRIS) {
+        penerima = 'QRIS wondr BNI';
+      }
     }
   } else {
     // Livin' Mandiri regexes
@@ -199,7 +210,7 @@ function parseTransaction(body: string, subject: string) {
 
   // 5. Determine Transaction Type (Tipe)
   let tipe = 'Pengeluaran';
-  const outKeywords = ["Pembayaran", "Debit", "Transfer Keluar", "Tarik", "Top-up", "Top Up", "Bayar", "QRIS"];
+  const outKeywords = ["Pembayaran", "Debit", "Transfer Keluar", "Tarik", "Top-up", "Top Up", "Bayar", "QRIS", "Setoran", "Life Goals"];
   const inKeywords = ["Kredit", "Transfer Masuk", "Terima", "Masuk"];
 
   if (outKeywords.some(k => subject.includes(k) || body.includes(k))) {
@@ -212,7 +223,9 @@ function parseTransaction(body: string, subject: string) {
   let kategori = 'Lainnya';
   const lowerDesc = (penerima + ' ' + body).toLowerCase();
 
-  if (/pisang|mie|ayam|nasi|resto|warung|cafe|kopi|coffee|food|bakso|sate|makan|dapur|burger|pizza|martabak|roti|kuliner|snack/i.test(lowerDesc)) {
+  if (/life\s*goals|menabung|nabung/i.test(lowerDesc)) {
+    kategori = 'Menabung';
+  } else if (/pisang|mie|ayam|nasi|resto|warung|cafe|kopi|coffee|food|bakso|sate|makan|dapur|burger|pizza|martabak|roti|kuliner|snack/i.test(lowerDesc)) {
     kategori = 'Makan';
   } else if (/spbu|pertamina|shell|bp-akr|bensin|parkir|toll|tol\b|transport|grab|gojek|maxim/i.test(lowerDesc)) {
     kategori = 'Bensin / Mobilitas';
