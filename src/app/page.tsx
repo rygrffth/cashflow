@@ -205,6 +205,42 @@ export default function Dashboard() {
   const handleDeleteTxn = async (id: number) => {
     if (!confirm('Hapus transaksi ini secara permanen?')) return;
     try {
+      const targetTxn = todayTransactions.find(t => t.id === id);
+      if (targetTxn) {
+        let tabId = targetTxn.tabungan_id;
+        if (!tabId && (targetTxn.kategori === 'Menabung' || targetTxn.kategori === 'Tarik Tabungan')) {
+          const { data: allTabs } = await supabase.from('tabungan').select('id, nama');
+          const match = allTabs?.find(tb => (targetTxn.catatan || '').toLowerCase().includes(tb.nama.toLowerCase()));
+          if (match) tabId = match.id;
+          else if (allTabs && allTabs.length === 1) tabId = allTabs[0].id;
+        }
+
+        if (tabId) {
+          try {
+            const { data: targetTabungan } = await supabase
+              .from('tabungan')
+              .select('*')
+              .eq('id', tabId)
+              .single();
+
+            if (targetTabungan) {
+              const curTerkumpul = Number(targetTabungan.nominal_terkumpul) || 0;
+              const nom = Number(targetTxn.nominal) || 0;
+              const isSetor = targetTxn.kategori === 'Menabung' || targetTxn.tipe === 'Pengeluaran';
+              const newTerkumpul = isSetor ? Math.max(0, curTerkumpul - nom) : curTerkumpul + nom;
+              const newStatus = newTerkumpul >= Number(targetTabungan.target_nominal) ? 'Selesai' : 'Aktif';
+
+              await supabase.from('tabungan').update({
+                nominal_terkumpul: newTerkumpul,
+                status: newStatus
+              }).eq('id', tabId);
+            }
+          } catch (syncErr) {
+            console.warn('Tabungan sync skipped on delete:', syncErr);
+          }
+        }
+      }
+
       const { error } = await supabase.from('transaksi').delete().eq('id', id);
       if (error) throw error;
       fetchData(true);
@@ -223,12 +259,20 @@ export default function Dashboard() {
       const oldNominal = Number(oldTxn?.nominal || 0);
       const nominalDiff = newNominal - oldNominal;
 
+      let tabId = editingTxn.tabungan_id;
+      if (!tabId && (editingTxn.kategori === 'Menabung' || editingTxn.kategori === 'Tarik Tabungan')) {
+        const { data: allTabs } = await supabase.from('tabungan').select('id, nama');
+        const match = allTabs?.find(tb => (editingTxn.catatan || '').toLowerCase().includes(tb.nama.toLowerCase()));
+        if (match) tabId = match.id;
+        else if (allTabs && allTabs.length === 1) tabId = allTabs[0].id;
+      }
+
       // Sinkron penuh ke target tabungan jika transaksi ini bertipe tabungan
-      if (editingTxn.tabungan_id && nominalDiff !== 0) {
+      if (tabId && nominalDiff !== 0) {
         const { data: targetTabungan } = await supabase
           .from('tabungan')
           .select('*')
-          .eq('id', editingTxn.tabungan_id)
+          .eq('id', tabId)
           .single();
 
         if (targetTabungan) {
@@ -240,7 +284,7 @@ export default function Dashboard() {
           await supabase.from('tabungan').update({
             nominal_terkumpul: newTerkumpul,
             status: newStatus
-          }).eq('id', editingTxn.tabungan_id);
+          }).eq('id', tabId);
         }
       }
 

@@ -14,7 +14,10 @@ export const BASE_CATEGORIES = [
   "Titipan / Jastip",
   "Piutang",
   "Piutang Kembali",
-  "Investasi"
+  "Investasi",
+  "Gaji",
+  "Menabung",
+  "Tarik Tabungan"
 ];
 
 // Categories counted towards daily spending limit

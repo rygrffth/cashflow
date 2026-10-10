@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { PlusCircle, Calendar, Tag, CreditCard, PenTool, CheckCircle, Loader2, ChevronDown, ChevronUp } from 'lucide-react';
 import { KATEGORI_OPTIONS } from '@/config/categories';
@@ -31,6 +31,16 @@ export default function TransactionForm({ saldoBank, uangCash, onSuccess }: Form
   const [customKategori, setCustomKategori] = useState('');
   const [nominal, setNominal] = useState<string>('');
   const [catatan, setCatatan] = useState('');
+
+  // Tabungan Sync States
+  const [tabunganList, setTabunganList] = useState<any[]>([]);
+  const [selectedTabunganId, setSelectedTabunganId] = useState<number | null>(null);
+
+  useEffect(() => {
+    supabase.from('tabungan').select('id, nama, nominal_terkumpul, target_nominal, status').then(({ data }) => {
+      if (data) setTabunganList(data);
+    });
+  }, []);
 
   // Scheduled Settlement States
   const [status, setStatus] = useState<'Cleared' | 'Pending'>('Cleared');
@@ -149,7 +159,8 @@ export default function TransactionForm({ saldoBank, uangCash, onSuccess }: Form
         tenggat_waktu: finalKategori === "Scheduled Settlement" ? tenggatWaktu : "",
         tanggal_bayar: tglBayar,
         sumber: sumber,
-        titipan: totalTitipan
+        titipan: totalTitipan,
+        tabungan_id: (finalKategori === 'Menabung' || finalKategori === 'Tarik Tabungan') ? selectedTabunganId : null
       };
 
       const transactionsToInsert: any[] = [primaryTx];
@@ -193,6 +204,31 @@ export default function TransactionForm({ saldoBank, uangCash, onSuccess }: Form
 
       if (error) throw error;
 
+      // Sync tabungan target balance if linked
+      if (selectedTabunganId && (finalKategori === 'Menabung' || finalKategori === 'Tarik Tabungan')) {
+        try {
+          const { data: targetTabungan } = await supabase
+            .from('tabungan')
+            .select('*')
+            .eq('id', selectedTabunganId)
+            .single();
+
+          if (targetTabungan) {
+            const curTerkumpul = Number(targetTabungan.nominal_terkumpul) || 0;
+            const isSetor = finalKategori === 'Menabung' || tipe === 'Pengeluaran';
+            const newTerkumpul = isSetor ? curTerkumpul + parsedNominal : Math.max(0, curTerkumpul - parsedNominal);
+            const newStatus = newTerkumpul >= Number(targetTabungan.target_nominal) ? 'Selesai' : 'Aktif';
+
+            await supabase.from('tabungan').update({
+              nominal_terkumpul: newTerkumpul,
+              status: newStatus
+            }).eq('id', selectedTabunganId);
+          }
+        } catch (syncErr) {
+          console.warn('Tabungan sync error on transaction submit:', syncErr);
+        }
+      }
+
       // Success
       setSuccessMsg('✅ Transaksi berhasil disimpan ke Supabase!');
 
@@ -200,6 +236,7 @@ export default function TransactionForm({ saldoBank, uangCash, onSuccess }: Form
       setNominal('');
       setCatatan('');
       setCustomKategori('');
+      setSelectedTabunganId(null);
       setTenggatWaktu('');
       setStatus('Cleared');
       setTitBank('');
@@ -313,7 +350,15 @@ export default function TransactionForm({ saldoBank, uangCash, onSuccess }: Form
               </label>
               <select
                 value={kategori}
-                onChange={(e) => setKategori(e.target.value)}
+                onChange={(e) => {
+                  const newKat = e.target.value;
+                  setKategori(newKat);
+                  if (newKat === 'Gaji' || newKat === 'Tarik Tabungan') {
+                    setTipe('Pemasukan');
+                  } else if (newKat === 'Menabung') {
+                    setTipe('Pengeluaran');
+                  }
+                }}
                 className="bg-slate-900/60 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-emerald-500 text-sm h-[38px]"
               >
                 {KATEGORI_OPTIONS.map((opt) => (
@@ -323,6 +368,27 @@ export default function TransactionForm({ saldoBank, uangCash, onSuccess }: Form
             </div>
           )}
         </div>
+
+        {/* Dynamic: Target Tabungan Selector */}
+        {(kategori === "Menabung" || kategori === "Tarik Tabungan") && (
+          <div className="flex flex-col gap-1.5 p-3 bg-emerald-950/20 rounded-lg border border-emerald-500/30 animate-fadeIn">
+            <label className="text-xs font-semibold text-emerald-400 flex items-center gap-1.5">
+              <span>🎯</span> Target Tabungan Tujuan
+            </label>
+            <select
+              value={selectedTabunganId || ''}
+              onChange={(e) => setSelectedTabunganId(e.target.value ? Number(e.target.value) : null)}
+              className="bg-slate-900/80 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-emerald-500 text-xs h-[38px]"
+            >
+              <option value="">Pilih Target Tabungan (Opsional)...</option>
+              {tabunganList.map((tab) => (
+                <option key={tab.id} value={tab.id}>
+                  {tab.nama} (Terkumpul: Rp {Number(tab.nominal_terkumpul).toLocaleString('id-ID')} / Rp {Number(tab.target_nominal).toLocaleString('id-ID')})
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
 
         {/* Dynamic: Custom Category Input */}
         {kategori === "Lainnya (Ketik Manual...)" && (
