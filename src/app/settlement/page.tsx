@@ -9,6 +9,8 @@ export default function SettlementPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [settlements, setSettlements] = useState<any[]>([]);
   const [editingSettle, setEditingSettle] = useState<any | null>(null);
+  const [selectedSettlementIds, setSelectedSettlementIds] = useState<number[]>([]);
+  const [isBulkDeletingSettle, setIsBulkDeletingSettle] = useState(false);
 
   // Add Settlement Form States
   const [catatan, setCatatan] = useState('');
@@ -124,10 +126,30 @@ export default function SettlementPage() {
     try {
       const { error } = await supabase.from('transaksi').delete().eq('id', id);
       if (error) throw error;
+      setSelectedSettlementIds(prev => prev.filter(item => item !== id));
       fetchSettlements(true);
     } catch (err: any) {
       console.error(err);
       alert(`Gagal menghapus tagihan: ${err.message}`);
+    }
+  };
+
+  const handleBulkDeleteSettle = async () => {
+    if (selectedSettlementIds.length === 0) return;
+    if (!confirm(`Hapus ${selectedSettlementIds.length} tagihan terjadwal terpilih secara permanen?`)) return;
+
+    setIsBulkDeletingSettle(true);
+    try {
+      const { error } = await supabase.from('transaksi').delete().in('id', selectedSettlementIds);
+      if (error) throw error;
+      alert(`✅ Berhasil menghapus ${selectedSettlementIds.length} tagihan terpilih!`);
+      setSelectedSettlementIds([]);
+      fetchSettlements(true);
+    } catch (err: any) {
+      console.error(err);
+      alert(`Gagal menghapus tagihan massal: ${err.message}`);
+    } finally {
+      setIsBulkDeletingSettle(false);
     }
   };
 
@@ -202,9 +224,36 @@ export default function SettlementPage() {
           )}
 
           <div className="glass-card p-5 border-slate-700/50">
-            <h3 className="font-bold text-lg text-slate-200 mb-4 flex items-center gap-2">
-              <Clock className="w-5 h-5 text-emerald-400" /> Daftar Tunggu Pembayaran
-            </h3>
+            <div className="flex flex-wrap justify-between items-center gap-2 mb-4">
+              <h3 className="font-bold text-lg text-slate-200 flex items-center gap-2">
+                <Clock className="w-5 h-5 text-emerald-400" /> Daftar Tunggu Pembayaran
+              </h3>
+              {settlements.length > 0 && (
+                <div className="flex items-center gap-2">
+                  <label className="flex items-center gap-1.5 text-xs text-slate-400 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={settlements.length > 0 && selectedSettlementIds.length === settlements.length}
+                      onChange={(e) => {
+                        if (e.target.checked) setSelectedSettlementIds(settlements.map(s => s.id));
+                        else setSelectedSettlementIds([]);
+                      }}
+                      className="accent-emerald-500 rounded border-slate-700 cursor-pointer"
+                    />
+                    <span>Pilih Semua</span>
+                  </label>
+                  {selectedSettlementIds.length > 0 && (
+                    <button
+                      onClick={handleBulkDeleteSettle}
+                      disabled={isBulkDeletingSettle}
+                      className="px-2.5 py-1 bg-rose-600 hover:bg-rose-700 text-white rounded text-[11px] font-bold flex items-center gap-1 transition cursor-pointer"
+                    >
+                      <Trash2 className="w-3 h-3" /> Hapus Terpilih ({selectedSettlementIds.length})
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
             
             <div className="space-y-3">
               {settlements.length > 0 ? (
@@ -212,17 +261,28 @@ export default function SettlementPage() {
                   const overdue = isOverdue(item.tenggat_waktu);
                   return (
                     <div key={item.id} className="p-4 bg-slate-900/60 rounded-xl border border-slate-800/80 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
-                      <div>
-                        <p className="font-bold text-slate-100 flex items-center gap-2">
-                          {item.catatan}
-                          {overdue && <span className="px-1.5 py-0.5 bg-rose-500/20 text-rose-400 text-[8px] rounded uppercase font-black">Jatuh Tempo</span>}
-                        </p>
-                        <p className="text-[11px] text-slate-400 mt-1">
-                          Sumber Dana: <span className="text-slate-300 font-semibold">{item.sumber}</span> • Input: {item.tanggal}
-                        </p>
-                        <p className={`text-[11px] font-semibold mt-0.5 ${overdue ? 'text-rose-400' : 'text-slate-300'}`}>
-                          Due Date: {item.tenggat_waktu || '-'}
-                        </p>
+                      <div className="flex items-start gap-3">
+                        <input
+                          type="checkbox"
+                          checked={selectedSettlementIds.includes(item.id)}
+                          onChange={(e) => {
+                            if (e.target.checked) setSelectedSettlementIds(prev => [...prev, item.id]);
+                            else setSelectedSettlementIds(prev => prev.filter(id => id !== item.id));
+                          }}
+                          className="mt-1 accent-emerald-500 rounded border-slate-700 cursor-pointer w-4 h-4"
+                        />
+                        <div>
+                          <p className="font-bold text-slate-100 flex items-center gap-2">
+                            {item.catatan}
+                            {overdue && <span className="px-1.5 py-0.5 bg-rose-500/20 text-rose-400 text-[8px] rounded uppercase font-black">Jatuh Tempo</span>}
+                          </p>
+                          <p className="text-[11px] text-slate-400 mt-1">
+                            Sumber Dana: <span className="text-slate-300 font-semibold">{item.sumber}</span> • Input: {item.tanggal}
+                          </p>
+                          <p className={`text-[11px] font-semibold mt-0.5 ${overdue ? 'text-rose-400' : 'text-slate-300'}`}>
+                            Due Date: {item.tenggat_waktu || '-'}
+                          </p>
+                        </div>
                       </div>
                       
                       <div className="flex flex-row sm:flex-col items-center sm:items-end justify-between sm:justify-center gap-2">

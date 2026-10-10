@@ -30,6 +30,8 @@ export default function Dashboard() {
   // Lists State
   const [todayTransactions, setTodayTransactions] = useState<any[]>([]);
   const [editingTxn, setEditingTxn] = useState<any | null>(null);
+  const [selectedTodayIds, setSelectedTodayIds] = useState<number[]>([]);
+  const [isBulkDeletingToday, setIsBulkDeletingToday] = useState(false);
 
   // Secret Mode State
   const [secretCode, setSecretCode] = useState('');
@@ -209,10 +211,30 @@ export default function Dashboard() {
     try {
       const { error } = await supabase.from('transaksi').delete().eq('id', id);
       if (error) throw error;
+      setSelectedTodayIds(prev => prev.filter(item => item !== id));
       fetchData(true);
     } catch (e: any) {
       console.error(e);
       alert(`Gagal menghapus transaksi: ${e.message}`);
+    }
+  };
+
+  const handleBulkDeleteToday = async () => {
+    if (selectedTodayIds.length === 0) return;
+    if (!confirm(`Hapus ${selectedTodayIds.length} transaksi terpilih hari ini secara permanen?`)) return;
+
+    setIsBulkDeletingToday(true);
+    try {
+      const { error } = await supabase.from('transaksi').delete().in('id', selectedTodayIds);
+      if (error) throw error;
+      alert(`✅ Berhasil menghapus ${selectedTodayIds.length} transaksi terpilih!`);
+      setSelectedTodayIds([]);
+      fetchData(true);
+    } catch (e: any) {
+      console.error(e);
+      alert(`Gagal menghapus transaksi massal: ${e.message}`);
+    } finally {
+      setIsBulkDeletingToday(false);
     }
   };
 
@@ -341,9 +363,36 @@ export default function Dashboard() {
 
           {/* Today's Transactions Log */}
           <div className="glass-card p-6 border-slate-700/40 space-y-4">
-            <h3 className="text-sm font-bold text-emerald-400 flex items-center gap-2">
-              <ListTodo className="w-4 h-4" /> 📋 Transaksi Hari Ini
-            </h3>
+            <div className="flex flex-wrap justify-between items-center gap-2">
+              <h3 className="text-sm font-bold text-emerald-400 flex items-center gap-2">
+                <ListTodo className="w-4 h-4" /> 📋 Transaksi Hari Ini
+              </h3>
+              {todayTransactions.length > 0 && (
+                <div className="flex items-center gap-2">
+                  <label className="flex items-center gap-1.5 text-[11px] text-slate-400 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={todayTransactions.length > 0 && selectedTodayIds.length === todayTransactions.length}
+                      onChange={(e) => {
+                        if (e.target.checked) setSelectedTodayIds(todayTransactions.map(t => t.id));
+                        else setSelectedTodayIds([]);
+                      }}
+                      className="accent-emerald-500 rounded border-slate-700 cursor-pointer"
+                    />
+                    <span>Pilih Semua</span>
+                  </label>
+                  {selectedTodayIds.length > 0 && (
+                    <button
+                      onClick={handleBulkDeleteToday}
+                      disabled={isBulkDeletingToday}
+                      className="px-2.5 py-1 bg-rose-600 hover:bg-rose-700 text-white rounded-md text-[11px] font-bold flex items-center gap-1 transition cursor-pointer"
+                    >
+                      <Trash2 className="w-3 h-3" /> Hapus ({selectedTodayIds.length})
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
 
             {todayTransactions.length > 0 ? (
               <div className="space-y-3 max-h-[300px] overflow-y-auto pr-1 no-scrollbar">
@@ -352,17 +401,28 @@ export default function Dashboard() {
                     key={t.id || Math.random()}
                     className="p-3 bg-slate-950/40 border border-slate-900 rounded-xl flex justify-between items-center text-xs tracking-wide"
                   >
-                    <div>
-                      <p className="font-bold text-slate-200">{t.catatan || t.kategori}</p>
-                      <div className="flex gap-2 items-center mt-1 text-[10px] text-slate-400">
-                        <span className="px-1.5 py-0.5 bg-slate-800 rounded font-semibold text-slate-300">
-                          {t.kategori}
-                        </span>
-                        <span>•</span>
-                        <span className="flex items-center gap-0.5">
-                          {t.sumber === 'Bank' ? <Landmark className="w-2.5 h-2.5" /> : <Wallet className="w-2.5 h-2.5" />}
-                          {t.sumber}
-                        </span>
+                    <div className="flex items-center gap-2.5">
+                      <input
+                        type="checkbox"
+                        checked={selectedTodayIds.includes(t.id)}
+                        onChange={(e) => {
+                          if (e.target.checked) setSelectedTodayIds(prev => [...prev, t.id]);
+                          else setSelectedTodayIds(prev => prev.filter(id => id !== t.id));
+                        }}
+                        className="accent-emerald-500 rounded border-slate-700 cursor-pointer w-3.5 h-3.5"
+                      />
+                      <div>
+                        <p className="font-bold text-slate-200">{t.catatan || t.kategori}</p>
+                        <div className="flex gap-2 items-center mt-1 text-[10px] text-slate-400">
+                          <span className="px-1.5 py-0.5 bg-slate-800 rounded font-semibold text-slate-300">
+                            {t.kategori}
+                          </span>
+                          <span>•</span>
+                          <span className="flex items-center gap-0.5">
+                            {t.sumber === 'Bank' ? <Landmark className="w-2.5 h-2.5" /> : <Wallet className="w-2.5 h-2.5" />}
+                            {t.sumber}
+                          </span>
+                        </div>
                       </div>
                     </div>
 

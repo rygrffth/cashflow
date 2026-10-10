@@ -30,6 +30,10 @@ export default function PiutangPage() {
   const [sumberKembali, setSumberKembali] = useState<'Bank' | 'Cash'>('Bank');
   const [editingPiutang, setEditingPiutang] = useState<any | null>(null);
 
+  // Bulk Delete States
+  const [selectedPiutangIds, setSelectedPiutangIds] = useState<number[]>([]);
+  const [isBulkDeletingPiutang, setIsBulkDeletingPiutang] = useState(false);
+
   const fetchPiutang = useCallback(async (isSilent = false) => {
     if (!isSilent) setLoading(true);
     else setRefreshing(true);
@@ -196,10 +200,30 @@ export default function PiutangPage() {
     try {
       const { error } = await supabase.from('piutang').delete().eq('id', id);
       if (error) throw error;
+      setSelectedPiutangIds(prev => prev.filter(item => item !== id));
       fetchPiutang(true);
     } catch (err: any) {
       console.error(err);
       alert(`Gagal menghapus: ${err.message}`);
+    }
+  };
+
+  const handleBulkDeletePiutang = async () => {
+    if (selectedPiutangIds.length === 0) return;
+    if (!confirm(`Hapus ${selectedPiutangIds.length} data piutang terpilih secara permanen?`)) return;
+
+    setIsBulkDeletingPiutang(true);
+    try {
+      const { error } = await supabase.from('piutang').delete().in('id', selectedPiutangIds);
+      if (error) throw error;
+      alert(`✅ Berhasil menghapus ${selectedPiutangIds.length} data piutang terpilih!`);
+      setSelectedPiutangIds([]);
+      fetchPiutang(true);
+    } catch (err: any) {
+      console.error(err);
+      alert(`Gagal menghapus data massal: ${err.message}`);
+    } finally {
+      setIsBulkDeletingPiutang(false);
     }
   };
 
@@ -285,9 +309,40 @@ export default function PiutangPage() {
 
             {/* Active Piutang */}
             <div className="glass-card p-5 border-slate-700/50">
-              <h3 className="font-bold text-lg text-emerald-400 mb-4 flex items-center gap-2">
-                <Clock className="w-5 h-5" /> Piutang Aktif (Belum Lunas)
-              </h3>
+              <div className="flex flex-wrap justify-between items-center gap-2 mb-4">
+                <h3 className="font-bold text-lg text-emerald-400 flex items-center gap-2">
+                  <Clock className="w-5 h-5" /> Piutang Aktif (Belum Lunas)
+                </h3>
+                {activePiutang.length > 0 && (
+                  <div className="flex items-center gap-2">
+                    <label className="flex items-center gap-1.5 text-xs text-slate-400 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={activePiutang.length > 0 && activePiutang.every(p => selectedPiutangIds.includes(p.id))}
+                        onChange={(e) => {
+                          const activeIds = activePiutang.map(p => p.id);
+                          if (e.target.checked) {
+                            setSelectedPiutangIds(prev => Array.from(new Set([...prev, ...activeIds])));
+                          } else {
+                            setSelectedPiutangIds(prev => prev.filter(id => !activeIds.includes(id)));
+                          }
+                        }}
+                        className="accent-emerald-500 rounded border-slate-700 cursor-pointer"
+                      />
+                      <span>Pilih Semua</span>
+                    </label>
+                    {activePiutang.some(p => selectedPiutangIds.includes(p.id)) && (
+                      <button
+                        onClick={handleBulkDeletePiutang}
+                        disabled={isBulkDeletingPiutang}
+                        className="px-2.5 py-1 bg-rose-600 hover:bg-rose-700 text-white rounded text-[11px] font-bold flex items-center gap-1 transition cursor-pointer"
+                      >
+                        <Trash2 className="w-3 h-3" /> Hapus Terpilih
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
               
               <div className="space-y-3">
                 {activePiutang.length > 0 ? (
@@ -300,15 +355,26 @@ export default function PiutangPage() {
                     const overdue = isOverdue(pTenggat);
                     return (
                       <div key={p.id} className="p-4 bg-slate-900/60 rounded-xl border border-slate-800/80 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
-                        <div>
-                          <p className="font-bold text-slate-100 flex items-center gap-2">
-                            {pNama}
-                            {overdue && <span className="px-1.5 py-0.5 bg-rose-500/20 text-rose-400 text-[8px] rounded uppercase font-black">Overdue</span>}
-                          </p>
-                          <p className="text-[11px] text-slate-400 mt-1">
-                            Dicatat: {pTanggal} • Deadline: <span className={overdue ? 'text-rose-400 font-bold' : 'text-slate-300 font-semibold'}>{pTenggat}</span>
-                          </p>
-                          {pCatatan && <p className="text-[10px] text-slate-500 italic mt-1">&ldquo;{pCatatan}&rdquo;</p>}
+                        <div className="flex items-start gap-3">
+                          <input
+                            type="checkbox"
+                            checked={selectedPiutangIds.includes(p.id)}
+                            onChange={(e) => {
+                              if (e.target.checked) setSelectedPiutangIds(prev => [...prev, p.id]);
+                              else setSelectedPiutangIds(prev => prev.filter(id => id !== p.id));
+                            }}
+                            className="mt-1 accent-emerald-500 rounded border-slate-700 cursor-pointer w-4 h-4"
+                          />
+                          <div>
+                            <p className="font-bold text-slate-100 flex items-center gap-2">
+                              {pNama}
+                              {overdue && <span className="px-1.5 py-0.5 bg-rose-500/20 text-rose-400 text-[8px] rounded uppercase font-black">Overdue</span>}
+                            </p>
+                            <p className="text-[11px] text-slate-400 mt-1">
+                              Dicatat: {pTanggal} • Deadline: <span className={overdue ? 'text-rose-400 font-bold' : 'text-slate-300 font-semibold'}>{pTenggat}</span>
+                            </p>
+                            {pCatatan && <p className="text-[10px] text-slate-500 italic mt-1">&ldquo;{pCatatan}&rdquo;</p>}
+                          </div>
                         </div>
                         <div className="flex flex-row sm:flex-col items-center sm:items-end justify-between sm:justify-center gap-2">
                           <p className="font-black text-amber-400">Rp {Number(pNominal).toLocaleString('id-ID')}</p>
@@ -352,9 +418,40 @@ export default function PiutangPage() {
 
             {/* History Piutang */}
             <div className="glass-card p-5 border-slate-700/50">
-              <h3 className="font-bold text-lg text-slate-300 mb-4 flex items-center gap-2">
-                <CheckCircle className="w-5 h-5" /> Riwayat Lunas
-              </h3>
+              <div className="flex flex-wrap justify-between items-center gap-2 mb-4">
+                <h3 className="font-bold text-lg text-slate-300 flex items-center gap-2">
+                  <CheckCircle className="w-5 h-5" /> Riwayat Lunas
+                </h3>
+                {historyPiutang.length > 0 && (
+                  <div className="flex items-center gap-2">
+                    <label className="flex items-center gap-1.5 text-xs text-slate-400 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={historyPiutang.length > 0 && historyPiutang.every(p => selectedPiutangIds.includes(p.id))}
+                        onChange={(e) => {
+                          const histIds = historyPiutang.map(p => p.id);
+                          if (e.target.checked) {
+                            setSelectedPiutangIds(prev => Array.from(new Set([...prev, ...histIds])));
+                          } else {
+                            setSelectedPiutangIds(prev => prev.filter(id => !histIds.includes(id)));
+                          }
+                        }}
+                        className="accent-emerald-500 rounded border-slate-700 cursor-pointer"
+                      />
+                      <span>Pilih Semua</span>
+                    </label>
+                    {historyPiutang.some(p => selectedPiutangIds.includes(p.id)) && (
+                      <button
+                        onClick={handleBulkDeletePiutang}
+                        disabled={isBulkDeletingPiutang}
+                        className="px-2.5 py-1 bg-rose-600 hover:bg-rose-700 text-white rounded text-[11px] font-bold flex items-center gap-1 transition cursor-pointer"
+                      >
+                        <Trash2 className="w-3 h-3" /> Hapus Terpilih
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
               
               <div className="space-y-3">
                 {historyPiutang.length > 0 ? (
@@ -365,9 +462,20 @@ export default function PiutangPage() {
                     const pNominal = p.nominal || p.Nominal || 0;
                     return (
                       <div key={p.id} className="p-3 bg-slate-900/30 rounded-xl border border-slate-800 flex justify-between items-center opacity-70 group hover:opacity-100 transition">
-                        <div>
-                          <p className="font-bold text-slate-300 line-through">{pNama}</p>
-                          <p className="text-[10px] text-slate-500">Lunas pada: {pTanggalLunas} {pSumber ? `(Masuk ke ${pSumber})` : ''}</p>
+                        <div className="flex items-center gap-3">
+                          <input
+                            type="checkbox"
+                            checked={selectedPiutangIds.includes(p.id)}
+                            onChange={(e) => {
+                              if (e.target.checked) setSelectedPiutangIds(prev => [...prev, p.id]);
+                              else setSelectedPiutangIds(prev => prev.filter(id => id !== p.id));
+                            }}
+                            className="accent-emerald-500 rounded border-slate-700 cursor-pointer w-4 h-4"
+                          />
+                          <div>
+                            <p className="font-bold text-slate-300 line-through">{pNama}</p>
+                            <p className="text-[10px] text-slate-500">Lunas pada: {pTanggalLunas} {pSumber ? `(Masuk ke ${pSumber})` : ''}</p>
+                          </div>
                         </div>
                         <div className="flex items-center gap-3">
                           <p className="font-bold text-emerald-400/70">Rp {Number(pNominal).toLocaleString('id-ID')}</p>

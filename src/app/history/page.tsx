@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { KATEGORI_HISTORY_OPTIONS as KATEGORI_OPTIONS } from '@/config/categories';
-import { RefreshCw, Trash2, Calendar, Filter, Download, History } from 'lucide-react';
+import { RefreshCw, Trash2, Calendar, Filter, Download, History, Pencil, X } from 'lucide-react';
 
 export default function HistoryPage() {
   const [loading, setLoading] = useState(true);
@@ -18,6 +18,7 @@ export default function HistoryPage() {
   const [isEditMode, setIsEditMode] = useState(false);
   const [editedTransactions, setEditedTransactions] = useState<Record<number, any>>({});
   const [isSavingMassal, setIsSavingMassal] = useState(false);
+  const [editingTxn, setEditingTxn] = useState<any | null>(null);
 
   // Bulk Delete States
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
@@ -61,6 +62,38 @@ export default function HistoryPage() {
     } catch (e) {
       console.error(e);
       alert('Gagal menghapus transaksi');
+    }
+  };
+
+  const handleUpdateTxn = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingTxn) return;
+    try {
+      const parsedNominal = Number(editingTxn.nominal);
+      if (isNaN(parsedNominal) || parsedNominal <= 0) {
+        alert('Nominal harus lebih dari 0.');
+        return;
+      }
+
+      const { error } = await supabase
+        .from('transaksi')
+        .update({
+          tanggal: editingTxn.tanggal,
+          tipe: editingTxn.tipe,
+          kategori: editingTxn.kategori,
+          nominal: parsedNominal,
+          catatan: editingTxn.catatan,
+          sumber: editingTxn.sumber,
+        })
+        .eq('id', editingTxn.id);
+
+      if (error) throw error;
+      setEditingTxn(null);
+      fetchHistory(true);
+      alert('✅ Transaksi berhasil diperbarui!');
+    } catch (e: any) {
+      console.error(e);
+      alert(`Gagal memperbarui transaksi: ${e.message}`);
     }
   };
 
@@ -466,14 +499,24 @@ export default function HistoryPage() {
 
                       {/* Aksi */}
                       <td className="px-4 py-3 text-center">
-                        <button 
-                          onClick={() => handleDelete(t.id)}
-                          disabled={isEditMode}
-                          className="p-1.5 text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-md transition disabled:opacity-30 disabled:hover:bg-transparent"
-                          title="Hapus"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                        <div className="flex items-center justify-center gap-1">
+                          <button 
+                            onClick={() => setEditingTxn({ ...t })}
+                            disabled={isEditMode}
+                            className="p-1.5 text-slate-500 hover:text-emerald-400 hover:bg-emerald-500/10 rounded-md transition disabled:opacity-30 disabled:hover:bg-transparent cursor-pointer"
+                            title="Edit Transaksi"
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </button>
+                          <button 
+                            onClick={() => handleDelete(t.id)}
+                            disabled={isEditMode}
+                            className="p-1.5 text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-md transition disabled:opacity-30 disabled:hover:bg-transparent cursor-pointer"
+                            title="Hapus"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -530,6 +573,113 @@ export default function HistoryPage() {
                 Batal
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Edit Transaksi Individual */}
+      {editingTxn && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4 animate-fadeIn text-sm">
+          <div className="glass-card max-w-md w-full p-6 border-slate-700/60 space-y-4">
+            <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+              <h3 className="font-bold text-white flex items-center gap-2">
+                <Pencil className="w-4 h-4 text-emerald-400" /> Edit Transaksi
+              </h3>
+              <button 
+                onClick={() => setEditingTxn(null)}
+                className="text-slate-400 hover:text-white cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdateTxn} className="space-y-4">
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-semibold text-slate-400">Tanggal</label>
+                <input
+                  type="date"
+                  value={editingTxn.tanggal}
+                  onChange={e => setEditingTxn({ ...editingTxn, tanggal: e.target.value })}
+                  onClick={(e) => (e.target as any).showPicker()}
+                  className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none focus:border-emerald-500 text-xs cursor-pointer"
+                  required
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-semibold text-slate-400">Tipe</label>
+                  <select
+                    value={editingTxn.tipe}
+                    onChange={e => setEditingTxn({ ...editingTxn, tipe: e.target.value })}
+                    className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none focus:border-emerald-500 text-xs"
+                  >
+                    <option value="Pengeluaran">Pengeluaran</option>
+                    <option value="Pemasukan">Pemasukan</option>
+                  </select>
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-semibold text-slate-400">Sumber Rekening</label>
+                  <select
+                    value={editingTxn.sumber}
+                    onChange={e => setEditingTxn({ ...editingTxn, sumber: e.target.value })}
+                    className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none focus:border-emerald-500 text-xs"
+                  >
+                    <option value="Bank">Bank</option>
+                    <option value="Cash">Cash</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-semibold text-slate-400">Kategori</label>
+                <input
+                  type="text"
+                  list="kategori-list"
+                  value={editingTxn.kategori}
+                  onChange={e => setEditingTxn({ ...editingTxn, kategori: e.target.value })}
+                  className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none focus:border-emerald-500 text-xs"
+                  required
+                />
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-semibold text-slate-400">Nominal (Rp)</label>
+                <input
+                  type="number"
+                  value={editingTxn.nominal}
+                  onChange={e => setEditingTxn({ ...editingTxn, nominal: e.target.value })}
+                  className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none focus:border-emerald-500 text-xs font-bold"
+                  required
+                />
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-semibold text-slate-400">Catatan</label>
+                <textarea
+                  value={editingTxn.catatan || ''}
+                  onChange={e => setEditingTxn({ ...editingTxn, catatan: e.target.value })}
+                  className="bg-slate-900 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-emerald-500 text-xs min-h-[50px] resize-none"
+                />
+              </div>
+
+              <div className="flex gap-2 pt-2 justify-end">
+                <button
+                  type="button"
+                  onClick={() => setEditingTxn(null)}
+                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-bold transition cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-slate-950 rounded-lg text-xs font-black transition cursor-pointer"
+                >
+                  Simpan Perubahan
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

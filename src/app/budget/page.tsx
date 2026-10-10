@@ -67,6 +67,24 @@ export default function BudgetPage() {
   const [reverseMainTxn, setReverseMainTxn] = useState(true);
   const [deletingHistoryLoading, setDeletingHistoryLoading] = useState(false);
 
+  // Bulk Delete & Edit History Item States
+  const [selectedHistoryIds, setSelectedHistoryIds] = useState<number[]>([]);
+  const [isBulkDeletingHistory, setIsBulkDeletingHistory] = useState(false);
+  const [editingHistoryItem, setEditingHistoryItem] = useState<any | null>(null);
+  const [editHistoryForm, setEditHistoryForm] = useState<{
+    tanggal: string;
+    tabungan_id: number;
+    tipe: 'Setor' | 'Tarik';
+    nominal: string;
+    catatan: string;
+  }>({
+    tanggal: '',
+    tabungan_id: 0,
+    tipe: 'Setor',
+    nominal: '',
+    catatan: ''
+  });
+
   const fetchTabungan = useCallback(async (isSilent = false) => {
     if (!isSilent) setLoading(true);
     else setRefreshing(true);
@@ -370,6 +388,113 @@ export default function BudgetPage() {
       alert(`❌ Gagal menghapus riwayat: ${e.message}`);
     } finally {
       setDeletingHistoryLoading(false);
+    }
+  };
+
+  // Bulk Delete History Items
+  const handleBulkDeleteHistory = async () => {
+    if (selectedHistoryIds.length === 0) return;
+    if (!confirm(`Hapus ${selectedHistoryIds.length} riwayat transaksi tabungan yang dipilih secara permanen?`)) return;
+
+    setIsBulkDeletingHistory(true);
+    try {
+      const { error } = await supabase
+        .from('transaksi_tabungan')
+        .delete()
+        .in('id', selectedHistoryIds);
+
+      if (error) throw error;
+
+      alert(`✅ Berhasil menghapus ${selectedHistoryIds.length} riwayat tabungan!`);
+      setSelectedHistoryIds([]);
+      fetchTabungan(true);
+    } catch (e: any) {
+      console.error(e);
+      alert(`❌ Gagal menghapus riwayat massal: ${e.message}`);
+    } finally {
+      setIsBulkDeletingHistory(false);
+    }
+  };
+
+  // Update a Specific History Item and Synchronize Target Balance
+  const handleUpdateHistoryItem = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingHistoryItem) return;
+
+    try {
+      const oldNominal = Number(editingHistoryItem.nominal) || 0;
+      const oldTipe = editingHistoryItem.tipe;
+      const oldTargetId = editingHistoryItem.tabungan_id;
+
+      const newNominal = Number(editHistoryForm.nominal) || 0;
+      const newTipe = editHistoryForm.tipe;
+      const newTargetId = Number(editHistoryForm.tabungan_id);
+
+      if (newNominal <= 0) {
+        alert('Nominal harus lebih dari 0.');
+        return;
+      }
+
+      // 1. Update transaksi_tabungan
+      const { error } = await supabase
+        .from('transaksi_tabungan')
+        .update({
+          tanggal: editHistoryForm.tanggal,
+          tabungan_id: newTargetId,
+          tipe: newTipe,
+          nominal: newNominal,
+          catatan: editHistoryForm.catatan
+        })
+        .eq('id', editingHistoryItem.id);
+
+      if (error) throw error;
+
+      // 2. Adjust target tabungan balance
+      if (oldTargetId === newTargetId) {
+        const target = tabunganData.find(t => t.id === newTargetId);
+        if (target) {
+          const currentTerkumpul = Number(target.nominal_terkumpul) || 0;
+          const oldContribution = oldTipe === 'Setor' ? oldNominal : -oldNominal;
+          const newContribution = newTipe === 'Setor' ? newNominal : -newNominal;
+          const updatedTerkumpul = Math.max(0, currentTerkumpul - oldContribution + newContribution);
+          const targetNominal = Number(target.target_nominal) || 0;
+
+          await supabase.from('tabungan').update({
+            nominal_terkumpul: updatedTerkumpul,
+            status: updatedTerkumpul >= targetNominal ? 'Selesai' : 'Aktif'
+          }).eq('id', newTargetId);
+        }
+      } else {
+        // Different targets
+        const oldTarget = tabunganData.find(t => t.id === oldTargetId);
+        if (oldTarget) {
+          const oldTerkumpul = Number(oldTarget.nominal_terkumpul) || 0;
+          const oldContribution = oldTipe === 'Setor' ? oldNominal : -oldNominal;
+          const updatedOld = Math.max(0, oldTerkumpul - oldContribution);
+          await supabase.from('tabungan').update({
+            nominal_terkumpul: updatedOld,
+            status: updatedOld >= Number(oldTarget.target_nominal) ? 'Selesai' : 'Aktif'
+          }).eq('id', oldTargetId);
+        }
+
+        const newTarget = tabunganData.find(t => t.id === newTargetId);
+        if (newTarget) {
+          const newCurrent = Number(newTarget.nominal_terkumpul) || 0;
+          const newContribution = newTipe === 'Setor' ? newNominal : -newNominal;
+          const updatedNew = Math.max(0, newCurrent + newContribution);
+          await supabase.from('tabungan').update({
+            nominal_terkumpul: updatedNew,
+            status: updatedNew >= Number(newTarget.target_nominal) ? 'Selesai' : 'Aktif'
+          }).eq('id', newTargetId);
+        }
+      }
+
+      setEditingHistoryItem(null);
+      fetchTabungan(true);
+      alert('✅ Riwayat transaksi tabungan berhasil diperbarui!');
+    } catch (err: any) {
+      console.error(err);
+      alert(`❌ Gagal memperbarui riwayat: ${err.message}`);
     }
   };
 
@@ -720,16 +845,27 @@ export default function BudgetPage() {
 
       {/* History Section: Riwayat Transaksi Tabungan */}
       <div className="glass-card p-6 border-slate-700/50 space-y-4">
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-b border-slate-800/80 pb-4">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-slate-800/80 pb-4">
           <div>
             <h2 className="text-lg font-bold text-white flex items-center gap-2">
               <History className="w-5 h-5 text-emerald-400" /> 📜 Riwayat Transaksi Tabungan
             </h2>
             <p className="text-xs text-slate-400">Daftar mutasi setor, tarik, dan pencairan dana tabungan</p>
           </div>
-          <span className="px-2.5 py-1 bg-slate-800 text-slate-300 text-xs font-semibold rounded-lg">
-            {historyData.length} Catatan Riwayat
-          </span>
+          <div className="flex items-center gap-2">
+            {selectedHistoryIds.length > 0 && (
+              <button
+                onClick={handleBulkDeleteHistory}
+                disabled={isBulkDeletingHistory}
+                className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 transition cursor-pointer"
+              >
+                <Trash2 className="w-3.5 h-3.5" /> Hapus Terpilih ({selectedHistoryIds.length})
+              </button>
+            )}
+            <span className="px-2.5 py-1 bg-slate-800 text-slate-300 text-xs font-semibold rounded-lg">
+              {historyData.length} Catatan Riwayat
+            </span>
+          </div>
         </div>
 
         {historyData.length > 0 ? (
@@ -737,6 +873,18 @@ export default function BudgetPage() {
             <table className="w-full text-left text-xs">
               <thead>
                 <tr className="border-b border-slate-800 text-slate-400">
+                  <th className="py-2.5 px-3 text-center w-10">
+                    <input
+                      type="checkbox"
+                      checked={historyData.length > 0 && selectedHistoryIds.length === historyData.length}
+                      onChange={(e) => {
+                        if (e.target.checked) setSelectedHistoryIds(historyData.map(h => h.id));
+                        else setSelectedHistoryIds([]);
+                      }}
+                      className="accent-emerald-500 rounded border-slate-700 cursor-pointer"
+                      title="Pilih Semua"
+                    />
+                  </th>
                   <th className="py-2.5 px-3">Tanggal</th>
                   <th className="py-2.5 px-3">Target Tabungan</th>
                   <th className="py-2.5 px-3">Tipe</th>
@@ -751,6 +899,17 @@ export default function BudgetPage() {
                   const isSetor = h.tipe === 'Setor';
                   return (
                     <tr key={h.id} className="hover:bg-slate-800/30 transition">
+                      <td className="py-3 px-3 text-center">
+                        <input
+                          type="checkbox"
+                          checked={selectedHistoryIds.includes(h.id)}
+                          onChange={(e) => {
+                            if (e.target.checked) setSelectedHistoryIds(prev => [...prev, h.id]);
+                            else setSelectedHistoryIds(prev => prev.filter(id => id !== h.id));
+                          }}
+                          className="accent-emerald-500 rounded border-slate-700 cursor-pointer"
+                        />
+                      </td>
                       <td className="py-3 px-3 text-slate-300 whitespace-nowrap">{h.tanggal}</td>
                       <td className="py-3 px-3 font-semibold text-white whitespace-nowrap">
                         {target ? target.nama : `Target #${h.tabungan_id}`}
@@ -773,18 +932,36 @@ export default function BudgetPage() {
                         {h.catatan || <span className="text-slate-500 italic">Tanpa catatan</span>}
                       </td>
                       <td className="py-3 px-3 text-right whitespace-nowrap">
-                        <button
-                          onClick={() => {
-                            setHistoryToDelete(h);
-                            setDeleteHistoryReason('');
-                            setAdjustBalanceOnDelete(true);
-                            setReverseMainTxn(true);
-                          }}
-                          className="p-1.5 text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 rounded transition cursor-pointer"
-                          title="Hapus riwayat ini"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                        <div className="flex items-center justify-end gap-1">
+                          <button
+                            onClick={() => {
+                              setEditingHistoryItem(h);
+                              setEditHistoryForm({
+                                tanggal: h.tanggal,
+                                tabungan_id: h.tabungan_id,
+                                tipe: h.tipe,
+                                nominal: String(h.nominal),
+                                catatan: h.catatan || ''
+                              });
+                            }}
+                            className="p-1.5 text-slate-400 hover:text-emerald-400 hover:bg-slate-800 rounded transition cursor-pointer"
+                            title="Edit riwayat ini"
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => {
+                              setHistoryToDelete(h);
+                              setDeleteHistoryReason('');
+                              setAdjustBalanceOnDelete(true);
+                              setReverseMainTxn(true);
+                            }}
+                            className="p-1.5 text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 rounded transition cursor-pointer"
+                            title="Hapus riwayat ini"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -1145,6 +1322,104 @@ export default function BudgetPage() {
                 <button
                   type="button"
                   onClick={() => setEditingTabungan(null)}
+                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-bold transition cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-slate-950 rounded-lg text-xs font-black transition cursor-pointer"
+                >
+                  Simpan Perubahan
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit History Item Modal */}
+      {editingHistoryItem && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fadeIn text-sm">
+          <div className="glass-card max-w-md w-full p-6 border-slate-700/50 space-y-4">
+            <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+              <h3 className="font-bold text-white flex items-center gap-2">
+                <Pencil className="w-4 h-4 text-emerald-400" /> Edit Riwayat Tabungan
+              </h3>
+              <button 
+                onClick={() => setEditingHistoryItem(null)}
+                className="text-slate-400 hover:text-white cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdateHistoryItem} className="space-y-4">
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-semibold text-slate-400">Target Tabungan</label>
+                <select
+                  value={editHistoryForm.tabungan_id}
+                  onChange={e => setEditHistoryForm({ ...editHistoryForm, tabungan_id: Number(e.target.value) })}
+                  className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none focus:border-emerald-500 text-xs"
+                  required
+                >
+                  {tabunganData.map(t => (
+                    <option key={t.id} value={t.id}>{t.nama}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-semibold text-slate-400">Tanggal</label>
+                  <input
+                    type="date"
+                    value={editHistoryForm.tanggal}
+                    onChange={e => setEditHistoryForm({ ...editHistoryForm, tanggal: e.target.value })}
+                    onClick={(e) => (e.target as any).showPicker()}
+                    className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none focus:border-emerald-500 text-xs cursor-pointer"
+                    required
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-semibold text-slate-400">Tipe Transaksi</label>
+                  <select
+                    value={editHistoryForm.tipe}
+                    onChange={e => setEditHistoryForm({ ...editHistoryForm, tipe: e.target.value as 'Setor' | 'Tarik' })}
+                    className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none focus:border-emerald-500 text-xs"
+                  >
+                    <option value="Setor">Setor</option>
+                    <option value="Tarik">Tarik / Pakai</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-semibold text-slate-400">Nominal (Rp)</label>
+                <input
+                  type="number"
+                  value={editHistoryForm.nominal}
+                  onChange={e => setEditHistoryForm({ ...editHistoryForm, nominal: e.target.value })}
+                  className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none focus:border-emerald-500 text-xs font-bold"
+                  required
+                />
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-semibold text-slate-400">Catatan / Keterangan</label>
+                <textarea
+                  value={editHistoryForm.catatan}
+                  onChange={e => setEditHistoryForm({ ...editHistoryForm, catatan: e.target.value })}
+                  placeholder="Keterangan transaksi..."
+                  className="bg-slate-900 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-emerald-500 text-xs min-h-[60px] resize-none"
+                />
+              </div>
+
+              <div className="flex gap-2 pt-2 justify-end">
+                <button
+                  type="button"
+                  onClick={() => setEditingHistoryItem(null)}
                   className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-bold transition cursor-pointer"
                 >
                   Batal

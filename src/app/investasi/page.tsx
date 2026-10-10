@@ -32,6 +32,8 @@ export default function InvestasiPage() {
   const [editSekarang, setEditSekarang] = useState('');
   const [editCatatan, setEditCatatan] = useState('');
   const [editingLoading, setEditingLoading] = useState(false);
+  const [selectedInvestasiIds, setSelectedInvestasiIds] = useState<number[]>([]);
+  const [isBulkDeletingInvestasi, setIsBulkDeletingInvestasi] = useState(false);
 
   // Fetch investments
   const fetchInvestasi = useCallback(async (isSilent = false) => {
@@ -197,10 +199,30 @@ export default function InvestasiPage() {
         .eq('id', id);
 
       if (error) throw error;
+      setSelectedInvestasiIds(prev => prev.filter(item => item !== id));
       fetchInvestasi(true);
     } catch (err: any) {
       console.error(err);
       alert(`Gagal menghapus investasi: ${err.message}`);
+    }
+  };
+
+  const handleBulkDeleteInvestasi = async () => {
+    if (selectedInvestasiIds.length === 0) return;
+    if (!confirm(`Hapus ${selectedInvestasiIds.length} aset investasi terpilih secara permanen?`)) return;
+
+    setIsBulkDeletingInvestasi(true);
+    try {
+      const { error } = await supabase.from('investasi').delete().in('id', selectedInvestasiIds);
+      if (error) throw error;
+      alert(`✅ Berhasil menghapus ${selectedInvestasiIds.length} aset investasi!`);
+      setSelectedInvestasiIds([]);
+      fetchInvestasi(true);
+    } catch (e: any) {
+      console.error(e);
+      alert(`Gagal menghapus aset massal: ${e.message}`);
+    } finally {
+      setIsBulkDeletingInvestasi(false);
     }
   };
 
@@ -437,7 +459,34 @@ export default function InvestasiPage() {
 
         {/* Investment List Grid */}
         <div className="lg:col-span-2 space-y-4">
-          <h3 className="text-sm font-bold text-slate-200">📋 Daftar Aset Portofolio</h3>
+          <div className="flex flex-wrap justify-between items-center gap-2">
+            <h3 className="text-sm font-bold text-slate-200">📋 Daftar Aset Portofolio</h3>
+            {investasiList.length > 0 && (
+              <div className="flex items-center gap-2">
+                <label className="flex items-center gap-1.5 text-xs text-slate-400 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={investasiList.length > 0 && selectedInvestasiIds.length === investasiList.length}
+                    onChange={(e) => {
+                      if (e.target.checked) setSelectedInvestasiIds(investasiList.map(item => item.id));
+                      else setSelectedInvestasiIds([]);
+                    }}
+                    className="accent-emerald-500 rounded border-slate-700 cursor-pointer"
+                  />
+                  <span>Pilih Semua</span>
+                </label>
+                {selectedInvestasiIds.length > 0 && (
+                  <button
+                    onClick={handleBulkDeleteInvestasi}
+                    disabled={isBulkDeletingInvestasi}
+                    className="px-2.5 py-1 bg-rose-600 hover:bg-rose-700 text-white rounded text-[11px] font-bold flex items-center gap-1 transition cursor-pointer"
+                  >
+                    <Trash2 className="w-3 h-3" /> Hapus Terpilih ({selectedInvestasiIds.length})
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
 
           {loading ? (
             <div className="text-center text-emerald-400 py-12 animate-pulse text-xs">Memuat data portofolio...</div>
@@ -452,12 +501,23 @@ export default function InvestasiPage() {
                 return (
                   <div key={item.id} className="glass-card p-4 border-slate-700/50 flex flex-col justify-between space-y-3 text-xs relative group">
                     <div className="flex justify-between items-start">
-                      <div>
-                        <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700 font-mono">
-                          {item.kategori}
-                        </span>
-                        <h4 className="text-sm font-bold text-white mt-1.5">{item.nama}</h4>
-                        {item.catatan && <p className="text-[10px] text-slate-500 mt-1 italic leading-tight">{item.catatan}</p>}
+                      <div className="flex items-start gap-2.5">
+                        <input
+                          type="checkbox"
+                          checked={selectedInvestasiIds.includes(item.id)}
+                          onChange={(e) => {
+                            if (e.target.checked) setSelectedInvestasiIds(prev => [...prev, item.id]);
+                            else setSelectedInvestasiIds(prev => prev.filter(id => id !== item.id));
+                          }}
+                          className="mt-1 accent-emerald-500 rounded border-slate-700 cursor-pointer w-4 h-4"
+                        />
+                        <div>
+                          <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700 font-mono">
+                            {item.kategori}
+                          </span>
+                          <h4 className="text-sm font-bold text-white mt-1.5">{item.nama}</h4>
+                          {item.catatan && <p className="text-[10px] text-slate-500 mt-1 italic leading-tight">{item.catatan}</p>}
+                        </div>
                       </div>
                       
                       {/* Action buttons */}
