@@ -172,10 +172,10 @@ export default function PortfolioGrid({
         </div>
       </div>
 
-      {/* Row 2: Secondary Columns (Dana Operasional, Limit Harian, Sisa Hari) */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      {/* Row 2: Secondary Columns (Horizontal Snap Scroll on Mobile, 3-col Grid on Desktop) */}
+      <div className="flex md:grid md:grid-cols-3 gap-4 overflow-x-auto no-scrollbar snap-x snap-mandatory pb-1 -mx-4 px-4 md:mx-0 md:px-0">
         {/* Dana Operasional */}
-        <div className="glass-card p-5 relative overflow-hidden flex flex-col justify-between min-h-[130px] border-l-4 border-l-indigo-500">
+        <div className="glass-card p-5 relative overflow-hidden flex flex-col justify-between min-h-[130px] min-w-[80vw] sm:min-w-[280px] md:min-w-0 snap-center shrink-0 md:shrink border-l-4 border-l-indigo-500">
           <div className="flex justify-between items-start">
             <div>
               <p className="text-xs font-semibold text-slate-400 tracking-wider uppercase mb-1">📊 Dana Operasional</p>
@@ -198,7 +198,7 @@ export default function PortfolioGrid({
         </div>
 
         {/* Piutang Aktif */}
-        <div className="glass-card p-5 relative overflow-hidden flex flex-col justify-between min-h-[130px] border-l-4 border-l-amber-500 bg-gradient-to-r from-amber-955/5 to-transparent">
+        <div className="glass-card p-5 relative overflow-hidden flex flex-col justify-between min-h-[130px] min-w-[80vw] sm:min-w-[280px] md:min-w-0 snap-center shrink-0 md:shrink border-l-4 border-l-amber-500 bg-gradient-to-r from-amber-955/5 to-transparent">
           <div className="flex justify-between items-start">
             <div>
               <p className="text-xs font-semibold text-slate-400 tracking-wider uppercase mb-1">💸 Piutang Aktif</p>
@@ -215,7 +215,7 @@ export default function PortfolioGrid({
         </div>
 
         {/* Sisa Hari */}
-        <div className="glass-card p-5 relative overflow-hidden flex flex-col justify-between min-h-[130px] border-l-4 border-l-pink-500">
+        <div className="glass-card p-5 relative overflow-hidden flex flex-col justify-between min-h-[130px] min-w-[80vw] sm:min-w-[280px] md:min-w-0 snap-center shrink-0 md:shrink border-l-4 border-l-pink-500">
           <div className="flex justify-between items-start">
             <div>
               <p className="text-xs font-semibold text-slate-400 tracking-wider uppercase mb-1">📅 Sisa Hari Ke Gajian</p>
