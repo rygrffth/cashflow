@@ -7,7 +7,7 @@ import { JAJAN_CATEGORIES } from '@/config/categories';
 import DailyLimitCard from '@/components/DailyLimitCard';
 import JajanSimulator from '@/components/JajanSimulator';
 import TransactionForm from '@/components/TransactionForm';
-import { RefreshCw, Clock, Landmark, Wallet, ListTodo, Lock, Unlock, Pencil, Trash2, Target, TrendingUp } from 'lucide-react';
+import { RefreshCw, Clock, Landmark, Wallet, ListTodo, Lock, Unlock, Pencil, Trash2, Target, TrendingUp, PlusCircle } from 'lucide-react';
 import { getWIBDateString, parseDateParts } from '@/lib/dateUtils';
 import { calculateGajianCycle } from '@/lib/gajianUtils';
 import { computeFinancialBalances } from '@/lib/balanceUtils';
@@ -42,10 +42,20 @@ export default function Dashboard() {
   const [todayTransactions, setTodayTransactions] = useState<any[]>([]);
   const [editingTxn, setEditingTxn] = useState<any | null>(null);
 
+  // Transaction Modal State
+  const [isModalOpen, setIsModalOpen] = useState(false);
+
   // Secret Mode State
   const [secretCode, setSecretCode] = useState('');
   const [fakeOffset, setFakeOffset] = useState(140000000);
   const isRealMode = secretCode === 'naufal';
+
+  // Listen to open-transaction-modal event dispatched from Sidebar FAB
+  useEffect(() => {
+    const handleOpenModal = () => setIsModalOpen(true);
+    window.addEventListener('open-transaction-modal', handleOpenModal);
+    return () => window.removeEventListener('open-transaction-modal', handleOpenModal);
+  }, []);
 
   // Load secret code and fake offset on mount to synchronize with Settings
   useEffect(() => {
@@ -387,21 +397,32 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <div className="flex flex-col sm:flex-row items-end sm:items-center gap-4 w-full md:w-auto">
+        <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end">
           {/* Clock Display */}
-          <div className="px-4 py-2 bg-slate-900/80 border border-slate-800 rounded-xl text-xs font-semibold text-emerald-400 tracking-wider shadow-inner w-full sm:w-auto text-center md:text-right">
+          <div className="px-3.5 py-1.5 bg-slate-900/80 border border-slate-800 rounded-xl text-xs font-semibold text-emerald-400 tracking-wider shadow-inner">
             {timeStr || '🕒 Memuat waktu...'}
           </div>
 
-          {/* Refresh Button */}
-          <button
-            onClick={() => fetchData(true)}
-            disabled={refreshing}
-            className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 active:scale-95 text-slate-950 font-bold rounded-xl text-xs flex items-center justify-center gap-2 cursor-pointer transition-all shadow-md w-full sm:w-auto"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} />
-            {refreshing ? 'Sinkronisasi...' : 'Refresh Data'}
-          </button>
+          <div className="flex items-center gap-2">
+            {/* Quick Refresh Icon */}
+            <button
+              onClick={() => fetchData(true)}
+              disabled={refreshing}
+              className="p-2 bg-slate-900/80 hover:bg-slate-800 border border-slate-800 rounded-xl text-slate-400 hover:text-white transition cursor-pointer active:scale-95"
+              title="Perbarui Data"
+            >
+              <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin text-emerald-400' : ''}`} />
+            </button>
+
+            {/* Prominent Desktop + Catat Transaksi Button */}
+            <button
+              onClick={() => setIsModalOpen(true)}
+              className="hidden sm:flex items-center gap-2 px-4 py-2 bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-slate-950 font-bold rounded-xl text-xs cursor-pointer transition-all shadow-[0_4px_16px_rgba(16,185,129,0.3)] hover:shadow-[0_6px_20px_rgba(16,185,129,0.4)]"
+            >
+              <PlusCircle className="w-4 h-4 stroke-[2.5]" />
+              <span>Catat Transaksi</span>
+            </button>
+          </div>
         </div>
       </header>
 
@@ -501,23 +522,24 @@ export default function Dashboard() {
           )}
         </div>
 
-        {/* Right 1 Column: Form and Logs */}
+        {/* Right 1 Column: Today's Transactions Log (Clean & Compact) */}
         <div className="space-y-8">
-          {/* Add Transaction Form */}
-          <TransactionForm
-            saldoBank={saldoBank}
-            uangCash={uangCash}
-            onSuccess={() => fetchData(true)}
-          />
-
-          {/* Today's Transactions Log */}
           <div className="glass-card p-6 border-slate-700/40 space-y-4">
-            <h3 className="text-sm font-bold text-emerald-400 flex items-center gap-2">
-              <ListTodo className="w-4 h-4" /> 📋 Transaksi Hari Ini
-            </h3>
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-bold text-emerald-400 flex items-center gap-2">
+                <ListTodo className="w-4 h-4" /> 📋 Transaksi Hari Ini
+              </h3>
+              <button
+                onClick={() => setIsModalOpen(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-lg text-xs font-bold transition cursor-pointer"
+              >
+                <PlusCircle className="w-3.5 h-3.5" />
+                <span>+ Catat</span>
+              </button>
+            </div>
 
             {todayTransactions.length > 0 ? (
-              <div className="space-y-3 max-h-[300px] overflow-y-auto pr-1 no-scrollbar">
+              <div className="space-y-3 max-h-[480px] overflow-y-auto pr-1 no-scrollbar">
                 {todayTransactions.map((t) => {
                   const normKat = (t.kategori || '').trim().toLowerCase();
                   const isExcludedFromLimit =
@@ -583,13 +605,44 @@ export default function Dashboard() {
               })}
               </div>
             ) : (
-              <p className="text-xs text-slate-400 text-center py-6 bg-slate-950/20 rounded-xl border border-slate-900/50">
-                Belum ada transaksi aktif dicatat hari ini.
-              </p>
+              <div className="text-center py-10 bg-slate-950/20 rounded-xl border border-slate-900/50 space-y-3">
+                <p className="text-xs text-slate-400">
+                  Belum ada transaksi aktif dicatat hari ini.
+                </p>
+                <button
+                  onClick={() => setIsModalOpen(true)}
+                  className="inline-flex items-center gap-2 px-3.5 py-2 bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-400 border border-emerald-500/30 rounded-xl text-xs font-bold transition cursor-pointer"
+                >
+                  <PlusCircle className="w-4 h-4" />
+                  <span>Catat Transaksi Sekarang</span>
+                </button>
+              </div>
             )}
           </div>
         </div>
       </main>
+
+      {/* 🚀 New Transaction Modal / Bottom Sheet */}
+      {isModalOpen && (
+        <div 
+          className="fixed inset-0 bg-slate-950/80 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-4 z-50 animate-fadeIn"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setIsModalOpen(false);
+          }}
+        >
+          <div className="w-full sm:max-w-lg max-h-[90vh] overflow-y-auto rounded-t-3xl sm:rounded-2xl border-t sm:border border-slate-700/60 shadow-2xl bg-slate-950/95 animate-slideUp sm:animate-scaleUp">
+            <TransactionForm
+              saldoBank={saldoBank}
+              uangCash={uangCash}
+              onSuccess={() => {
+                fetchData(true);
+                setIsModalOpen(false);
+              }}
+              onClose={() => setIsModalOpen(false)}
+            />
+          </div>
+        </div>
+      )}
 
 
 

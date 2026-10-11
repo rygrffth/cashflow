@@ -6,7 +6,7 @@ import { usePathname } from 'next/navigation';
 import { 
   LayoutDashboard, History, Target, HandCoins, Settings, 
   CalendarRange, BarChart3, RefreshCw, Sun, Moon, Landmark, 
-  Menu, X, ChevronLeft, ChevronRight 
+  Menu, X, ChevronLeft, ChevronRight, PlusCircle 
 } from 'lucide-react';
 
 export default function Sidebar() {
@@ -228,6 +228,20 @@ export default function Sidebar() {
           <History className="w-5 h-5 mb-0.5" />
           <span>Riwayat</span>
         </Link>
+
+        {/* ➕ Quick Add Transaction FAB (Centered prominent button) */}
+        <button
+          onClick={() => {
+            if (typeof window !== 'undefined') {
+              window.dispatchEvent(new CustomEvent('open-transaction-modal'));
+            }
+          }}
+          className="flex flex-col items-center justify-center -mt-4 py-1.5 px-3 rounded-2xl bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-slate-950 font-black shadow-[0_4px_16px_rgba(16,185,129,0.4)] transition-all cursor-pointer border-2 border-slate-900"
+          title="Catat Transaksi Baru"
+        >
+          <PlusCircle className="w-6 h-6 stroke-[2.5]" />
+          <span className="text-[10px] tracking-tight">Catat</span>
+        </button>
 
         <Link
           href="/budget"

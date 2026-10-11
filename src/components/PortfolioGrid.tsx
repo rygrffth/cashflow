@@ -81,10 +81,10 @@ export default function PortfolioGrid({
         </h2>
       </div>
 
-      {/* Row 1: The 4 Primary Portfolio Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* Row 1: The 4 Primary Portfolio Cards (Horizontal Snap Scroll on Mobile, 4-col Grid on Desktop) */}
+      <div className="flex md:grid md:grid-cols-2 lg:grid-cols-4 gap-4 overflow-x-auto no-scrollbar snap-x snap-mandatory pb-1 -mx-4 px-4 md:mx-0 md:px-0">
         {/* Bank Card */}
-        <div className="glass-card p-5 relative overflow-hidden flex flex-col justify-between min-h-[140px]">
+        <div className="glass-card p-5 relative overflow-hidden flex flex-col justify-between min-h-[140px] min-w-[80vw] sm:min-w-[280px] md:min-w-0 snap-center shrink-0 md:shrink">
           <div className="flex justify-between items-start">
             <div>
               <p className="text-xs font-semibold text-slate-400 tracking-wider uppercase mb-1">🏦 Saldo Bank / ATM</p>
@@ -106,7 +106,7 @@ export default function PortfolioGrid({
         </div>
 
         {/* Cash Card */}
-        <div className="glass-card p-5 relative overflow-hidden flex flex-col justify-between min-h-[140px]">
+        <div className="glass-card p-5 relative overflow-hidden flex flex-col justify-between min-h-[140px] min-w-[80vw] sm:min-w-[280px] md:min-w-0 snap-center shrink-0 md:shrink">
           <div className="flex justify-between items-start">
             <div>
               <p className="text-xs font-semibold text-slate-400 tracking-wider uppercase mb-1">💵 Uang Cash</p>
@@ -128,7 +128,7 @@ export default function PortfolioGrid({
         </div>
 
         {/* Tabungan Card */}
-        <div className="glass-card p-5 relative overflow-hidden flex flex-col justify-between min-h-[140px]">
+        <div className="glass-card p-5 relative overflow-hidden flex flex-col justify-between min-h-[140px] min-w-[80vw] sm:min-w-[280px] md:min-w-0 snap-center shrink-0 md:shrink">
           <div className="flex justify-between items-start">
             <div>
               <p className="text-xs font-semibold text-slate-400 tracking-wider uppercase mb-1">💰 Tabungan</p>
@@ -150,7 +150,7 @@ export default function PortfolioGrid({
         </div>
 
         {/* Total Aset Card */}
-        <div className="glass-card p-5 relative overflow-hidden flex flex-col justify-between min-h-[140px] bg-gradient-to-br from-slate-900/40 via-emerald-950/10 to-slate-900/40">
+        <div className="glass-card p-5 relative overflow-hidden flex flex-col justify-between min-h-[140px] min-w-[80vw] sm:min-w-[280px] md:min-w-0 snap-center shrink-0 md:shrink bg-gradient-to-br from-slate-900/40 via-emerald-950/10 to-slate-900/40">
           <div className="flex justify-between items-start">
             <div>
               <p className="text-xs font-semibold text-emerald-400 tracking-wider uppercase mb-1">💎 Total Aset</p>

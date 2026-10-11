@@ -10,9 +10,10 @@ interface FormProps {
   saldoBank: number;
   uangCash: number;
   onSuccess: () => void;
+  onClose?: () => void;
 }
 
-export default function TransactionForm({ saldoBank, uangCash, onSuccess }: FormProps) {
+export default function TransactionForm({ saldoBank, uangCash, onSuccess, onClose }: FormProps) {
   // Loading & Feedback States
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
@@ -258,9 +259,21 @@ export default function TransactionForm({ saldoBank, uangCash, onSuccess }: Form
 
   return (
     <div className="glass-card p-6 border-slate-700/40 space-y-5">
-      <h2 className="text-xl font-bold tracking-tight text-emerald-400 flex items-center gap-2">
-        <PlusCircle className="w-5 h-5" /> Catat Transaksi Baru
-      </h2>
+      <div className="flex items-center justify-between">
+        <h2 className="text-xl font-bold tracking-tight text-emerald-400 flex items-center gap-2">
+          <PlusCircle className="w-5 h-5" /> Catat Transaksi Baru
+        </h2>
+        {onClose && (
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-1.5 -mr-1 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800/60 transition cursor-pointer"
+            title="Tutup Form"
+          >
+            ✕
+          </button>
+        )}
+      </div>
 
       <form onSubmit={handleSubmit} className="space-y-4">
         {/* Error Message */}
