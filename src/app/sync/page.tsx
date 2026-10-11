@@ -21,11 +21,19 @@ export default function SyncPage() {
   const [selectedIndices, setSelectedIndices] = useState<number[]>([]);
   const [importing, setImporting] = useState(false);
 
-  // Load credentials on mount
+  // Load credentials on mount (email from localStorage, password from sessionStorage for security)
   useEffect(() => {
     if (typeof window !== 'undefined') {
       setSyncEmail(localStorage.getItem('syncEmail') || '');
-      setSyncPassword(localStorage.getItem('syncPassword') || '');
+      const savedPass = sessionStorage.getItem('syncPassword') || localStorage.getItem('syncPassword') || '';
+      setSyncPassword(savedPass);
+      // Migrate password from localStorage to sessionStorage if still present
+      if (localStorage.getItem('syncPassword')) {
+        localStorage.removeItem('syncPassword');
+        if (savedPass) {
+          sessionStorage.setItem('syncPassword', savedPass);
+        }
+      }
     }
   }, []);
 
@@ -39,10 +47,10 @@ export default function SyncPage() {
     setErrorMsg('');
     setFetchedRows([]);
 
-    // Save credentials to localStorage for convenience
+    // Save email to localStorage and password to sessionStorage for security
     if (typeof window !== 'undefined') {
       localStorage.setItem('syncEmail', syncEmail);
-      localStorage.setItem('syncPassword', syncPassword);
+      sessionStorage.setItem('syncPassword', syncPassword);
     }
 
     try {
@@ -86,10 +94,10 @@ export default function SyncPage() {
     try {
       const rowsToImport = fetchedRows.filter((_, idx) => selectedIndices.includes(idx));
       
-      // Fetch existing transactions to avoid duplicate insertions
+      // Fetch existing transactions with only required columns to optimize payload
       const { data: existingTx, error: fetchErr } = await supabase
         .from('transaksi')
-        .select('*');
+        .select('nominal, tanggal, catatan');
         
       if (fetchErr) throw fetchErr;
       
@@ -97,11 +105,17 @@ export default function SyncPage() {
       let skippedCount = 0;
       
       for (const row of rowsToImport) {
-        const isDup = existingTx.some(tx => 
-          Number(tx.nominal) === Number(row.nominal) && 
-          tx.tanggal === row.tanggal && 
-          (tx.catatan || '').toLowerCase().includes((row.catatan || '').toLowerCase().slice(0, 15))
-        );
+        const rowCatatanClean = (row.catatan || '').toLowerCase().trim();
+        const prefixMatchLength = Math.min(rowCatatanClean.length, 30);
+        const rowPrefix = rowCatatanClean.slice(0, prefixMatchLength);
+
+        const isDup = (existingTx || []).some(tx => {
+          if (Number(tx.nominal) !== Number(row.nominal)) return false;
+          if (tx.tanggal !== row.tanggal) return false;
+          const txCatatanClean = (tx.catatan || '').toLowerCase().trim();
+          if (!rowPrefix || !txCatatanClean) return true;
+          return txCatatanClean.includes(rowPrefix) || rowCatatanClean.includes(txCatatanClean.slice(0, prefixMatchLength));
+        });
         
         if (!isDup) {
           newRows.push({

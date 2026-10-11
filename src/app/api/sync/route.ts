@@ -5,7 +5,13 @@ import { NextResponse } from 'next/server';
 function decodeQuotedPrintable(str: string): string {
   return str
     .replace(/=\r?\n/g, '') // Join line wraps
-    .replace(/=([0-9A-F]{2})/gi, (_, hex) => String.fromCharCode(parseInt(hex, 16)));
+    .replace(/(?:=[0-9A-Fa-f]{2})+/g, (match) => {
+      const bytes = match
+        .split('=')
+        .slice(1)
+        .map(hex => parseInt(hex, 16));
+      return Buffer.from(bytes).toString('utf-8');
+    });
 }
 
 // Decode MIME encoded-words (like =?UTF-8?B?...?= or =?UTF-8?Q?...?=)
@@ -130,8 +136,9 @@ function parseTransaction(body: string, subject: string) {
         agu: 'Aug', sep: 'Sep', okt: 'Oct', nov: 'Nov', des: 'Dec'
       };
 
-      Object.keys(bulanMap).forEach(idBln => {
-        const regex = new RegExp(idBln, 'gi');
+      const sortedKeys = Object.keys(bulanMap).sort((a, b) => b.length - a.length);
+      sortedKeys.forEach(idBln => {
+        const regex = new RegExp(`\\b${idBln}\\b`, 'gi');
         rawTgl = rawTgl.replace(regex, bulanMap[idBln]);
       });
 
@@ -278,7 +285,10 @@ export async function POST(req: Request) {
       logger: false,
       tls: {
         rejectUnauthorized: false
-      }
+      },
+      connectionTimeout: 10000,
+      socketTimeout: 20000,
+      greetTimeout: 8000
     });
 
     // Prevent unhandled 'error' events from crashing the process
@@ -306,7 +316,7 @@ export async function POST(req: Request) {
         }
 
         if (searchResult && searchResult.length > 0) {
-          const limitVal = limit ? parseInt(limit, 10) : 10;
+          const limitVal = Math.min(Math.max(parseInt(String(limit), 10) || 10, 1), 100);
           const sortedIds = searchResult.slice(-limitVal).reverse();
 
           for (const uid of sortedIds) {
@@ -338,10 +348,20 @@ export async function POST(req: Request) {
           }
         }
       } finally {
-        lock.release();
+        if (lock) {
+          try {
+            lock.release();
+          } catch (lockErr) {
+            console.warn('Error releasing lock:', lockErr);
+          }
+        }
       }
     } finally {
-      await client.logout();
+      try {
+        await client.logout();
+      } catch (logoutErr) {
+        console.warn('Error during IMAP logout:', logoutErr);
+      }
     }
 
     return NextResponse.json({ success: true, data: results });
