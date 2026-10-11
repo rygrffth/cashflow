@@ -14,6 +14,7 @@ export default function SettingsPage() {
   const [successMsg, setSuccessMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
   const [localCode, setLocalCode] = useState('');
+  const [fakeOffset, setFakeOffset] = useState(140000000);
 
   // Excluded categories settings states
   const [excludeCategories, setExcludeCategories] = useState<string[]>([
@@ -173,11 +174,15 @@ export default function SettingsPage() {
     }
   };
 
-  // Load secretCode on mount
+  // Load secretCode and fakeOffset on mount
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('secretCode') || '';
       setLocalCode(saved);
+      const savedOffset = localStorage.getItem('fake_asset_offset');
+      if (savedOffset !== null && !isNaN(Number(savedOffset))) {
+        setFakeOffset(Number(savedOffset));
+      }
     }
   }, []);
 
@@ -186,6 +191,13 @@ export default function SettingsPage() {
     setLocalCode(val);
     if (typeof window !== 'undefined') {
       localStorage.setItem('secretCode', val);
+    }
+  };
+
+  const handleFakeOffsetChange = (val: number) => {
+    setFakeOffset(val);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('fake_asset_offset', String(val));
     }
   };
 
@@ -474,6 +486,19 @@ export default function SettingsPage() {
                     <span className="text-emerald-400 font-bold">🔒 Mode User Aktif</span>
                   </>
                 )}
+              </div>
+
+              <div className="flex flex-col gap-1.5 pt-1">
+                <label className="text-xs font-semibold text-slate-400">Nominal Penyamaran Total Aset (Mode User)</label>
+                <CurrencyInput
+                  placeholder="140.000.000"
+                  value={fakeOffset}
+                  onValueChange={handleFakeOffsetChange}
+                  className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-emerald-500 text-sm w-full"
+                />
+                <p className="text-[11px] text-slate-500 leading-tight">
+                  Nominal ini ditambahkan ke Total Aset & Tabungan saat berada di Mode User agar rasio Dana Operasional tetap klop dan konsisten.
+                </p>
               </div>
             </div>
           </div>

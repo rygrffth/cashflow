@@ -44,13 +44,18 @@ export default function Dashboard() {
 
   // Secret Mode State
   const [secretCode, setSecretCode] = useState('');
+  const [fakeOffset, setFakeOffset] = useState(140000000);
   const isRealMode = secretCode === 'naufal';
 
-  // Load secret code on mount to synchronize with Settings
+  // Load secret code and fake offset on mount to synchronize with Settings
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('secretCode') || '';
       setSecretCode(saved);
+      const savedOffset = localStorage.getItem('fake_asset_offset');
+      if (savedOffset !== null && !isNaN(Number(savedOffset))) {
+        setFakeOffset(Number(savedOffset));
+      }
     }
   }, []);
 
@@ -404,21 +409,30 @@ export default function Dashboard() {
       <main className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Left 2 Columns: Portfolios, Daily status, Simulator */}
         <div className="lg:col-span-2 space-y-8">
-          <PortfolioGrid
-            saldoBank={saldoBank}
-            uangCash={uangCash}
-            tabungan={tabungan}
-            totalAset={isRealMode ? totalAset : 140000000 + totalAset}
-            saldoOp={saldoOp}
-            batasHr={batasHr}
-            sisaHari={sisaHari}
-            targetGajianFormatted={targetGajianFormatted}
-            isRealMode={isRealMode}
-            secretCode={secretCode}
-            setSecretCode={setSecretCode}
-            piutangSum={piutangSum}
-            piutangCount={piutangCount}
-          />
+          {(() => {
+            const displayedTotalAset = isRealMode ? totalAset : (fakeOffset + totalAset);
+            // Tabungan ikut menyesuaikan secara dinamis saat bukan Mode Admin agar:
+            // Saldo Aset dikurangi Tabungan = Dana Operasional (saldoOp)
+            const displayedTabungan = isRealMode ? tabungan : Math.max(0, displayedTotalAset - saldoOp);
+
+            return (
+              <PortfolioGrid
+                saldoBank={saldoBank}
+                uangCash={uangCash}
+                tabungan={displayedTabungan}
+                totalAset={displayedTotalAset}
+                saldoOp={saldoOp}
+                batasHr={batasHr}
+                sisaHari={sisaHari}
+                targetGajianFormatted={targetGajianFormatted}
+                isRealMode={isRealMode}
+                secretCode={secretCode}
+                setSecretCode={setSecretCode}
+                piutangSum={piutangSum}
+                piutangCount={piutangCount}
+              />
+            );
+          })()}
 
           <DailyLimitCard
             batasHr={batasHr}
