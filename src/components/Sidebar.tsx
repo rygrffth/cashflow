@@ -72,31 +72,6 @@ export default function Sidebar() {
 
   return (
     <>
-      {/* 📱 Mobile Header Bar (Visible on mobile only) */}
-      <header className="md:hidden sticky top-0 z-40 flex h-16 items-center justify-between bg-[color:var(--background)]/85 backdrop-blur-md border-b border-[color:var(--card-border)] px-4">
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setIsOpen(true)}
-            className="p-2 -ml-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800/50 transition cursor-pointer"
-            title="Buka Menu"
-          >
-            <Menu className="w-5 h-5" />
-          </button>
-          <span className="text-md font-black tracking-tight text-white flex items-center gap-2">
-            <img src="/logo.png" alt="Logo" className="w-5 h-5 object-contain rounded-lg" />
-            <span>Cashflow</span>
-          </span>
-        </div>
-
-        {/* Theme Toggle (Mobile) */}
-        <button
-          onClick={toggleTheme}
-          className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800/50 transition cursor-pointer flex items-center justify-center bg-slate-900/40"
-          title={theme === 'dark' ? 'Mode Terang' : 'Mode Gelap'}
-        >
-          {theme === 'dark' ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-indigo-400" />}
-        </button>
-      </header>
 
       {/* 📱 Mobile Drawer Overlay / Backdrop */}
       {isOpen && (
