@@ -21,10 +21,13 @@ function decodeMimeWords(str: string): string {
 
 function getAllMimeParts(rawSource: string): Array<{ contentType: string; content: string }> {
   const partsList: Array<{ contentType: string; content: string }> = [];
+  const MAX_DEPTH = 10; // Guard against malformed/adversarial MIME with infinite nesting
 
-  function walk(source: string) {
+  function walk(source: string, depth = 0) {
+    if (depth > MAX_DEPTH) return; // Bug fix #2: prevent stack overflow on malformed MIME
+
     const sepMatch = source.match(/\r?\n\r?\n/);
-    const sepIndex = sepMatch ? sepMatch.index : -1;
+    const sepIndex = sepMatch?.index ?? -1; // Bug fix #1: null-safe index access
     const sepLen = sepMatch ? sepMatch[0].length : 0;
 
     const headers = sepIndex !== -1 ? source.slice(0, sepIndex) : '';
@@ -43,7 +46,7 @@ function getAllMimeParts(rawSource: string): Array<{ contentType: string; conten
         const subParts = body.split('--' + boundary);
         for (const sp of subParts) {
           if (!sp.trim() || sp.trim() === '--') continue;
-          walk(sp);
+          walk(sp, depth + 1); // Bug fix #2: pass depth counter
         }
       }
     } else {
@@ -63,7 +66,7 @@ function getAllMimeParts(rawSource: string): Array<{ contentType: string; conten
 
 function parseMimeEmail(rawSource: string): { body: string; subject: string } {
   const sepMatch = rawSource.match(/\r?\n\r?\n/);
-  const sepIndex = sepMatch ? sepMatch.index : -1;
+  const sepIndex = sepMatch?.index ?? -1; // Bug fix #1: null-safe index access
   const headersPart = sepIndex !== -1 ? rawSource.slice(0, sepIndex) : '';
 
   const subjectMatch = headersPart.match(/^Subject:\s*(.*)$/im);
@@ -149,7 +152,9 @@ function parseTransaction(body: string, subject: string) {
   const jam = jamMatch ? jamMatch[1] : '';
 
   // 4. Extract Recipient & Bank Platform (Livin' Mandiri vs wondr by BNI)
-  const isBNI = /wondr|bni/i.test(body) || /bni/i.test(subject);
+  // Bug fix #3: use \b word boundaries to prevent false positives on words like
+  // "kombinasi", "turbin", etc. from Mandiri emails matching the BNI pattern.
+  const isBNI = /\bwondr\b|\bbni\b/i.test(body) || /\bbni\b/i.test(subject);
   let penerima = isBNI ? 'BNI Transaction' : 'Mandiri Transaction';
 
   if (isBNI) {
