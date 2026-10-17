@@ -510,7 +510,7 @@ export default function SettingsPage() {
             <Shuffle className="w-5 h-5 text-emerald-400" /> Filter Kategori Operational
           </h2>
           <p className="text-xs text-slate-400 mb-6 leading-relaxed">
-            Pilih kategori pengeluaran yang ingin **dikecualikan** dari perhitungan limit harian dan charts di halaman Analytics (misal transfer aset, pinjaman, tabungan).
+            Pilih kategori pengeluaran yang ingin **dikecualikan** dari perhitungan limit jajan operasional harian (misal transfer aset, pinjaman/piutang, tabungan). Semua transaksi akan tetap tercatat utuh di halaman Analisis.
           </p>
 
           <form onSubmit={handleSaveExcludeCategories} className="space-y-4">

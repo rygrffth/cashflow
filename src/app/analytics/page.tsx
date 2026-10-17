@@ -163,7 +163,7 @@ export default function AnalyticsPage() {
             if (t.status === 'Cleared') {
               monthlyIncome += nom;
             }
-          } else if (t.tipe === 'Pengeluaran' && !EXCLUDE_FROM_LIMIT.includes(t.kategori)) {
+          } else if (t.tipe === 'Pengeluaran') {
             if (t.status === 'Cleared' || t.status === 'Pending') {
               monthlyExpense += nom;
               categorySpendMap[t.kategori] = (categorySpendMap[t.kategori] || 0) + nom;
@@ -187,7 +187,7 @@ export default function AnalyticsPage() {
     transactions.forEach(t => {
       if (t.tanggal) {
         const d = new Date(t.tanggal);
-        if (d >= thirtyDaysAgo && d <= now && t.tipe === 'Pengeluaran' && !EXCLUDE_FROM_LIMIT.includes(t.kategori) && t.status === 'Cleared') {
+        if (d >= thirtyDaysAgo && d <= now && t.tipe === 'Pengeluaran' && t.status === 'Cleared') {
           last30DaysSpend += Number(t.nominal) - (Number(t.titipan) || 0);
         }
       }
@@ -285,7 +285,7 @@ export default function AnalyticsPage() {
       overallBg,
       categorySpendMap
     };
-  }, [transactions, EXCLUDE_FROM_LIMIT, stats.saldoOp, stats.totalReal]);
+  }, [transactions, stats.saldoOp, stats.totalReal]);
 
   // Period ranges mapping for Charts
   const chartFilteredData = useMemo(() => {
@@ -331,7 +331,7 @@ export default function AnalyticsPage() {
     const map: Record<string, { date: string; Bank: number; Cash: number; Total: number }> = {};
 
     chartFilteredData.forEach(t => {
-      if (t.tipe === 'Pengeluaran' && !EXCLUDE_FROM_LIMIT.includes(t.kategori)) {
+      if (t.tipe === 'Pengeluaran') {
         const dStr = t.tanggal;
         if (!map[dStr]) {
           map[dStr] = { date: dStr, Bank: 0, Cash: 0, Total: 0 };
@@ -344,13 +344,13 @@ export default function AnalyticsPage() {
     });
 
     return Object.values(map).sort((a, b) => a.date.localeCompare(b.date));
-  }, [chartFilteredData, EXCLUDE_FROM_LIMIT]);
+  }, [chartFilteredData]);
 
   // 2. Chart: Category distribution donut & top list
   const categoryChartData = useMemo(() => {
     const map: Record<string, number> = {};
     chartFilteredData.forEach(t => {
-      if (t.tipe === 'Pengeluaran' && !EXCLUDE_FROM_LIMIT.includes(t.kategori)) {
+      if (t.tipe === 'Pengeluaran') {
         const kat = t.kategori;
         const amt = Number(t.nominal) - (Number(t.titipan) || 0);
         map[kat] = (map[kat] || 0) + (amt || 0);
@@ -369,7 +369,7 @@ export default function AnalyticsPage() {
         color: colors[idx % colors.length]
       }))
       .sort((a, b) => b.value - a.value);
-  }, [chartFilteredData, EXCLUDE_FROM_LIMIT]);
+  }, [chartFilteredData]);
 
   // 3. Chart: Cashflow bar (Pemasukan, Pengeluaran Bank, Pengeluaran Cash, Pending)
   const cashflowChartData = useMemo(() => {
@@ -413,7 +413,7 @@ export default function AnalyticsPage() {
     const mapLast: Record<string, number> = {};
 
     transactions.forEach(t => {
-      if (t.tipe === 'Pengeluaran' && !EXCLUDE_FROM_LIMIT.includes(t.kategori)) {
+      if (t.tipe === 'Pengeluaran') {
         const d = new Date(t.tanggal);
         const amt = Number(t.nominal) - (Number(t.titipan) || 0);
         if (d.getMonth() === curMonth && d.getFullYear() === curYear) {
@@ -430,7 +430,7 @@ export default function AnalyticsPage() {
       'Bulan Lalu': mapLast[kat] || 0,
       'Bulan Ini': mapThis[kat] || 0
     })).sort((a, b) => b['Bulan Ini'] - a['Bulan Ini']);
-  }, [transactions, EXCLUDE_FROM_LIMIT]);
+  }, [transactions]);
 
   // 5. Chart: Daily Cumulative Balance Trend (Bank + Cash)
   const dailyBalanceChartData = useMemo(() => {
@@ -502,7 +502,6 @@ export default function AnalyticsPage() {
 
     const sevenDaysTxns = transactions.filter(t => {
       if (t.tipe !== 'Pengeluaran' || t.status !== 'Cleared') return false;
-      if (EXCLUDE_FROM_LIMIT.includes(t.kategori)) return false;
       const d = new Date(t.tanggal);
       return d >= sevenDaysAgo && d <= today;
     });
@@ -517,7 +516,7 @@ export default function AnalyticsPage() {
     const prediksiSaldo = stats.saldoOp - proyeksiPengeluaran;
 
     return { avg7Days, proyeksiPengeluaran, prediksiSaldo };
-  }, [transactions, stats.saldoOp, stats.sisaHari, EXCLUDE_FROM_LIMIT]);
+  }, [transactions, stats.saldoOp, stats.sisaHari]);
 
   // Multi-Period Report calculation
   const reportPeriodLimits = useMemo(() => {
@@ -564,7 +563,7 @@ export default function AnalyticsPage() {
       const nom = Number(t.nominal) - (Number(t.titipan) || 0);
       if (t.tipe === 'Pemasukan') {
         totalIn += nom;
-      } else if (t.tipe === 'Pengeluaran' && !EXCLUDE_FROM_LIMIT.includes(t.kategori)) {
+      } else if (t.tipe === 'Pengeluaran') {
         totalOut += nom;
       }
     });
@@ -574,7 +573,7 @@ export default function AnalyticsPage() {
     const netFlow = totalIn - totalOut;
 
     return { totalIn, totalOut, avgHarian, netFlow, diffDays };
-  }, [transactions, reportPeriodLimits, EXCLUDE_FROM_LIMIT]);
+  }, [transactions, reportPeriodLimits]);
 
   // Generating monthly options dynamically for select box
   const monthOptions = useMemo(() => {
@@ -693,7 +692,7 @@ export default function AnalyticsPage() {
 
             <div className="flex-1"></div>
             <div className="text-[10px] text-slate-400 italic">
-              *Menampilkan data terfilter ({chartFilteredData.length} transaksi)
+              *Menampilkan data periode terfilter ({chartFilteredData.length} transaksi)
             </div>
           </div>
 
@@ -1219,7 +1218,7 @@ export default function AnalyticsPage() {
                 </p>
                 <p className="text-2xl font-black text-rose-400">Rp {reportStats.totalOut.toLocaleString('id-ID')}</p>
               </div>
-              <p className="text-[10px] text-slate-500 mt-2">Menghilangkan kategori Scheduled & Menabung</p>
+              <p className="text-[10px] text-slate-500 mt-2">Seluruh pengeluaran pada periode terfilter</p>
             </div>
 
             {/* Net Cash Flow */}

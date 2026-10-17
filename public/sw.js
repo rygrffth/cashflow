@@ -1,5 +1,5 @@
-const CACHE_NAME = 'cashflow-pwa-v3';
-const STATIC_CACHE_NAME = 'cashflow-static-v3';
+const CACHE_NAME = 'cashflow-pwa-v4';
+const STATIC_CACHE_NAME = 'cashflow-static-v4';
 
 // Assets to cache immediately on SW installation
 const PRECACHE_ASSETS = [
