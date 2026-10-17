@@ -1,21 +1,31 @@
 'use client';
 
 import React from 'react';
+import { ShieldCheck } from 'lucide-react';
 
 interface DailyLimitProps {
   batasHr: number;
   outHariHarian: number;
   saldoOp: number;
   sisaHari: number;
+  isBufferActive?: boolean;
+  settlementBufferSum?: number;
 }
 
-export default function DailyLimitCard({ batasHr, outHariHarian, saldoOp, sisaHari }: DailyLimitProps) {
+export default function DailyLimitCard({
+  batasHr,
+  outHariHarian,
+  saldoOp,
+  sisaHari,
+  isBufferActive = false,
+  settlementBufferSum = 0
+}: DailyLimitProps) {
   const sisaJatahHariIni = batasHr - outHariHarian;
   const warnaSisa = sisaJatahHariIni >= 0 ? 'text-emerald-400' : 'text-rose-500';
   const persentase = batasHr > 0 ? (outHariHarian / batasHr) * 100 : 0;
 
   const sisaHariBesok = Math.max(sisaHari - 1, 1);
-  const realLimitBesok = sisaHari > 1 ? saldoOp / sisaHariBesok : saldoOp;
+  const realLimitBesok = sisaHari > 1 ? Math.max(0, Math.floor(saldoOp / sisaHariBesok)) : Math.max(0, Math.floor(saldoOp));
   const selisihLimit = realLimitBesok - batasHr;
 
   // Clamped percentage for progress bar width
@@ -55,9 +65,17 @@ export default function DailyLimitCard({ batasHr, outHariHarian, saldoOp, sisaHa
 
   return (
     <div className="space-y-6">
-      <h2 className="text-xl font-bold tracking-tight text-emerald-400 flex items-center gap-2">
-        <span>💰</span> Limit Harian
-      </h2>
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+        <h2 className="text-xl font-bold tracking-tight text-emerald-400 flex items-center gap-2">
+          <span>💰</span> Limit Harian
+        </h2>
+        {isBufferActive && settlementBufferSum > 0 && (
+          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs font-semibold">
+            <ShieldCheck className="w-3.5 h-3.5 text-rose-400" />
+            <span>Buffer Tagihan Aktif: -Rp {settlementBufferSum.toLocaleString('id-ID')}</span>
+          </div>
+        )}
+      </div>
 
       {/* Grid: 4 Metric Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">

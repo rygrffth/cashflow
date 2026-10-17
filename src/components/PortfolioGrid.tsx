@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Eye, EyeOff, Wallet, Landmark, PiggyBank, Briefcase, Calendar, ShieldAlert, CalendarClock } from 'lucide-react';
+import Link from 'next/link';
+import { Eye, EyeOff, Wallet, Landmark, PiggyBank, Briefcase, Calendar, ShieldAlert, CalendarClock, ChevronRight, AlertTriangle } from 'lucide-react';
 
 interface PortfolioProps {
   saldoBank: number;
@@ -19,6 +20,7 @@ interface PortfolioProps {
   piutangCount: number;
   settlementSum?: number;
   settlementCount?: number;
+  urgentSettlementCount?: number;
 }
 
 export default function PortfolioGrid({
@@ -36,7 +38,8 @@ export default function PortfolioGrid({
   piutangSum,
   piutangCount,
   settlementSum = 0,
-  settlementCount = 0
+  settlementCount = 0,
+  urgentSettlementCount = 0
 }: PortfolioProps) {
   // Hydration safety flag
   const [isMounted, setIsMounted] = useState(false);
@@ -204,43 +207,69 @@ export default function PortfolioGrid({
         </div>
 
         {/* Scheduled Settlement */}
-        <div className="glass-card p-5 relative overflow-hidden flex flex-col justify-between min-h-[130px] min-w-[80vw] sm:min-w-[280px] md:min-w-0 snap-center shrink-0 md:shrink border-l-4 border-l-rose-500 bg-gradient-to-r from-rose-950/10 to-transparent">
+        <div className="glass-card p-5 relative overflow-hidden flex flex-col justify-between min-h-[130px] min-w-[80vw] sm:min-w-[280px] md:min-w-0 snap-center shrink-0 md:shrink border-l-4 border-l-rose-500 bg-gradient-to-r from-rose-950/10 to-transparent group">
           <div className="flex justify-between items-start">
-            <div>
-              <p className="text-xs font-semibold text-slate-400 tracking-wider uppercase mb-1">⏳ Scheduled Settlement</p>
-              <h3 className="text-lg font-bold text-rose-400">
+            <Link href="/settlement" className="flex-1 cursor-pointer pr-2">
+              <div className="flex items-center gap-1.5 mb-1">
+                <p className="text-xs font-semibold text-slate-400 tracking-wider uppercase group-hover:text-rose-300 transition-colors">
+                  ⏳ Scheduled Settlement
+                </p>
+                <ChevronRight className="w-3.5 h-3.5 text-slate-500 group-hover:text-rose-400 group-hover:translate-x-0.5 transition-all" />
+              </div>
+              <h3 className="text-lg font-bold text-rose-400 group-hover:text-rose-300 transition-colors">
                 {formatCurrency(settlementSum, showSettlement)}
               </h3>
-              <p className="text-[10px] text-slate-400 mt-1">{settlementCount} tagihan pending</p>
-            </div>
-            <span className="p-2 bg-rose-500/10 rounded-lg text-rose-400 border border-rose-500/20">
+              <div className="flex items-center gap-2 mt-1">
+                <span className="text-[10px] text-slate-400">{settlementCount} tagihan pending</span>
+                {urgentSettlementCount > 0 && (
+                  <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30 animate-pulse">
+                    <AlertTriangle className="w-2.5 h-2.5" /> {urgentSettlementCount} segera
+                  </span>
+                )}
+              </div>
+            </Link>
+            <Link href="/settlement" className="p-2 bg-rose-500/10 hover:bg-rose-500/20 rounded-lg text-rose-400 border border-rose-500/20 transition-colors">
               <CalendarClock className="w-4 h-4" />
-            </span>
+            </Link>
           </div>
-          <button
-            onClick={() => handleToggle('show_settlement', !showSettlement, setShowSettlement)}
-            className="self-end p-1.5 hover:bg-slate-800/60 rounded text-slate-400 hover:text-white transition-colors"
-            title={showSettlement ? "Sembunyikan" : "Tampilkan"}
-          >
-            {showSettlement ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-          </button>
+          <div className="flex justify-between items-center mt-3 pt-2 border-t border-slate-800/40">
+            <Link href="/settlement" className="text-[10px] text-rose-400/80 hover:text-rose-300 flex items-center gap-1 font-semibold">
+              Buka Jadwal <ChevronRight className="w-3 h-3" />
+            </Link>
+            <button
+              onClick={() => handleToggle('show_settlement', !showSettlement, setShowSettlement)}
+              className="p-1 hover:bg-slate-800/60 rounded text-slate-400 hover:text-white transition-colors"
+              title={showSettlement ? "Sembunyikan" : "Tampilkan"}
+            >
+              {showSettlement ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+            </button>
+          </div>
         </div>
 
         {/* Piutang Aktif */}
-        <div className="glass-card p-5 relative overflow-hidden flex flex-col justify-between min-h-[130px] min-w-[80vw] sm:min-w-[280px] md:min-w-0 snap-center shrink-0 md:shrink border-l-4 border-l-amber-500 bg-gradient-to-r from-amber-955/5 to-transparent">
+        <div className="glass-card p-5 relative overflow-hidden flex flex-col justify-between min-h-[130px] min-w-[80vw] sm:min-w-[280px] md:min-w-0 snap-center shrink-0 md:shrink border-l-4 border-l-amber-500 bg-gradient-to-r from-amber-955/5 to-transparent group">
           <div className="flex justify-between items-start">
-            <div>
-              <p className="text-xs font-semibold text-slate-400 tracking-wider uppercase mb-1">💸 Piutang Aktif</p>
-              <h3 className="text-lg font-bold text-amber-400">
+            <Link href="/piutang" className="flex-1 cursor-pointer pr-2">
+              <div className="flex items-center gap-1.5 mb-1">
+                <p className="text-xs font-semibold text-slate-400 tracking-wider uppercase group-hover:text-amber-300 transition-colors">
+                  💸 Piutang Aktif
+                </p>
+                <ChevronRight className="w-3.5 h-3.5 text-slate-500 group-hover:text-amber-400 group-hover:translate-x-0.5 transition-all" />
+              </div>
+              <h3 className="text-lg font-bold text-amber-400 group-hover:text-amber-300 transition-colors">
                 Rp {piutangSum.toLocaleString('id-ID')}
               </h3>
               <p className="text-[10px] text-slate-400 mt-1">{piutangCount} piutang belum lunas</p>
-            </div>
-            <span className="p-2 bg-amber-500/10 rounded-lg text-amber-400 border border-amber-500/20">
+            </Link>
+            <Link href="/piutang" className="p-2 bg-amber-500/10 hover:bg-amber-500/20 rounded-lg text-amber-400 border border-amber-500/20 transition-colors">
               <span>💸</span>
-            </span>
+            </Link>
           </div>
-          <div className="h-4"></div> {/* Spacing alignment */}
+          <div className="flex justify-between items-center mt-3 pt-2 border-t border-slate-800/40">
+            <Link href="/piutang" className="text-[10px] text-amber-400/80 hover:text-amber-300 flex items-center gap-1 font-semibold">
+              Kelola Piutang <ChevronRight className="w-3 h-3" />
+            </Link>
+          </div>
         </div>
 
         {/* Sisa Hari */}

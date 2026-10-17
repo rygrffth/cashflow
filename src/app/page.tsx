@@ -34,6 +34,9 @@ export default function Dashboard() {
   const [piutangSum, setPiutangSum] = useState(0);
   const [settlementCount, setSettlementCount] = useState(0);
   const [settlementSum, setSettlementSum] = useState(0);
+  const [urgentSettlementCount, setUrgentSettlementCount] = useState(0);
+  const [isBufferActive, setIsBufferActive] = useState(false);
+  const [effectiveSaldoOp, setEffectiveSaldoOp] = useState(0);
 
   // Category Budgets Tracking State
   const [categoryBudgets, setCategoryBudgets] = useState<Record<string, number>>({});
@@ -138,8 +141,21 @@ export default function Dashboard() {
       const pendingSettlements = allTxns.filter(
         t => t.kategori === 'Scheduled Settlement' && t.status === 'Pending'
       );
+      const computedSettlementSum = pendingSettlements.reduce((acc, curr) => acc + (Number(curr.nominal) || 0), 0);
       setSettlementCount(pendingSettlements.length);
-      setSettlementSum(pendingSettlements.reduce((acc, curr) => acc + (Number(curr.nominal) || 0), 0));
+      setSettlementSum(computedSettlementSum);
+
+      // Hitung tagihan mendesak (jatuh tempo <= hari ini atau dalam 3 hari)
+      const urgentCount = pendingSettlements.filter(t => {
+        if (!t.tenggat_waktu) return false;
+        return t.tenggat_waktu <= todayWIB;
+      }).length;
+      setUrgentSettlementCount(urgentCount);
+
+      // Buffer setting from settings
+      const bufferSetting = (settingsData || []).find(s => s.key === 'subtract_settlement_from_daily');
+      const bufferActive = bufferSetting ? bufferSetting.value === 'true' : false;
+      setIsBufferActive(bufferActive);
 
       // --- CALCULATIONS ---
       // Tabungan / Real Darurat
@@ -157,14 +173,20 @@ export default function Dashboard() {
       setTotalAset(balances.totalAset);
       setSaldoOp(balances.saldoOp);
 
+      // Dana Operasional Efektif (Jika Safe Buffer Settlement aktif, kurangi pending settlement)
+      const computedEffectiveOp = bufferActive
+        ? Math.max(0, balances.saldoOp - computedSettlementSum)
+        : balances.saldoOp;
+      setEffectiveSaldoOp(computedEffectiveOp);
+
       // Siklus Gajian Dinamis (Otomatis bergulir bulanan jika tanggal terlewat, bebas diubah di Settings)
       const gajianSet = (settingsData || []).find(s => s.key === 'tanggal_gajian');
       const cycleResult = calculateGajianCycle(gajianSet?.value, todayWIB);
       setSisaHari(cycleResult.daysRemaining);
       setTargetGajianFormatted(cycleResult.targetDateFormatted);
 
-      // Limit Harian
-      const computedBatasHr = Math.max(0, Math.floor(balances.saldoOp / cycleResult.daysRemaining));
+      // Limit Harian (Menggunakan computedEffectiveOp agar safe buffer settlement otomatis berlaku)
+      const computedBatasHr = Math.max(0, Math.floor(computedEffectiveOp / cycleResult.daysRemaining));
       setBatasHr(computedBatasHr);
 
       // Category Budgets from settings
@@ -463,6 +485,7 @@ export default function Dashboard() {
                 piutangCount={piutangCount}
                 settlementSum={settlementSum}
                 settlementCount={settlementCount}
+                urgentSettlementCount={urgentSettlementCount}
               />
             );
           })()}
@@ -470,12 +493,14 @@ export default function Dashboard() {
           <DailyLimitCard
             batasHr={batasHr}
             outHariHarian={outHariHarian}
-            saldoOp={saldoOp}
+            saldoOp={effectiveSaldoOp}
             sisaHari={sisaHari}
+            isBufferActive={isBufferActive}
+            settlementBufferSum={settlementSum}
           />
 
           <JajanSimulator
-            saldoOp={saldoOp}
+            saldoOp={effectiveSaldoOp}
             outHariHarian={outHariHarian}
             batasHr={batasHr}
             sisaHari={sisaHari}

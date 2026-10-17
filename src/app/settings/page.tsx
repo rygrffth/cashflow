@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Settings, Save, Loader2, CalendarClock, Lock, Unlock, Database, Shuffle, Tags, Download, FileSpreadsheet } from 'lucide-react';
+import { Settings, Save, Loader2, CalendarClock, Lock, Unlock, Database, Shuffle, Tags, Download, FileSpreadsheet, ShieldCheck } from 'lucide-react';
 import { BASE_CATEGORIES } from '@/config/categories';
 import { calculateGajianCycle } from '@/lib/gajianUtils';
 import CurrencyInput from '@/components/CurrencyInput';
@@ -15,6 +15,10 @@ export default function SettingsPage() {
   const [errorMsg, setErrorMsg] = useState('');
   const [localCode, setLocalCode] = useState('');
   const [fakeOffset, setFakeOffset] = useState(140000000);
+  const [subtractSettlementFromDaily, setSubtractSettlementFromDaily] = useState(false);
+  const [savingBuffer, setSavingBuffer] = useState(false);
+  const [bufferSuccessMsg, setBufferSuccessMsg] = useState('');
+  const [bufferErrorMsg, setBufferErrorMsg] = useState('');
 
   // Excluded categories settings states
   const [excludeCategories, setExcludeCategories] = useState<string[]>([
@@ -237,6 +241,16 @@ export default function SettingsPage() {
             console.error('Failed to parse categoryBudgets:', e);
           }
         }
+
+        const { data: bufferData, error: bufferError } = await supabase
+          .from('settings')
+          .select('*')
+          .eq('key', 'subtract_settlement_from_daily')
+          .single();
+        if (bufferError && bufferError.code !== 'PGRST116') throw bufferError;
+        if (bufferData && bufferData.value) {
+          setSubtractSettlementFromDaily(bufferData.value === 'true');
+        }
       } catch (e) {
         console.error(e);
       } finally {
@@ -371,6 +385,43 @@ export default function SettingsPage() {
       setBudgetErrorMsg('Gagal memperbarui anggaran kategori.');
     } finally {
       setSavingBudgets(false);
+    }
+  };
+
+  const handleSaveBufferSetting = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSavingBuffer(true);
+    setBufferSuccessMsg('');
+    setBufferErrorMsg('');
+
+    try {
+      const { data: existing } = await supabase
+        .from('settings')
+        .select('*')
+        .eq('key', 'subtract_settlement_from_daily')
+        .single();
+
+      const strVal = String(subtractSettlementFromDaily);
+
+      if (existing) {
+        const { error } = await supabase
+          .from('settings')
+          .update({ value: strVal, tipe_data: 'boolean' })
+          .eq('key', 'subtract_settlement_from_daily');
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from('settings')
+          .insert([{ key: 'subtract_settlement_from_daily', value: strVal, tipe_data: 'boolean' }]);
+        if (error) throw error;
+      }
+
+      setBufferSuccessMsg('✅ Pengaturan safe buffer settlement berhasil disimpan!');
+    } catch (e: any) {
+      console.error(e);
+      setBufferErrorMsg('Gagal menyimpan pengaturan buffer settlement.');
+    } finally {
+      setSavingBuffer(false);
     }
   };
 
@@ -549,6 +600,52 @@ export default function SettingsPage() {
               Simpan Filter Kategori
             </button>
           </form>
+        </div>
+
+        {/* Safe Operational Buffer (Pengurangan Settlement dari Limit Harian) */}
+        <div className="glass-card p-6 border-slate-700/50 flex flex-col justify-between">
+          <div>
+            <h2 className="text-lg font-bold text-slate-100 flex items-center gap-2 mb-4">
+              <ShieldCheck className="w-5 h-5 text-emerald-400" /> Safe Operational Buffer
+            </h2>
+            <p className="text-xs text-slate-400 mb-6 leading-relaxed">
+              Otomatis kurangi nominal <strong>Scheduled Settlement Pending</strong> dari saldo operasional saat menghitung <strong>Limit Harian</strong>, sehingga uang tagihan tidak terpakai untuk jajan harian.
+            </p>
+
+            <form onSubmit={handleSaveBufferSetting} className="space-y-4">
+              {bufferSuccessMsg && <div className="text-xs font-bold text-emerald-400 bg-emerald-500/10 p-3 rounded">{bufferSuccessMsg}</div>}
+              {bufferErrorMsg && <div className="text-xs font-bold text-rose-400 bg-rose-500/10 p-3 rounded">{bufferErrorMsg}</div>}
+
+              <div className="p-4 bg-slate-950/40 rounded-xl border border-slate-800 space-y-3">
+                <label className="flex items-start gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={subtractSettlementFromDaily}
+                    onChange={(e) => setSubtractSettlementFromDaily(e.target.checked)}
+                    className="mt-0.5 rounded border-slate-700 bg-slate-900 text-emerald-500 focus:ring-emerald-500 w-4 h-4"
+                  />
+                  <div>
+                    <span className="text-sm font-semibold text-slate-200">
+                      Kunci Nominal Settlement dari Limit Harian
+                    </span>
+                    <p className="text-xs text-slate-400 mt-1 leading-relaxed">
+                      Jika aktif: <code className="text-emerald-400 font-mono">Limit Harian = (Dana Operasional - Tagihan Settlement) / Sisa Hari</code>.
+                      Sangat direkomendasikan agar Anda tidak overspend sebelum tagihan terbayar.
+                    </p>
+                  </div>
+                </label>
+              </div>
+
+              <button
+                type="submit"
+                disabled={savingBuffer}
+                className="w-full bg-slate-800 hover:bg-slate-700 text-emerald-400 font-bold py-2 rounded-lg text-sm transition-all flex justify-center items-center gap-2 cursor-pointer"
+              >
+                {savingBuffer ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                Simpan Pengaturan Buffer
+              </button>
+            </form>
+          </div>
         </div>
 
         {/* Anggaran Kategori (Category Budgeting) */}
