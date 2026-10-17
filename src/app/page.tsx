@@ -32,6 +32,8 @@ export default function Dashboard() {
   const [outHariHarian, setOutHariHarian] = useState(0);
   const [piutangCount, setPiutangCount] = useState(0);
   const [piutangSum, setPiutangSum] = useState(0);
+  const [settlementCount, setSettlementCount] = useState(0);
+  const [settlementSum, setSettlementSum] = useState(0);
 
   // Category Budgets Tracking State
   const [categoryBudgets, setCategoryBudgets] = useState<Record<string, number>>({});
@@ -130,6 +132,15 @@ export default function Dashboard() {
       setPiutangCount(activePiutang.length);
       setPiutangSum(activePiutang.reduce((s, i) => s + Number(i.nominal || i.Nominal || 0), 0));
 
+      const allTxns = txns || [];
+
+      // Pending Scheduled Settlements
+      const pendingSettlements = allTxns.filter(
+        t => t.kategori === 'Scheduled Settlement' && t.status === 'Pending'
+      );
+      setSettlementCount(pendingSettlements.length);
+      setSettlementSum(pendingSettlements.reduce((acc, curr) => acc + (Number(curr.nominal) || 0), 0));
+
       // --- CALCULATIONS ---
       // Tabungan / Real Darurat
       const tabunganSum = (savingData || []).reduce((acc, curr) => acc + (Number(curr.nominal_terkumpul) || 0), 0);
@@ -140,7 +151,6 @@ export default function Dashboard() {
       setTotalInvestasi(investasiSum);
 
       // Saldo Finansial Terpusat (Bank, Cash, Total Aset termasuk Investasi & Tabungan, Saldo Op)
-      const allTxns = txns || [];
       const balances = computeFinancialBalances(allTxns, tabunganSum, investasiSum);
       setSaldoBank(balances.saldoBank);
       setUangCash(balances.uangCash);
@@ -451,6 +461,8 @@ export default function Dashboard() {
                 setSecretCode={setSecretCode}
                 piutangSum={piutangSum}
                 piutangCount={piutangCount}
+                settlementSum={settlementSum}
+                settlementCount={settlementCount}
               />
             );
           })()}

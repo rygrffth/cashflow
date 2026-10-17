@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Eye, EyeOff, Wallet, Landmark, PiggyBank, Briefcase, Calendar, ShieldAlert } from 'lucide-react';
+import { Eye, EyeOff, Wallet, Landmark, PiggyBank, Briefcase, Calendar, ShieldAlert, CalendarClock } from 'lucide-react';
 
 interface PortfolioProps {
   saldoBank: number;
@@ -17,6 +17,8 @@ interface PortfolioProps {
   setSecretCode: (val: string) => void;
   piutangSum: number;
   piutangCount: number;
+  settlementSum?: number;
+  settlementCount?: number;
 }
 
 export default function PortfolioGrid({
@@ -32,7 +34,9 @@ export default function PortfolioGrid({
   secretCode,
   setSecretCode,
   piutangSum,
-  piutangCount
+  piutangCount,
+  settlementSum = 0,
+  settlementCount = 0
 }: PortfolioProps) {
   // Hydration safety flag
   const [isMounted, setIsMounted] = useState(false);
@@ -43,6 +47,7 @@ export default function PortfolioGrid({
   const [showTabungan, setShowTabungan] = useState(false);
   const [showAset, setShowAset] = useState(false);
   const [showOp, setShowOp] = useState(false);
+  const [showSettlement, setShowSettlement] = useState(false);
 
   // Load preferences from localStorage on mount
   useEffect(() => {
@@ -53,6 +58,7 @@ export default function PortfolioGrid({
       setShowTabungan(localStorage.getItem('show_tabungan') === 'true');
       setShowAset(localStorage.getItem('show_aset') === 'true');
       setShowOp(localStorage.getItem('show_op') === 'true');
+      setShowSettlement(localStorage.getItem('show_settlement') === 'true');
     } catch (e) {
       console.error('Failed to read localStorage:', e);
     }
@@ -172,8 +178,8 @@ export default function PortfolioGrid({
         </div>
       </div>
 
-      {/* Row 2: Secondary Columns (Horizontal Snap Scroll on Mobile, 3-col Grid on Desktop) */}
-      <div className="flex md:grid md:grid-cols-3 gap-4 overflow-x-auto no-scrollbar snap-x snap-mandatory pb-1 -mx-4 px-4 md:mx-0 md:px-0">
+      {/* Row 2: Secondary Columns (Horizontal Snap Scroll on Mobile, 4-col Grid on Desktop) */}
+      <div className="flex md:grid md:grid-cols-2 lg:grid-cols-4 gap-4 overflow-x-auto no-scrollbar snap-x snap-mandatory pb-1 -mx-4 px-4 md:mx-0 md:px-0">
         {/* Dana Operasional */}
         <div className="glass-card p-5 relative overflow-hidden flex flex-col justify-between min-h-[130px] min-w-[80vw] sm:min-w-[280px] md:min-w-0 snap-center shrink-0 md:shrink border-l-4 border-l-indigo-500">
           <div className="flex justify-between items-start">
@@ -194,6 +200,29 @@ export default function PortfolioGrid({
             title={showOp ? "Sembunyikan" : "Tampilkan"}
           >
             {showOp ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+          </button>
+        </div>
+
+        {/* Scheduled Settlement */}
+        <div className="glass-card p-5 relative overflow-hidden flex flex-col justify-between min-h-[130px] min-w-[80vw] sm:min-w-[280px] md:min-w-0 snap-center shrink-0 md:shrink border-l-4 border-l-rose-500 bg-gradient-to-r from-rose-950/10 to-transparent">
+          <div className="flex justify-between items-start">
+            <div>
+              <p className="text-xs font-semibold text-slate-400 tracking-wider uppercase mb-1">⏳ Scheduled Settlement</p>
+              <h3 className="text-lg font-bold text-rose-400">
+                {formatCurrency(settlementSum, showSettlement)}
+              </h3>
+              <p className="text-[10px] text-slate-400 mt-1">{settlementCount} tagihan pending</p>
+            </div>
+            <span className="p-2 bg-rose-500/10 rounded-lg text-rose-400 border border-rose-500/20">
+              <CalendarClock className="w-4 h-4" />
+            </span>
+          </div>
+          <button
+            onClick={() => handleToggle('show_settlement', !showSettlement, setShowSettlement)}
+            className="self-end p-1.5 hover:bg-slate-800/60 rounded text-slate-400 hover:text-white transition-colors"
+            title={showSettlement ? "Sembunyikan" : "Tampilkan"}
+          >
+            {showSettlement ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
           </button>
         </div>
 
