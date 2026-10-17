@@ -11,12 +11,18 @@ const PRECACHE_ASSETS = [
   '/icons/icon-512.png',
 ];
 
-// Install Event
+// Install Event - Pre-cache with resilient error handling
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(STATIC_CACHE_NAME).then((cache) => {
+    caches.open(STATIC_CACHE_NAME).then(async (cache) => {
       console.log('[Service Worker] Pre-caching core assets');
-      return cache.addAll(PRECACHE_ASSETS);
+      await Promise.allSettled(
+        PRECACHE_ASSETS.map((asset) =>
+          cache.add(asset).catch((err) => {
+            console.warn('[Service Worker] Non-critical precache failed for:', asset, err);
+          })
+        )
+      );
     }).then(() => self.skipWaiting())
   );
 });
@@ -103,10 +109,40 @@ async function networkFirst(request, cacheName) {
     if (cachedResponse) {
       return cachedResponse;
     }
-    return new Response('Offline: Resource not available', {
-      status: 503,
-      statusText: 'Service Unavailable',
-    });
+    // Fallback to cached root '/' if available
+    const rootFallback = await cache.match('/');
+    if (rootFallback) {
+      return rootFallback;
+    }
+    return new Response(
+      `<!DOCTYPE html>
+      <html lang="id">
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Offline | Cashflow</title>
+        <style>
+          body { background: #0B0F19; color: #F8FAFC; font-family: system-ui, sans-serif; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; text-align: center; padding: 20px; }
+          .card { background: rgba(30, 41, 59, 0.5); border: 1px solid rgba(51, 65, 85, 0.6); padding: 32px; border-radius: 20px; max-width: 360px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); }
+          h1 { font-size: 18px; margin: 12px 0 8px; color: #10B981; }
+          p { font-size: 13px; color: #94A3B8; margin-bottom: 20px; }
+          button { background: #10B981; color: #022C22; border: none; padding: 10px 20px; border-radius: 12px; font-weight: bold; cursor: pointer; }
+        </style>
+      </head>
+      <body>
+        <div class="card">
+          <div style="font-size: 40px;">📶</div>
+          <h1>Mode Offline</h1>
+          <p>Koneksi internet Anda sedang terputus. Silakan hubungkan kembali internet Anda untuk melihat data terbaru.</p>
+          <button onclick="window.location.reload()">Coba Lagi</button>
+        </div>
+      </body>
+      </html>`,
+      {
+        headers: { 'Content-Type': 'text/html; charset=utf-8' },
+        status: 200,
+      }
+    );
   }
 }
 

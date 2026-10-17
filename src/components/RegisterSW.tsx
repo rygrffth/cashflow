@@ -31,9 +31,13 @@ export default function RegisterSW() {
           });
       };
 
-      // Auto reload once when new SW takes control
+      // Auto reload once safely when new SW takes control
+      let refreshing = false;
       navigator.serviceWorker.addEventListener("controllerchange", () => {
-        window.location.reload();
+        if (!refreshing) {
+          refreshing = true;
+          window.location.reload();
+        }
       });
 
       if (document.readyState === "complete") {
