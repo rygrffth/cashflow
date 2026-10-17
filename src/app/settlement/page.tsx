@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
-import { CalendarRange, PlusCircle, RefreshCw, Trash2, CheckCircle, AlertCircle, Clock, Pencil } from 'lucide-react';
+import { CalendarRange, PlusCircle, RefreshCw, Trash2, CheckCircle, AlertCircle, Clock, Pencil, FastForward, Archive } from 'lucide-react';
 import CurrencyInput from '@/components/CurrencyInput';
 import { getWIBDateString } from '@/lib/dateUtils';
 
@@ -161,6 +161,75 @@ export default function SettlementPage() {
 
   const overdueCount = settlements.filter(s => isOverdue(s.tenggat_waktu)).length;
 
+  // Roll forward a single settlement to next month's same day (or today if invalid)
+  const handleRollForward = async (item: any) => {
+    try {
+      const todayStr = getWIBDateString();
+      let nextDateStr = todayStr;
+
+      if (item.tenggat_waktu && item.tenggat_waktu.includes('-')) {
+        const [y, m, d] = item.tenggat_waktu.split('-').map(Number);
+        const dayOfMonth = d || 25;
+        const [curY, curM] = todayStr.split('-').map(Number);
+
+        // Target next month from current date
+        let targetY = curY;
+        let targetM = curM + 1;
+        if (targetM > 12) {
+          targetM = 1;
+          targetY += 1;
+        }
+        const daysInMonth = new Date(targetY, targetM, 0).getDate();
+        const targetD = Math.min(dayOfMonth, daysInMonth);
+        nextDateStr = `${targetY}-${String(targetM).padStart(2, '0')}-${String(targetD).padStart(2, '0')}`;
+      }
+
+      const confirmOk = confirm(
+        `📅 Undur/Perpanjang tagihan "${item.catatan}" ke siklus bulan berikutnya (${nextDateStr})?`
+      );
+      if (!confirmOk) return;
+
+      const { error } = await supabase
+        .from('transaksi')
+        .update({ tenggat_waktu: nextDateStr })
+        .eq('id', item.id);
+
+      if (error) throw error;
+      alert(`✅ Tenggat waktu berhasil dimajukan ke ${nextDateStr}`);
+      fetchSettlements(true);
+    } catch (err: any) {
+      console.error(err);
+      alert(`Gagal memajukan tenggat waktu: ${err.message}`);
+    }
+  };
+
+  // Batch action: Auto-expire/Clear all overdue settlements that were missed long ago
+  const handleExpireAllOverdue = async () => {
+    const overdueItems = settlements.filter(s => isOverdue(s.tenggat_waktu));
+    if (overdueItems.length === 0) return;
+
+    const confirmOk = confirm(
+      `⚠️ Tandai ${overdueItems.length} tagihan lampau yang terlewat sebagai "Expired / Diabaikan"?\n\n` +
+      `Status akan diubah menjadi "Expired" sehingga tidak lagi membebani buffer limit harian.`
+    );
+    if (!confirmOk) return;
+
+    try {
+      const ids = overdueItems.map(s => s.id);
+      const { error } = await supabase
+        .from('transaksi')
+        .update({ status: 'Expired' })
+        .in('id', ids);
+
+      if (error) throw error;
+      alert(`✅ Berhasil mengarsipkan ${overdueItems.length} tagihan lampau!`);
+      fetchSettlements(true);
+    } catch (err: any) {
+      console.error(err);
+      alert(`Gagal mengarsipkan tagihan: ${err.message}`);
+    }
+  };
+
   if (loading) return <div className="text-center text-emerald-400 py-20 animate-pulse">Memuat Scheduled Settlement...</div>;
 
   return (
@@ -189,9 +258,18 @@ export default function SettlementPage() {
         <div className="lg:col-span-2 space-y-4">
 
           {overdueCount > 0 && (
-            <div className="p-4 bg-rose-500/10 border border-rose-500/30 rounded-xl flex items-center gap-3 text-rose-400 text-xs font-bold animate-pulse">
-              <AlertCircle className="w-5 h-5 flex-shrink-0" />
-              <span>🚨 Ada {overdueCount} tagihan terjadwal yang sudah melewati jatuh tempo! Segera lunasi.</span>
+            <div className="p-4 bg-rose-500/10 border border-rose-500/30 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-rose-400 text-xs font-bold">
+              <div className="flex items-center gap-2.5">
+                <AlertCircle className="w-5 h-5 flex-shrink-0 animate-pulse" />
+                <span>🚨 Ada {overdueCount} tagihan terjadwal yang sudah melewati jatuh tempo!</span>
+              </div>
+              <button
+                onClick={handleExpireAllOverdue}
+                className="px-3 py-1.5 bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 rounded-lg text-xs font-bold transition flex items-center gap-1.5 self-start sm:self-auto cursor-pointer"
+                title="Arsipkan semua tagihan lampau agar tidak membebani limit operasional"
+              >
+                <Archive className="w-3.5 h-3.5" /> Abaikan / Arsipkan Semua
+              </button>
             </div>
           )}
 
@@ -221,10 +299,19 @@ export default function SettlementPage() {
 
                       <div className="flex flex-row sm:flex-col items-center sm:items-end justify-between sm:justify-center gap-2">
                         <p className="font-black text-rose-400">Rp {Number(item.nominal).toLocaleString('id-ID')}</p>
-                        <div className="flex gap-2">
+                        <div className="flex items-center gap-2">
+                          {overdue && (
+                            <button
+                              onClick={() => handleRollForward(item)}
+                              title="Undur ke Bulan Depan (Roll-forward)"
+                              className="px-2.5 py-1.5 bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 border border-indigo-500/30 text-xs font-semibold rounded-lg transition flex items-center gap-1 cursor-pointer"
+                            >
+                              <FastForward className="w-3.5 h-3.5" /> Undur
+                            </button>
+                          )}
                           <button
                             onClick={() => handlePay(item.id, item.catatan)}
-                            className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-slate-950 text-xs font-extrabold rounded-lg transition"
+                            className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-slate-950 text-xs font-extrabold rounded-lg transition cursor-pointer"
                           >
                             Lunas
                           </button>
@@ -238,7 +325,7 @@ export default function SettlementPage() {
                           <button
                             onClick={() => handleDelete(item.id)}
                             title="Hapus"
-                            className="p-1.5 text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition"
+                            className="p-1.5 text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition cursor-pointer"
                           >
                             <Trash2 className="w-4.5 h-4.5" />
                           </button>
