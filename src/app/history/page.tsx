@@ -105,9 +105,39 @@ export default function HistoryPage() {
         }
       }
 
-      const { error } = await supabase.from('transaksi').delete().eq('id', id);
-      if (error) throw error;
-      setSelectedIds(prev => prev.filter(selectedId => selectedId !== id));
+      // 2. Check if this is a Transfer Aset transaction (paired transfer between Bank & Cash)
+      let pairedTxnId: number | null = null;
+      if (targetTxn && (targetTxn.kategori || '').trim().toLowerCase() === 'transfer aset') {
+        const isOutbound = targetTxn.tipe === 'Pengeluaran';
+        const partnerType = isOutbound ? 'Pemasukan' : 'Pengeluaran';
+        const partnerSumber = targetTxn.sumber === 'Bank' ? 'Cash' : 'Bank';
+        const targetNom = Number(targetTxn.nominal) || 0;
+
+        // Find the paired transaction on the same date with same nominal
+        const partner = transactions.find(t =>
+          t.id !== targetTxn.id &&
+          (t.kategori || '').trim().toLowerCase() === 'transfer aset' &&
+          t.tanggal === targetTxn.tanggal &&
+          t.tipe === partnerType &&
+          t.sumber === partnerSumber &&
+          Number(t.nominal) === targetNom
+        );
+
+        if (partner) {
+          pairedTxnId = partner.id;
+        }
+      }
+
+      // Delete target (and its pair if Transfer Aset)
+      if (pairedTxnId) {
+        const { error } = await supabase.from('transaksi').delete().in('id', [id, pairedTxnId]);
+        if (error) throw error;
+        setSelectedIds(prev => prev.filter(selectedId => selectedId !== id && selectedId !== pairedTxnId));
+      } else {
+        const { error } = await supabase.from('transaksi').delete().eq('id', id);
+        if (error) throw error;
+        setSelectedIds(prev => prev.filter(selectedId => selectedId !== id));
+      }
       fetchHistory(true);
     } catch (e) {
       console.error(e);
@@ -265,14 +295,39 @@ export default function HistoryPage() {
         }
       }
 
+      // 2. Include paired Transfer Aset transactions if user selected one side of transfer
+      const finalDeleteIds = new Set<number>(selectedIds);
+      for (const tx of txnsToSync) {
+        if ((tx.kategori || '').trim().toLowerCase() === 'transfer aset') {
+          const isOutbound = tx.tipe === 'Pengeluaran';
+          const partnerType = isOutbound ? 'Pemasukan' : 'Pengeluaran';
+          const partnerSumber = tx.sumber === 'Bank' ? 'Cash' : 'Bank';
+          const targetNom = Number(tx.nominal) || 0;
+
+          const partner = transactions.find(t =>
+            t.id !== tx.id &&
+            (t.kategori || '').trim().toLowerCase() === 'transfer aset' &&
+            t.tanggal === tx.tanggal &&
+            t.tipe === partnerType &&
+            t.sumber === partnerSumber &&
+            Number(t.nominal) === targetNom
+          );
+
+          if (partner) {
+            finalDeleteIds.add(partner.id);
+          }
+        }
+      }
+
+      const idArrayToDelete = Array.from(finalDeleteIds);
       const { error } = await supabase
         .from('transaksi')
         .delete()
-        .in('id', selectedIds);
+        .in('id', idArrayToDelete);
 
       if (error) throw error;
 
-      alert(`✅ Berhasil menghapus ${selectedIds.length} transaksi!`);
+      alert(`✅ Berhasil menghapus ${idArrayToDelete.length} transaksi!`);
       setSelectedIds([]);
       setIsDeleteModalOpen(false);
       setDeleteConfirmText('');

@@ -249,7 +249,13 @@ export default function TransactionForm({ saldoBank, uangCash, onSuccess, onClos
       onSuccess();
     } catch (e: any) {
       console.error('Database write error:', e);
-      setErrorMsg(`❌ Gagal menyimpan data: ${e.message || 'Error tidak diketahui'}`);
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        setErrorMsg('❌ Koneksi internet terputus. Silakan hubungkan kembali internet Anda.');
+      } else if (e.name === 'AbortError' || (e.message && e.message.toLowerCase().includes('timeout'))) {
+        setErrorMsg('⏱️ Koneksi ke database lambat atau time out. Silakan coba lagi.');
+      } else {
+        setErrorMsg(`❌ Gagal menyimpan data: ${e.message || 'Error tidak diketahui'}`);
+      }
     } finally {
       setLoading(false);
     }

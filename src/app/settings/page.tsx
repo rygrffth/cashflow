@@ -49,6 +49,14 @@ export default function SettingsPage() {
 
   // Backup & Export States
   const [exporting, setExporting] = useState(false);
+  const [lastBackupDate, setLastBackupDate] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const savedDate = localStorage.getItem('last_backup_date');
+      if (savedDate) setLastBackupDate(savedDate);
+    }
+  }, []);
 
   const handleExportJSON = async () => {
     setExporting(true);
@@ -77,6 +85,11 @@ export default function SettingsPage() {
       a.download = `backup_keuangan_${new Date().toISOString().split('T')[0]}.json`;
       a.click();
       URL.revokeObjectURL(url);
+
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('last_backup_date', new Date().toISOString());
+        setLastBackupDate(new Date().toISOString());
+      }
     } catch (err: any) {
       alert('Gagal mengekspor data: ' + (err.message || 'Error'));
     } finally {
@@ -771,6 +784,29 @@ export default function SettingsPage() {
         <p className="text-xs text-slate-400 mb-6">
           Unduh salinan cadangan data keuangan Anda untuk keperluan arsip offline atau pembukaan di Excel/Spreadsheet.
         </p>
+
+        {/* Backup Status / Reminder */}
+        {(() => {
+          if (!lastBackupDate) {
+            return (
+              <div className="mb-4 p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl text-xs text-amber-300 flex items-center gap-2">
+                <span>⚠️</span>
+                <span>Anda belum pernah mengunduh backup di perangkat ini. Disarankan untuk mencadangkan data secara berkala.</span>
+              </div>
+            );
+          }
+          const daysDiff = Math.floor((Date.now() - new Date(lastBackupDate).getTime()) / (1000 * 60 * 60 * 24));
+          const isStale = daysDiff >= 30;
+          return (
+            <div className={`mb-4 p-3 rounded-xl text-xs flex items-center justify-between border ${isStale ? 'bg-rose-500/10 border-rose-500/30 text-rose-300' : 'bg-slate-900/60 border-slate-800 text-slate-300'}`}>
+              <div className="flex items-center gap-2">
+                <span>{isStale ? '🚨' : '🛡️'}</span>
+                <span>Terakhir dicadangkan: <strong>{new Date(lastBackupDate).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}</strong> ({daysDiff} hari yang lalu)</span>
+              </div>
+              {isStale && <span className="font-bold text-[10px] bg-rose-500/20 px-2 py-0.5 rounded text-rose-300">Backup Diperlukan</span>}
+            </div>
+          );
+        })()}
 
         <div className="flex flex-wrap gap-4">
           <button

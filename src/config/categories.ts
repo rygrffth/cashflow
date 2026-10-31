@@ -44,3 +44,32 @@ export const KATEGORI_SYNC_OPTIONS = [
   ...BASE_CATEGORIES.filter(c => c !== "Piutang" && c !== "Piutang Kembali"),
   "Lainnya"
 ];
+
+// Robust Normalizer Helpers (Enforce case-insensitivity & whitespace trimming)
+export const normalizeCategory = (cat?: string | null): string => {
+  return (cat || '').trim().toLowerCase();
+};
+
+export const isTransferAset = (cat?: string | null): boolean => {
+  return normalizeCategory(cat) === 'transfer aset';
+};
+
+export const isScheduledSettlement = (cat?: string | null): boolean => {
+  return normalizeCategory(cat) === 'scheduled settlement';
+};
+
+export const isPiutang = (cat?: string | null): boolean => {
+  return normalizeCategory(cat) === 'piutang';
+};
+
+export const isPiutangKembali = (cat?: string | null): boolean => {
+  return normalizeCategory(cat) === 'piutang kembali';
+};
+
+export const isMenabung = (cat?: string | null): boolean => {
+  return normalizeCategory(cat) === 'menabung';
+};
+
+export const isTarikTabungan = (cat?: string | null): boolean => {
+  return normalizeCategory(cat) === 'tarik tabungan';
+};
