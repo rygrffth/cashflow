@@ -8,12 +8,17 @@ import {
 } from 'lucide-react';
 import CurrencyInput from '@/components/CurrencyInput';
 import { getWIBDateString } from '@/lib/dateUtils';
+import { computeFinancialBalances } from '@/lib/balanceUtils';
 
 export default function InvestasiPage() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [investasiList, setInvestasiList] = useState<any[]>([]);
   const [dbError, setDbError] = useState<string | null>(null);
+
+  // Active balances for validation
+  const [saldoBank, setSaldoBank] = useState(0);
+  const [uangCash, setUangCash] = useState(0);
 
   // Form states
   const [nama, setNama] = useState('');
@@ -35,6 +40,12 @@ export default function InvestasiPage() {
   const [editCatatan, setEditCatatan] = useState('');
   const [editingLoading, setEditingLoading] = useState(false);
 
+  // Liquidation / Delete Modal state
+  const [liquidatingAsset, setLiquidatingAsset] = useState<any | null>(null);
+  const [liquidateDestination, setLiquidateDestination] = useState<'None' | 'Bank' | 'Cash'>('Bank');
+  const [liquidateNominal, setLiquidateNominal] = useState<string>('');
+  const [liquidateLoading, setLiquidateLoading] = useState(false);
+
   // Fetch investments
   const fetchInvestasi = useCallback(async (isSilent = false) => {
     if (!isSilent) setLoading(true);
@@ -55,6 +66,17 @@ export default function InvestasiPage() {
         }
       } else {
         setInvestasiList(data || []);
+      }
+
+      // Fetch active transactions to calculate available Bank & Cash balances
+      const { data: txns } = await supabase
+        .from('transaksi')
+        .select('tipe, sumber, nominal, kategori, status');
+
+      if (txns) {
+        const computed = computeFinancialBalances(txns);
+        setSaldoBank(computed.saldoBank);
+        setUangCash(computed.uangCash);
       }
     } catch (e: any) {
       console.error(e);
@@ -85,6 +107,16 @@ export default function InvestasiPage() {
 
     if (modalVal <= 0) {
       setFormError('⚠️ Nominal modal awal harus lebih dari 0.');
+      return;
+    }
+
+    // Validation: Check if source balance is sufficient when potongSaldo is selected
+    if (potongSaldo === 'Bank' && modalVal > saldoBank) {
+      setFormError(`❌ Saldo Bank tidak mencukupi (Tersedia: Rp ${saldoBank.toLocaleString('id-ID')}, Dibutuhkan: Rp ${modalVal.toLocaleString('id-ID')}). Silakan pilih sumber lain atau sesuaikan modal.`);
+      return;
+    }
+    if (potongSaldo === 'Cash' && modalVal > uangCash) {
+      setFormError(`❌ Uang Cash tidak mencukupi (Tersedia: Rp ${uangCash.toLocaleString('id-ID')}, Dibutuhkan: Rp ${modalVal.toLocaleString('id-ID')}). Silakan pilih sumber lain atau sesuaikan modal.`);
       return;
     }
 
@@ -184,23 +216,55 @@ export default function InvestasiPage() {
     }
   };
 
-  // Handle Delete
-  const handleDeleteAsset = async (id: number, name: string) => {
-    if (!confirm(`Apakah Anda yakin ingin menghapus investasi "${name}"? Tindakan ini tidak akan memengaruhi saldo Bank/Cash secara otomatis.`)) {
-      return;
-    }
+  // Open Liquidation Modal
+  const openLiquidateModal = (asset: any) => {
+    setLiquidatingAsset(asset);
+    setLiquidateDestination('Bank');
+    setLiquidateNominal(String(asset.nominal_sekarang ?? asset.nominal_modal ?? 0));
+  };
 
+  // Handle Liquidation / Asset Deletion
+  const handleConfirmLiquidation = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!liquidatingAsset) return;
+
+    setLiquidateLoading(true);
     try {
-      const { error } = await supabase
+      const todayStr = getWIBDateString();
+      const returnAmount = Number(liquidateNominal) || 0;
+
+      // 1. If returning funds to Bank or Cash, insert Pemasukan transaction
+      if (liquidateDestination !== 'None' && returnAmount > 0) {
+        const { error: txErr } = await supabase.from('transaksi').insert([{
+          tanggal: todayStr,
+          tipe: 'Pemasukan',
+          kategori: 'Investasi',
+          nominal: returnAmount,
+          catatan: `Likuidasi Aset: ${liquidatingAsset.nama}`.trim(),
+          status: 'Cleared',
+          sumber: liquidateDestination,
+          tenggat_waktu: '',
+          tanggal_bayar: todayStr
+        }]);
+
+        if (txErr) throw txErr;
+      }
+
+      // 2. Delete asset from table
+      const { error: delErr } = await supabase
         .from('investasi')
         .delete()
-        .eq('id', id);
+        .eq('id', liquidatingAsset.id);
 
-      if (error) throw error;
+      if (delErr) throw delErr;
+
+      setLiquidatingAsset(null);
       fetchInvestasi(true);
     } catch (err: any) {
       console.error(err);
-      alert(`Gagal menghapus investasi: ${err.message}`);
+      alert(`Gagal memproses likuidasi: ${err.message || err}`);
+    } finally {
+      setLiquidateLoading(false);
     }
   };
 
@@ -391,18 +455,23 @@ export default function InvestasiPage() {
             </div>
 
             <div className="space-y-1">
-              <label className="text-slate-400 font-semibold">Potong Saldo Keuangan Aktif?</label>
+              <label className="text-slate-400 font-semibold flex justify-between items-center">
+                <span>Potong Saldo Keuangan Aktif?</span>
+                <span className="text-[10px] text-emerald-400 font-mono">
+                  {potongSaldo === 'Bank' ? `Sisa: Rp ${saldoBank.toLocaleString('id-ID')}` : potongSaldo === 'Cash' ? `Sisa: Rp ${uangCash.toLocaleString('id-ID')}` : ''}
+                </span>
+              </label>
               <select
                 value={potongSaldo}
                 onChange={(e) => setPotongSaldo(e.target.value as any)}
                 className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 w-full text-white focus:outline-none focus:border-emerald-500"
               >
                 <option value="Tidak">Tidak, hanya catat portofolio</option>
-                <option value="Bank">Potong Saldo Bank</option>
-                <option value="Cash">Potong Saldo Cash</option>
+                <option value="Bank">🏦 Potong Saldo Bank (Tersedia: Rp {saldoBank.toLocaleString('id-ID')})</option>
+                <option value="Cash">💵 Potong Saldo Cash (Tersedia: Rp {uangCash.toLocaleString('id-ID')})</option>
               </select>
               <p className="text-[10px] text-slate-500 leading-tight">
-                *Jika memilih Bank/Cash, sistem akan otomatis mencatat log pengeluaran berkategori <b>Investasi</b>.
+                *Jika memilih Bank/Cash, sistem akan memvalidasi saldo dan otomatis mencatat pengeluaran <b>Investasi</b>.
               </p>
             </div>
 
@@ -461,9 +530,9 @@ export default function InvestasiPage() {
                           <Pencil className="w-3.5 h-3.5" />
                         </button>
                         <button
-                          onClick={() => handleDeleteAsset(item.id, item.nama)}
-                          className="p-1 hover:bg-rose-950/20 rounded text-slate-400 hover:text-rose-455 transition cursor-pointer"
-                          title="Hapus Aset"
+                          onClick={() => openLiquidateModal(item)}
+                          className="p-1 hover:bg-rose-950/20 rounded text-slate-400 hover:text-rose-400 transition cursor-pointer"
+                          title="Likuidasi / Hapus Aset"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
@@ -586,6 +655,122 @@ export default function InvestasiPage() {
                   className="w-1/2 bg-slate-800 hover:bg-slate-700 text-emerald-400 font-bold py-2 rounded-lg transition cursor-pointer"
                 >
                   {editingLoading ? 'Menyimpan...' : 'Simpan'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Liquidation / Asset Deletion Modal */}
+      {liquidatingAsset && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-fadeIn">
+          <div className="glass-card max-w-md w-full p-6 border-slate-700/80 space-y-4">
+            <div className="flex justify-between items-center">
+              <h3 className="text-sm font-bold text-white flex items-center gap-1.5">
+                <Briefcase className="w-4 h-4 text-emerald-400" /> Likuidasi / Hapus Aset Investasi
+              </h3>
+              <button
+                type="button"
+                onClick={() => setLiquidatingAsset(null)}
+                className="text-slate-400 hover:text-white font-bold cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="p-3 bg-slate-900/60 rounded-xl border border-slate-800 space-y-1 text-xs">
+              <div className="flex justify-between text-slate-300">
+                <span>Nama Aset:</span>
+                <span className="font-bold text-white">{liquidatingAsset.nama}</span>
+              </div>
+              <div className="flex justify-between text-slate-400">
+                <span>Kategori:</span>
+                <span className="font-medium text-slate-300">{liquidatingAsset.kategori}</span>
+              </div>
+              <div className="flex justify-between text-slate-400">
+                <span>Nilai Terakhir:</span>
+                <span className="font-mono font-bold text-emerald-400">
+                  Rp {Number(liquidatingAsset.nominal_sekarang ?? liquidatingAsset.nominal_modal ?? 0).toLocaleString('id-ID')}
+                </span>
+              </div>
+            </div>
+
+            <form onSubmit={handleConfirmLiquidation} className="space-y-4 text-xs">
+              <div className="space-y-1.5">
+                <label className="text-slate-400 font-semibold">Tujuan Pengembalian Dana</label>
+                <div className="grid grid-cols-1 gap-2">
+                  <label className={`p-2.5 rounded-lg border flex items-center gap-2 cursor-pointer transition ${liquidateDestination === 'Bank' ? 'bg-emerald-950/30 border-emerald-500/50 text-white' : 'bg-slate-900/60 border-slate-800 text-slate-400 hover:text-slate-200'}`}>
+                    <input
+                      type="radio"
+                      name="liquidateDest"
+                      value="Bank"
+                      checked={liquidateDestination === 'Bank'}
+                      onChange={() => setLiquidateDestination('Bank')}
+                      className="text-emerald-500 focus:ring-0"
+                    />
+                    <span>🏦 Likuidasi ke <b>Saldo Bank</b> (Catat Pemasukan)</span>
+                  </label>
+
+                  <label className={`p-2.5 rounded-lg border flex items-center gap-2 cursor-pointer transition ${liquidateDestination === 'Cash' ? 'bg-emerald-950/30 border-emerald-500/50 text-white' : 'bg-slate-900/60 border-slate-800 text-slate-400 hover:text-slate-200'}`}>
+                    <input
+                      type="radio"
+                      name="liquidateDest"
+                      value="Cash"
+                      checked={liquidateDestination === 'Cash'}
+                      onChange={() => setLiquidateDestination('Cash')}
+                      className="text-emerald-500 focus:ring-0"
+                    />
+                    <span>💵 Likuidasi ke <b>Uang Cash</b> (Catat Pemasukan)</span>
+                  </label>
+
+                  <label className={`p-2.5 rounded-lg border flex items-center gap-2 cursor-pointer transition ${liquidateDestination === 'None' ? 'bg-rose-950/30 border-rose-500/50 text-rose-300' : 'bg-slate-900/60 border-slate-800 text-slate-400 hover:text-slate-200'}`}>
+                    <input
+                      type="radio"
+                      name="liquidateDest"
+                      value="None"
+                      checked={liquidateDestination === 'None'}
+                      onChange={() => setLiquidateDestination('None')}
+                      className="text-rose-500 focus:ring-0"
+                    />
+                    <span>🗑️ Hapus Aset Saja (Tanpa mengubah saldo Bank/Cash)</span>
+                  </label>
+                </div>
+              </div>
+
+              {liquidateDestination !== 'None' && (
+                <div className="space-y-1.5 p-3 bg-slate-900/80 rounded-xl border border-slate-800">
+                  <label className="text-slate-300 font-semibold flex justify-between">
+                    <span>Nominal Likuidasi Diterima (Rp)</span>
+                    <span className="text-[10px] text-emerald-400">Pemasukan Investasi</span>
+                  </label>
+                  <CurrencyInput
+                    placeholder="0"
+                    value={liquidateNominal}
+                    onChangeValue={(val) => setLiquidateNominal(val)}
+                    className="bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 w-full text-white font-mono font-bold focus:outline-none focus:border-emerald-500"
+                    required
+                  />
+                  <p className="text-[10px] text-slate-400 leading-relaxed">
+                    💡 Sistem akan otomatis mencatat log transaksi <b>Pemasukan</b> senilai Rp {Number(liquidateNominal || 0).toLocaleString('id-ID')} ke <b>{liquidateDestination}</b> lalu menghapus aset ini.
+                  </p>
+                </div>
+              )}
+
+              <div className="flex gap-2.5 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setLiquidatingAsset(null)}
+                  className="w-1/2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold py-2 rounded-lg transition cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={liquidateLoading}
+                  className="w-1/2 bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-bold py-2 rounded-lg transition cursor-pointer active:scale-95 disabled:opacity-50"
+                >
+                  {liquidateLoading ? 'Memproses...' : 'Konfirmasi'}
                 </button>
               </div>
             </form>

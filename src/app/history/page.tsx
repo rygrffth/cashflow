@@ -17,6 +17,9 @@ export default function HistoryPage() {
   const [filterKategori, setFilterKategori] = useState('Semua');
   const [searchQuery, setSearchQuery] = useState('');
   const [filterMonth, setFilterMonth] = useState(() => new Date().toISOString().split('T')[0].substring(0, 7)); // YYYY-MM
+  const [filterDateMode, setFilterDateMode] = useState<'bulan' | 'range'>('bulan');
+  const [customStartDate, setCustomStartDate] = useState('');
+  const [customEndDate, setCustomEndDate] = useState('');
 
   // Edit Mode States
   const [isEditMode, setIsEditMode] = useState(false);
@@ -365,7 +368,10 @@ export default function HistoryPage() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.setAttribute("href", url);
-    link.setAttribute("download", `riwayat_transaksi_${filterMonth || 'semua'}.csv`);
+    const downloadName = filterDateMode === 'bulan'
+      ? `riwayat_transaksi_${filterMonth || 'semua'}.csv`
+      : `riwayat_transaksi_${customStartDate || 'awal'}_sd_${customEndDate || 'akhir'}.csv`;
+    link.setAttribute("download", downloadName);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -374,14 +380,23 @@ export default function HistoryPage() {
   // Derived filtered data
   const filteredData = transactions.filter(t => {
     const matchType = filterType === 'Semua' || t.tipe === filterType;
-    const matchMonth = !filterMonth || (t.tanggal ? t.tanggal.startsWith(filterMonth) : false);
+
+    // Date matching based on filterDateMode
+    let matchDate = true;
+    if (filterDateMode === 'bulan') {
+      matchDate = !filterMonth || (t.tanggal ? t.tanggal.startsWith(filterMonth) : false);
+    } else {
+      if (customStartDate && (!t.tanggal || t.tanggal < customStartDate)) matchDate = false;
+      if (customEndDate && (!t.tanggal || t.tanggal > customEndDate)) matchDate = false;
+    }
+
     const matchSumber = filterSumber === 'Semua' || t.sumber === filterSumber;
     const matchKategori = filterKategori === 'Semua' || t.kategori === filterKategori;
     const matchSearch = !searchQuery.trim() ||
       (t.catatan || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
       (t.kategori || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
       (t.sumber || '').toLowerCase().includes(searchQuery.toLowerCase());
-    return matchType && matchMonth && matchSumber && matchKategori && matchSearch;
+    return matchType && matchDate && matchSumber && matchKategori && matchSearch;
   });
 
   // Calculate summaries
@@ -424,13 +439,13 @@ export default function HistoryPage() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="glass-card p-4 border-slate-700/50">
           <p className="text-xs text-slate-400 font-semibold mb-1">
-            PEMASUKAN {filterSumber !== 'Semua' ? filterSumber.toUpperCase() : ''} BULAN INI
+            PEMASUKAN {filterSumber !== 'Semua' ? filterSumber.toUpperCase() : ''} {filterDateMode === 'bulan' ? 'BULAN INI' : 'PERIODE TERPILIH'}
           </p>
           <p className="text-xl font-bold text-emerald-400">Rp {totalIn.toLocaleString('id-ID')}</p>
         </div>
         <div className="glass-card p-4 border-slate-700/50">
           <p className="text-xs text-slate-400 font-semibold mb-1">
-            PENGELUARAN {filterSumber !== 'Semua' ? filterSumber.toUpperCase() : ''} BULAN INI
+            PENGELUARAN {filterSumber !== 'Semua' ? filterSumber.toUpperCase() : ''} {filterDateMode === 'bulan' ? 'BULAN INI' : 'PERIODE TERPILIH'}
           </p>
           <p className="text-xl font-bold text-rose-400">Rp {totalOut.toLocaleString('id-ID')}</p>
         </div>
@@ -447,17 +462,68 @@ export default function HistoryPage() {
       {/* Filters & Bulk Operations bar */}
       <div className="glass-card p-4 border-slate-700/50 flex flex-col gap-3">
         <div className="flex flex-wrap items-center gap-3">
-          {/* Filter Bulan */}
-          <div className="flex items-center gap-2">
-            <Calendar className="w-4 h-4 text-slate-400" />
-            <input
-              type="month"
-              value={filterMonth}
-              onChange={e => setFilterMonth(e.target.value)}
-              onClick={(e) => (e.target as any).showPicker()}
-              className="bg-slate-900 border border-slate-700 rounded px-2.5 py-1.5 text-xs text-white focus:border-emerald-500 outline-none w-36 cursor-pointer"
-            />
+          {/* Mode Switcher: Bulan vs Rentang Tanggal */}
+          <div className="flex items-center bg-slate-900 border border-slate-700 rounded-lg p-0.5 text-xs">
+            <button
+              type="button"
+              onClick={() => setFilterDateMode('bulan')}
+              className={`px-2.5 py-1 rounded-md font-semibold transition cursor-pointer ${filterDateMode === 'bulan' ? 'bg-emerald-500 text-slate-950 shadow' : 'text-slate-400 hover:text-white'}`}
+            >
+              Per Bulan
+            </button>
+            <button
+              type="button"
+              onClick={() => setFilterDateMode('range')}
+              className={`px-2.5 py-1 rounded-md font-semibold transition cursor-pointer ${filterDateMode === 'range' ? 'bg-emerald-500 text-slate-950 shadow' : 'text-slate-400 hover:text-white'}`}
+            >
+              Rentang Tanggal
+            </button>
           </div>
+
+          {/* Date Selector depending on mode */}
+          {filterDateMode === 'bulan' ? (
+            <div className="flex items-center gap-1.5">
+              <Calendar className="w-4 h-4 text-slate-400" />
+              <input
+                type="month"
+                value={filterMonth}
+                onChange={e => setFilterMonth(e.target.value)}
+                onClick={(e) => (e.target as any).showPicker()}
+                className="bg-slate-900 border border-slate-700 rounded px-2.5 py-1.5 text-xs text-white focus:border-emerald-500 outline-none w-36 cursor-pointer"
+              />
+            </div>
+          ) : (
+            <div className="flex flex-wrap items-center gap-1.5 bg-slate-900/60 border border-slate-800 rounded-lg p-1">
+              <Calendar className="w-4 h-4 text-slate-400 ml-1" />
+              <input
+                type="date"
+                value={customStartDate}
+                onChange={e => setCustomStartDate(e.target.value)}
+                onClick={(e) => (e.target as any).showPicker()}
+                placeholder="Mulai"
+                className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-white focus:border-emerald-500 outline-none w-32 cursor-pointer"
+              />
+              <span className="text-slate-500 text-xs font-semibold">s/d</span>
+              <input
+                type="date"
+                value={customEndDate}
+                onChange={e => setCustomEndDate(e.target.value)}
+                onClick={(e) => (e.target as any).showPicker()}
+                placeholder="Sampai"
+                className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-white focus:border-emerald-500 outline-none w-32 cursor-pointer"
+              />
+              {(customStartDate || customEndDate) && (
+                <button
+                  type="button"
+                  onClick={() => { setCustomStartDate(''); setCustomEndDate(''); }}
+                  className="text-xs text-slate-400 hover:text-rose-400 px-1 py-0.5 rounded cursor-pointer transition font-bold"
+                  title="Reset rentang tanggal"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+          )}
 
           {/* Filter Sumber Rekening */}
           <div className="flex items-center gap-2">

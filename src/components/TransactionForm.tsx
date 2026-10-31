@@ -282,6 +282,37 @@ export default function TransactionForm({ saldoBank, uangCash, onSuccess, onClos
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-4">
+        {/* Quick Favorite Presets (1-Tap Fill) */}
+        {tipe !== 'Transfer' && (
+          <div className="space-y-1.5 p-2.5 bg-slate-900/40 rounded-xl border border-slate-800/80">
+            <span className="text-[11px] font-semibold text-slate-400 flex items-center gap-1">
+              ⚡ Pintasan Cepat (1-Tap):
+            </span>
+            <div className="flex flex-wrap gap-1.5">
+              {[
+                { label: '🍛 Makan 25k', tipe: 'Pengeluaran', kat: 'Makan & Minum', nom: '25000', note: 'Makan siang' },
+                { label: '☕ Kopi 20k', tipe: 'Pengeluaran', kat: 'Makan & Minum', nom: '20000', note: 'Kopi / Cemilan' },
+                { label: '⛽ Bensin 30k', tipe: 'Pengeluaran', kat: 'Kendaraan', nom: '30000', note: 'Bensin' },
+                { label: '🛒 Mart 50k', tipe: 'Pengeluaran', kat: 'Belanja', nom: '50000', note: 'Minimarket' },
+                { label: '🅿️ Parkir 2k', tipe: 'Pengeluaran', kat: 'Kendaraan', nom: '2000', note: 'Parkir' }
+              ].map((p, idx) => (
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={() => {
+                    setTipe(p.tipe as any);
+                    setKategori(p.kat);
+                    setNominal(p.nom);
+                    setCatatan(p.note);
+                  }}
+                  className="px-2.5 py-1 bg-slate-800/80 hover:bg-emerald-950/40 text-slate-300 hover:text-emerald-300 border border-slate-700/60 hover:border-emerald-500/40 rounded-lg text-[11px] font-medium transition cursor-pointer active:scale-95 shadow-sm"
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
         {/* Error Message */}
         {errorMsg && (
           <div className="p-3 bg-rose-500/10 border border-rose-500/20 text-rose-400 rounded-lg text-xs font-semibold">
@@ -470,6 +501,39 @@ export default function TransactionForm({ saldoBank, uangCash, onSuccess, onClos
             className="bg-slate-900/60 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-emerald-500 text-sm font-bold w-full"
             required
           />
+          {/* Quick Increment Chips */}
+          <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+            <span className="text-[10px] text-slate-400 mr-0.5">Tambah:</span>
+            {[
+              { label: '+10rb', val: 10000 },
+              { label: '+20rb', val: 20000 },
+              { label: '+50rb', val: 50000 },
+              { label: '+100rb', val: 100000 },
+              { label: '+500rb', val: 500000 }
+            ].map((chip) => (
+              <button
+                key={chip.val}
+                type="button"
+                onClick={() => {
+                  const curr = Number(nominal) || 0;
+                  setNominal(String(curr + chip.val));
+                }}
+                className="px-2 py-0.5 bg-slate-800/90 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 rounded text-[10px] font-semibold transition active:scale-95 cursor-pointer"
+              >
+                {chip.label}
+              </button>
+            ))}
+            {nominal && Number(nominal) > 0 ? (
+              <button
+                type="button"
+                onClick={() => setNominal('')}
+                className="px-2 py-0.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 rounded text-[10px] font-semibold transition active:scale-95 cursor-pointer ml-auto"
+                title="Hapus nominal"
+              >
+                Reset (C)
+              </button>
+            ) : null}
+          </div>
         </div>
 
         <div className="flex flex-col gap-1.5">

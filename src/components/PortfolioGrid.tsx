@@ -21,6 +21,7 @@ interface PortfolioProps {
   settlementSum?: number;
   settlementCount?: number;
   urgentSettlementCount?: number;
+  isPastRolledOver?: boolean;
 }
 
 export default function PortfolioGrid({
@@ -39,7 +40,8 @@ export default function PortfolioGrid({
   piutangCount,
   settlementSum = 0,
   settlementCount = 0,
-  urgentSettlementCount = 0
+  urgentSettlementCount = 0,
+  isPastRolledOver = false
 }: PortfolioProps) {
   // Hydration safety flag
   const [isMounted, setIsMounted] = useState(false);
@@ -283,6 +285,16 @@ export default function PortfolioGrid({
               <p className="text-[10px] text-slate-400 mt-1">
                 {targetGajianFormatted ? `🎯 Target: ${targetGajianFormatted}` : 'Hari tersisa menuju gajian berikutnya'}
               </p>
+              {isPastRolledOver && (
+                <div className="mt-2">
+                  <span
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[9px] font-bold bg-pink-500/20 text-pink-300 border border-pink-500/30"
+                    title="Tanggal gajian bulan ini telah lewat, target otomatis bergulir ke bulan berikutnya"
+                  >
+                    🔄 Siklus Baru (Auto-Roll)
+                  </span>
+                </div>
+              )}
             </div>
             <span className="p-2 bg-pink-500/10 rounded-lg text-pink-400 border border-pink-500/20">
               <Calendar className="w-4 h-4" />

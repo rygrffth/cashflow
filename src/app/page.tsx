@@ -29,6 +29,7 @@ export default function Dashboard() {
   const [batasHr, setBatasHr] = useState(0);
   const [sisaHari, setSisaHari] = useState(1);
   const [targetGajianFormatted, setTargetGajianFormatted] = useState('');
+  const [isPastRolledOver, setIsPastRolledOver] = useState(false);
   const [outHariHarian, setOutHariHarian] = useState(0);
   const [piutangCount, setPiutangCount] = useState(0);
   const [piutangSum, setPiutangSum] = useState(0);
@@ -184,6 +185,7 @@ export default function Dashboard() {
       const cycleResult = calculateGajianCycle(gajianSet?.value, todayWIB);
       setSisaHari(cycleResult.daysRemaining);
       setTargetGajianFormatted(cycleResult.targetDateFormatted);
+      setIsPastRolledOver(cycleResult.isPastRolledOver);
 
       // Limit Harian (Menggunakan computedEffectiveOp agar safe buffer settlement otomatis berlaku)
       const computedBatasHr = Math.max(0, Math.floor(computedEffectiveOp / cycleResult.daysRemaining));
@@ -486,6 +488,7 @@ export default function Dashboard() {
                 settlementSum={settlementSum}
                 settlementCount={settlementCount}
                 urgentSettlementCount={urgentSettlementCount}
+                isPastRolledOver={isPastRolledOver}
               />
             );
           })()}
