@@ -160,11 +160,13 @@ export default function AnalyticsPage() {
         if (d.getMonth() === curMonth && d.getFullYear() === curYear) {
           const nom = Number(t.nominal) - (Number(t.titipan) || 0);
           if (t.tipe === 'Pemasukan') {
-            if (t.status === 'Cleared') {
+            // Transfer Aset antar Bank/Cash bukan pemasukan riil
+            if (t.status === 'Cleared' && t.kategori !== 'Transfer Aset') {
               monthlyIncome += nom;
             }
           } else if (t.tipe === 'Pengeluaran') {
-            if (t.status === 'Cleared' || t.status === 'Pending') {
+            // Transfer Aset antar Bank/Cash bukan pengeluaran riil
+            if ((t.status === 'Cleared' || t.status === 'Pending') && t.kategori !== 'Transfer Aset') {
               monthlyExpense += nom;
               categorySpendMap[t.kategori] = (categorySpendMap[t.kategori] || 0) + nom;
             }
@@ -187,7 +189,7 @@ export default function AnalyticsPage() {
     transactions.forEach(t => {
       if (t.tanggal) {
         const d = new Date(t.tanggal);
-        if (d >= thirtyDaysAgo && d <= now && t.tipe === 'Pengeluaran' && t.status === 'Cleared') {
+        if (d >= thirtyDaysAgo && d <= now && t.tipe === 'Pengeluaran' && t.status === 'Cleared' && t.kategori !== 'Transfer Aset') {
           last30DaysSpend += Number(t.nominal) - (Number(t.titipan) || 0);
         }
       }
@@ -331,7 +333,8 @@ export default function AnalyticsPage() {
     const map: Record<string, { date: string; Bank: number; Cash: number; Total: number }> = {};
 
     chartFilteredData.forEach(t => {
-      if (t.tipe === 'Pengeluaran') {
+      // Exclude Transfer Aset karena hanya pemindahan bentuk saldo
+      if (t.tipe === 'Pengeluaran' && t.kategori !== 'Transfer Aset') {
         const dStr = t.tanggal;
         if (!map[dStr]) {
           map[dStr] = { date: dStr, Bank: 0, Cash: 0, Total: 0 };
@@ -350,7 +353,8 @@ export default function AnalyticsPage() {
   const categoryChartData = useMemo(() => {
     const map: Record<string, number> = {};
     chartFilteredData.forEach(t => {
-      if (t.tipe === 'Pengeluaran') {
+      // Exclude Transfer Aset
+      if (t.tipe === 'Pengeluaran' && t.kategori !== 'Transfer Aset') {
         const kat = t.kategori;
         const amt = Number(t.nominal) - (Number(t.titipan) || 0);
         map[kat] = (map[kat] || 0) + (amt || 0);
@@ -379,6 +383,9 @@ export default function AnalyticsPage() {
     let pendingKeluar = 0;
 
     chartFilteredData.forEach(t => {
+      // Exclude Transfer Aset
+      if (t.kategori === 'Transfer Aset') return;
+
       const nom = Number(t.nominal) - (Number(t.titipan) || 0);
       if (t.tipe === 'Pemasukan') {
         pemasukan += nom;
@@ -413,7 +420,8 @@ export default function AnalyticsPage() {
     const mapLast: Record<string, number> = {};
 
     transactions.forEach(t => {
-      if (t.tipe === 'Pengeluaran') {
+      // Exclude Transfer Aset
+      if (t.tipe === 'Pengeluaran' && t.kategori !== 'Transfer Aset') {
         const d = new Date(t.tanggal);
         const amt = Number(t.nominal) - (Number(t.titipan) || 0);
         if (d.getMonth() === curMonth && d.getFullYear() === curYear) {
@@ -501,7 +509,7 @@ export default function AnalyticsPage() {
     sevenDaysAgo.setHours(0, 0, 0, 0);
 
     const sevenDaysTxns = transactions.filter(t => {
-      if (t.tipe !== 'Pengeluaran' || t.status !== 'Cleared') return false;
+      if (t.tipe !== 'Pengeluaran' || t.status !== 'Cleared' || t.kategori === 'Transfer Aset') return false;
       const d = new Date(t.tanggal);
       return d >= sevenDaysAgo && d <= today;
     });
@@ -553,6 +561,8 @@ export default function AnalyticsPage() {
   // Report calculations based on period limit
   const reportStats = useMemo(() => {
     const filtered = transactions.filter(t => {
+      // Exclude Transfer Aset
+      if (t.kategori === 'Transfer Aset') return false;
       const d = new Date(t.tanggal);
       return d >= reportPeriodLimits.start && d <= reportPeriodLimits.end;
     });

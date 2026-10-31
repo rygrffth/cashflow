@@ -1,5 +1,5 @@
-const CACHE_NAME = 'cashflow-pwa-v4';
-const STATIC_CACHE_NAME = 'cashflow-static-v4';
+const CACHE_NAME = 'cashflow-pwa-v5';
+const STATIC_CACHE_NAME = 'cashflow-static-v5';
 
 // Assets to cache immediately on SW installation
 const PRECACHE_ASSETS = [
@@ -23,8 +23,15 @@ self.addEventListener('install', (event) => {
           })
         )
       );
-    }).then(() => self.skipWaiting())
+    })
   );
+});
+
+// Allow page to tell SW when to activate safely
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
 });
 
 // Activate Event
@@ -51,6 +58,9 @@ self.addEventListener('fetch', (event) => {
 
   // 1. Only handle GET requests and local origins
   if (request.method !== 'GET') return;
+
+  // Never intercept sw.js or service worker registration files
+  if (url.pathname === '/sw.js') return;
 
   // Handle cross-origin assets like Google Fonts
   const isGoogleFont = url.hostname.includes('fonts.googleapis.com') || url.hostname.includes('fonts.gstatic.com');
