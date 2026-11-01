@@ -2,8 +2,10 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Target, PlusCircle, TrendingUp, RefreshCw, Trash2, ArrowUpRight, ArrowDownLeft, ShieldAlert, Pencil } from 'lucide-react';
+import { Target, PlusCircle, TrendingUp, RefreshCw, Trash2, ArrowUpRight, ArrowDownLeft, ShieldAlert, Pencil, Wallet } from 'lucide-react';
 import CurrencyInput from '@/components/CurrencyInput';
+import { getWIBDateString } from '@/lib/dateUtils';
+import { computeFinancialBalances } from '@/lib/balanceUtils';
 
 export default function BudgetPage() {
   const [loading, setLoading] = useState(true);
@@ -16,17 +18,14 @@ export default function BudgetPage() {
   // Add Target Form States
   const [nama, setNama] = useState('');
   const [targetNominal, setTargetNominal] = useState<string>('');
-  const [tanggalMulai, setTanggalMulai] = useState(() => {
-    const today = new Date();
-    const offset = today.getTimezoneOffset() * 60000;
-    return new Date(today.getTime() - offset).toISOString().split('T')[0];
-  });
+  const [tanggalMulai, setTanggalMulai] = useState(() => getWIBDateString());
   const [tanggalTarget, setTanggalTarget] = useState(() => {
     const nextYear = new Date();
     nextYear.setFullYear(nextYear.getFullYear() + 1);
-    const offset = nextYear.getTimezoneOffset() * 60000;
-    return new Date(nextYear.getTime() - offset).toISOString().split('T')[0];
+    return getWIBDateString(nextYear);
   });
+  const [saldoBank, setSaldoBank] = useState<number>(0);
+  const [uangCash, setUangCash] = useState<number>(0);
   const [kategori, setKategori] = useState('Umum');
   const [prioritas, setPrioritas] = useState(3);
   const [catatan, setCatatan] = useState('');
@@ -46,9 +45,17 @@ export default function BudgetPage() {
     else setRefreshing(true);
 
     try {
-      const { data, error } = await supabase.from('tabungan').select('*').order('id', { ascending: true });
-      if (error) throw error;
-      setTabunganData(data || []);
+      const [tabRes, txnRes] = await Promise.all([
+        supabase.from('tabungan').select('*').order('id', { ascending: true }),
+        supabase.from('transaksi').select('*')
+      ]);
+      if (tabRes.error) throw tabRes.error;
+      if (txnRes.error) throw txnRes.error;
+
+      setTabunganData(tabRes.data || []);
+      const balances = computeFinancialBalances(txnRes.data || []);
+      setSaldoBank(balances.saldoBank);
+      setUangCash(balances.uangCash);
     } catch (e) {
       console.error(e);
     } finally {
@@ -117,6 +124,14 @@ export default function BudgetPage() {
       return;
     }
 
+    if (isSetor) {
+      const currentAvailable = txnSumber === 'Bank' ? saldoBank : uangCash;
+      if (amt > currentAvailable) {
+        alert(`⚠️ Saldo ${txnSumber} tidak mencukupi!\nSaldo ${txnSumber} Anda saat ini: Rp ${currentAvailable.toLocaleString('id-ID')}\nNominal yang ingin disetor: Rp ${amt.toLocaleString('id-ID')}`);
+        return;
+      }
+    }
+
     if (!isSetor && amt > currentTerkumpul) {
       alert('Nominal penarikan melebihi jumlah terkumpul!');
       return;
@@ -125,9 +140,7 @@ export default function BudgetPage() {
     setTxnLoading(true);
 
     try {
-      const today = new Date();
-      const offset = today.getTimezoneOffset() * 60000;
-      const tglStr = new Date(today.getTime() - offset).toISOString().split('T')[0];
+      const tglStr = getWIBDateString();
 
       const newTerkumpul = isSetor ? currentTerkumpul + amt : currentTerkumpul - amt;
       const newStatus = newTerkumpul >= targetNominalVal ? 'Selesai' : 'Aktif';
@@ -204,11 +217,14 @@ export default function BudgetPage() {
 
       // Sinkron penuh ke saldo operasional jika nominal terkumpul berubah
       if (diff !== 0 && syncSource !== 'none') {
-        const today = new Date();
-        const offset = today.getTimezoneOffset() * 60000;
-        const todayStr = new Date(today.getTime() - offset).toISOString().split('T')[0];
+        const todayStr = getWIBDateString();
 
         if (diff > 0) {
+          const available = syncSource === 'Bank' ? saldoBank : uangCash;
+          if (diff > available) {
+            alert(`⚠️ Saldo ${syncSource} tidak mencukupi untuk menambah tabungan!\nSaldo saat ini: Rp ${available.toLocaleString('id-ID')}\nKebutuhan: Rp ${diff.toLocaleString('id-ID')}`);
+            return;
+          }
           // Tabungan bertambah: potong saldo operasional dari sumber pilihan
           await supabase.from('transaksi').insert([{
             tanggal: todayStr,
@@ -265,12 +281,40 @@ export default function BudgetPage() {
     }
   };
 
-  const handleDelete = async (id: number) => {
-    if (!confirm('Hapus target tabungan ini?')) return;
+  const handleDelete = async (target: any) => {
+    const terkumpul = Number(target.nominal_terkumpul) || 0;
+    let shouldRefund = false;
+
+    if (terkumpul > 0) {
+      const confirmMsg = `Target "${target.nama}" memiliki dana terkumpul sebesar Rp ${terkumpul.toLocaleString('id-ID')}.\n\nKembalikan dana ini ke Saldo Bank sebelum target dihapus?\n- Klik OK untuk kembalikan dana ke Saldo Bank (Pemasukan: Tarik Tabungan)\n- Klik Batal untuk membatalkan penghapusan`;
+      if (!confirm(confirmMsg)) return;
+      shouldRefund = true;
+    } else {
+      if (!confirm(`Hapus target tabungan "${target.nama}"?`)) return;
+    }
+
     try {
-      const { error } = await supabase.from('tabungan').delete().eq('id', id);
+      if (shouldRefund) {
+        const todayStr = getWIBDateString();
+        const { error: refundError } = await supabase.from('transaksi').insert([{
+          tanggal: todayStr,
+          tipe: 'Pemasukan',
+          kategori: 'Tarik Tabungan',
+          nominal: terkumpul,
+          catatan: `Pengembalian Saldo: Target Tabungan "${target.nama}" Dihapus`.trim(),
+          status: 'Cleared',
+          tenggat_waktu: '',
+          tanggal_bayar: todayStr,
+          sumber: 'Bank',
+          tabungan_id: null
+        }]);
+        if (refundError) throw refundError;
+      }
+
+      const { error } = await supabase.from('tabungan').delete().eq('id', target.id);
       if (error) throw error;
       fetchTabungan(true);
+      alert(shouldRefund ? '✅ Target dihapus & dana berhasil dikembalikan ke Saldo Bank!' : '✅ Target tabungan berhasil dihapus.');
     } catch (e: any) {
       console.error(e);
       alert(`Gagal menghapus target: ${e.message}`);
@@ -335,7 +379,7 @@ export default function BudgetPage() {
                       >
                         <Pencil className="w-4 h-4" />
                       </button>
-                      <button onClick={() => handleDelete(item.id)} className="text-slate-500 hover:text-rose-400 transition cursor-pointer">
+                      <button onClick={() => handleDelete(item)} className="text-slate-500 hover:text-rose-400 transition cursor-pointer" title="Hapus Target">
                         <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
@@ -420,14 +464,21 @@ export default function BudgetPage() {
                         </div>
 
                         <div className="flex flex-col gap-1">
-                          <label className="text-[10px] text-slate-400 font-semibold">Sumber Rekening</label>
+                          <label className="text-[10px] text-slate-400 font-semibold flex justify-between">
+                            <span>Sumber Rekening</span>
+                            {activeForm.type === 'setor' && (
+                              <span className="text-[9px] text-emerald-400 font-normal">
+                                Tersedia: Rp {(txnSumber === 'Bank' ? saldoBank : uangCash).toLocaleString('id-ID')}
+                              </span>
+                            )}
+                          </label>
                           <select
                             value={txnSumber}
                             onChange={(e) => setTxnSumber(e.target.value as 'Bank' | 'Cash')}
                             className="bg-slate-900 border border-slate-700 rounded px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-emerald-500"
                           >
-                            <option value="Bank">Bank / ATM</option>
-                            <option value="Cash">Uang Cash</option>
+                            <option value="Bank">Bank / ATM (Rp {saldoBank.toLocaleString('id-ID')})</option>
+                            <option value="Cash">Uang Cash (Rp {uangCash.toLocaleString('id-ID')})</option>
                           </select>
                         </div>
 

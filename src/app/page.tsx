@@ -327,8 +327,35 @@ export default function Dashboard() {
         }
       }
 
-      const { error } = await supabase.from('transaksi').delete().eq('id', id);
-      if (error) throw error;
+      // Check if this is a Transfer Aset transaction (paired transfer between Bank & Cash)
+      let pairedTxnId: number | null = null;
+      if (targetTxn && (targetTxn.kategori || '').trim().toLowerCase() === 'transfer aset') {
+        const isOutbound = targetTxn.tipe === 'Pengeluaran';
+        const partnerType = isOutbound ? 'Pemasukan' : 'Pengeluaran';
+        const partnerSumber = targetTxn.sumber === 'Bank' ? 'Cash' : 'Bank';
+        const targetNom = Number(targetTxn.nominal) || 0;
+
+        const partner = todayTransactions.find(t =>
+          t.id !== targetTxn.id &&
+          (t.kategori || '').trim().toLowerCase() === 'transfer aset' &&
+          t.tanggal === targetTxn.tanggal &&
+          t.tipe === partnerType &&
+          t.sumber === partnerSumber &&
+          Number(t.nominal) === targetNom
+        );
+
+        if (partner) {
+          pairedTxnId = partner.id;
+        }
+      }
+
+      if (pairedTxnId) {
+        const { error } = await supabase.from('transaksi').delete().in('id', [id, pairedTxnId]);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from('transaksi').delete().eq('id', id);
+        if (error) throw error;
+      }
       fetchData(true);
     } catch (e: any) {
       console.error(e);
@@ -374,6 +401,30 @@ export default function Dashboard() {
         }
       }
 
+      // Sync paired partner if Transfer Aset
+      if (oldTxn && (oldTxn.kategori || '').trim().toLowerCase() === 'transfer aset') {
+        const isOutbound = oldTxn.tipe === 'Pengeluaran';
+        const partnerType = isOutbound ? 'Pemasukan' : 'Pengeluaran';
+        const partnerSumber = oldTxn.sumber === 'Bank' ? 'Cash' : 'Bank';
+
+        const partner = todayTransactions.find(t =>
+          t.id !== oldTxn.id &&
+          (t.kategori || '').trim().toLowerCase() === 'transfer aset' &&
+          t.tanggal === oldTxn.tanggal &&
+          t.tipe === partnerType &&
+          t.sumber === partnerSumber &&
+          Number(t.nominal) === oldNominal
+        );
+
+        if (partner) {
+          await supabase.from('transaksi').update({
+            nominal: newNominal,
+            tanggal: editingTxn.tanggal,
+            tenggat_waktu: ''
+          }).eq('id', partner.id);
+        }
+      }
+
       const { error } = await supabase
         .from('transaksi')
         .update({
@@ -391,7 +442,7 @@ export default function Dashboard() {
       if (error) throw error;
       setEditingTxn(null);
       fetchData(true);
-      alert('✅ Transaksi & saldo tabungan berhasil disinkronkan!');
+      alert('✅ Transaksi berhasil diperbarui & disinkronkan!');
     } catch (e: any) {
       console.error(e);
       alert(`Gagal memperbarui transaksi: ${e.message}`);

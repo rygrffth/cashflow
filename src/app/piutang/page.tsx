@@ -2,9 +2,10 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
-import { HandCoins, RefreshCw, CheckCircle, Clock, PlusCircle, Calendar, AlertTriangle, ShieldAlert, Pencil, Trash2 } from 'lucide-react';
+import { HandCoins, RefreshCw, CheckCircle, Clock, PlusCircle, Calendar, AlertTriangle, ShieldAlert, Pencil, Trash2, Wallet } from 'lucide-react';
 import CurrencyInput from '@/components/CurrencyInput';
 import { getWIBDateString } from '@/lib/dateUtils';
+import { computeFinancialBalances } from '@/lib/balanceUtils';
 
 export default function PiutangPage() {
   const [loading, setLoading] = useState(true);
@@ -16,11 +17,12 @@ export default function PiutangPage() {
   const [nama, setNama] = useState('');
   const [nominal, setNominal] = useState<string>('');
   const [sumber, setSumber] = useState<'Bank' | 'Cash'>('Bank');
+  const [saldoBank, setSaldoBank] = useState<number>(0);
+  const [uangCash, setUangCash] = useState<number>(0);
   const [tenggat, setTenggat] = useState(() => {
     const nextWeek = new Date();
     nextWeek.setDate(nextWeek.getDate() + 7);
-    const offset = nextWeek.getTimezoneOffset() * 60000;
-    return new Date(nextWeek.getTime() - offset).toISOString().split('T')[0];
+    return getWIBDateString(nextWeek);
   });
   const [catatan, setCatatan] = useState('');
   const [formLoading, setFormLoading] = useState(false);
@@ -38,16 +40,24 @@ export default function PiutangPage() {
     setErrorMsg('');
 
     try {
-      // Table piutang does not have a "tanggal" column, order by created_at instead
-      const { data, error } = await supabase.from('piutang').select('*').order('created_at', { ascending: false });
+      const [piutangRes, txnRes] = await Promise.all([
+        supabase.from('piutang').select('*').order('created_at', { ascending: false }),
+        supabase.from('transaksi').select('*')
+      ]);
 
-      if (error) {
-        if (error.code === '42P01') {
+      if (piutangRes.error) {
+        if (piutangRes.error.code === '42P01') {
           throw new Error('Tabel piutang belum dibuat di Supabase.');
         }
-        throw error;
+        throw piutangRes.error;
       }
-      setPiutangData(data || []);
+      setPiutangData(piutangRes.data || []);
+
+      if (txnRes.data) {
+        const balances = computeFinancialBalances(txnRes.data);
+        setSaldoBank(balances.saldoBank);
+        setUangCash(balances.uangCash);
+      }
     } catch (e: any) {
       console.error(e);
       setErrorMsg(e.message || 'Gagal mengambil data piutang.');
@@ -75,6 +85,14 @@ export default function PiutangPage() {
     try {
       const todayStr = getWIBDateString();
       const parsedNominal = Number(nominal);
+
+      // Check balance sufficiency before lending funds
+      const available = sumber === 'Bank' ? saldoBank : uangCash;
+      if (parsedNominal > available) {
+        setFormError(`⚠️ Saldo ${sumber} tidak mencukupi untuk meminjamkan piutang!\nSaldo saat ini: Rp ${available.toLocaleString('id-ID')}\nNominal piutang: Rp ${parsedNominal.toLocaleString('id-ID')}`);
+        setFormLoading(false);
+        return;
+      }
 
       // 1. Insert to 'piutang' table (Lowercase keys, omit non-existent 'tanggal' and 'sumber' columns)
       const newPiutangObj = {
@@ -171,9 +189,10 @@ export default function PiutangPage() {
 
   const handleExtend = async (id: number, currentTenggat: string) => {
     try {
-      const current = new Date(currentTenggat);
-      current.setDate(current.getDate() + 7);
-      const newTenggat = current.toISOString().split('T')[0];
+      const baseDate = currentTenggat || getWIBDateString();
+      const [y, m, d] = baseDate.split('-').map(Number);
+      const nextDate = new Date(Date.UTC(y, m - 1, d + 7));
+      const newTenggat = nextDate.toISOString().split('T')[0];
 
       const { error } = await supabase
         .from('piutang')
@@ -231,13 +250,10 @@ export default function PiutangPage() {
   const historyPiutang = piutangData.filter(p => (p.status || p.Status) === 'Lunas');
   const totalActive = activePiutang.reduce((s, i) => s + Number(i.nominal || i.Nominal || 0), 0);
 
-  // Check deadline
+  // Check deadline safely using ISO comparison against WIB date
   const isOverdue = (tenggatStr: string) => {
     if (!tenggatStr) return false;
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const due = new Date(tenggatStr);
-    return due < today;
+    return tenggatStr < getWIBDateString();
   };
 
   const overdueCount = activePiutang.filter(p => isOverdue(p.tenggat || p.Tenggat)).length;
@@ -449,8 +465,8 @@ export default function PiutangPage() {
                       onChange={e => setSumber(e.target.value as 'Bank' | 'Cash')}
                       className="bg-slate-900 border border-slate-700 rounded px-2 py-1.5 text-white focus:outline-none"
                     >
-                      <option value="Bank">Bank</option>
-                      <option value="Cash">Cash</option>
+                      <option value="Bank">Bank (Rp {saldoBank.toLocaleString('id-ID')})</option>
+                      <option value="Cash">Cash (Rp {uangCash.toLocaleString('id-ID')})</option>
                     </select>
                   </div>
 

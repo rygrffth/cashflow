@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase';
 import { CalendarRange, PlusCircle, RefreshCw, Trash2, CheckCircle, AlertCircle, Clock, Pencil, FastForward, Archive } from 'lucide-react';
 import CurrencyInput from '@/components/CurrencyInput';
 import { getWIBDateString } from '@/lib/dateUtils';
+import { computeFinancialBalances } from '@/lib/balanceUtils';
 
 export default function SettlementPage() {
   const [loading, setLoading] = useState(true);
@@ -17,6 +18,8 @@ export default function SettlementPage() {
   const [nominal, setNominal] = useState<string>('');
   const [tenggat, setTenggat] = useState(() => getWIBDateString());
   const [sumber, setSumber] = useState<'Bank' | 'Cash'>('Bank');
+  const [saldoBank, setSaldoBank] = useState<number>(0);
+  const [uangCash, setUangCash] = useState<number>(0);
   const [formLoading, setFormLoading] = useState(false);
   const [formError, setFormError] = useState('');
   const [formSuccess, setFormSuccess] = useState('');
@@ -26,15 +29,24 @@ export default function SettlementPage() {
     else setRefreshing(true);
 
     try {
-      const { data, error } = await supabase
-        .from('transaksi')
-        .select('*')
-        .eq('kategori', 'Scheduled Settlement')
-        .eq('status', 'Pending')
-        .order('tenggat_waktu', { ascending: true });
+      const [settleRes, txnRes] = await Promise.all([
+        supabase
+          .from('transaksi')
+          .select('*')
+          .eq('kategori', 'Scheduled Settlement')
+          .eq('status', 'Pending')
+          .order('tenggat_waktu', { ascending: true }),
+        supabase.from('transaksi').select('*')
+      ]);
 
-      if (error) throw error;
-      setSettlements(data || []);
+      if (settleRes.error) throw settleRes.error;
+      setSettlements(settleRes.data || []);
+
+      if (txnRes.data) {
+        const balances = computeFinancialBalances(txnRes.data);
+        setSaldoBank(balances.saldoBank);
+        setUangCash(balances.uangCash);
+      }
     } catch (e) {
       console.error(e);
     } finally {
@@ -88,8 +100,18 @@ export default function SettlementPage() {
     }
   };
 
-  const handlePay = async (id: number, desc: string) => {
-    if (!confirm(`Tandai tagihan "${desc}" sudah lunas dibayar?`)) return;
+  const handlePay = async (item: any) => {
+    const nom = Number(item.nominal) || 0;
+    const available = item.sumber === 'Bank' ? saldoBank : uangCash;
+
+    if (nom > available) {
+      const proceed = confirm(
+        `⚠️ Peringatan: Saldo ${item.sumber} Anda saat ini (Rp ${available.toLocaleString('id-ID')}) lebih kecil dari tagihan (Rp ${nom.toLocaleString('id-ID')}).\n\nTetap lanjutkan pembayaran dan buat saldo menjadi minus?`
+      );
+      if (!proceed) return;
+    } else {
+      if (!confirm(`Tandai tagihan "${item.catatan}" (Rp ${nom.toLocaleString('id-ID')}) sudah lunas dibayar via ${item.sumber}?`)) return;
+    }
 
     try {
       const todayStr = getWIBDateString();
@@ -100,11 +122,11 @@ export default function SettlementPage() {
           status: 'Cleared',
           tanggal_bayar: todayStr
         })
-        .eq('id', id);
+        .eq('id', item.id);
 
       if (error) throw error;
 
-      alert(`🎉 Tagihan "${desc}" berhasil dilunasi!`);
+      alert(`🎉 Tagihan "${item.catatan}" berhasil dilunasi!`);
       fetchSettlements(true);
     } catch (err: any) {
       console.error(err);
@@ -150,13 +172,10 @@ export default function SettlementPage() {
 
   const totalPending = settlements.reduce((sum, item) => sum + Number(item.nominal), 0);
 
-  // Check if deadline is overdue
+  // Check if deadline is overdue cleanly using ISO string comparison
   const isOverdue = (dueStr: string) => {
     if (!dueStr) return false;
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const due = new Date(dueStr);
-    return due < today;
+    return dueStr < getWIBDateString();
   };
 
   const overdueCount = settlements.filter(s => isOverdue(s.tenggat_waktu)).length;
@@ -310,7 +329,7 @@ export default function SettlementPage() {
                             </button>
                           )}
                           <button
-                            onClick={() => handlePay(item.id, item.catatan)}
+                            onClick={() => handlePay(item)}
                             className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-slate-950 text-xs font-extrabold rounded-lg transition cursor-pointer"
                           >
                             Lunas

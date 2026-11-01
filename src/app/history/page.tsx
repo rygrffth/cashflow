@@ -231,6 +231,30 @@ export default function HistoryPage() {
           }
         }
 
+        // Sinkronisasi pasangan transaksi jika Transfer Aset
+        if ((oldTx?.kategori || '').trim().toLowerCase() === 'transfer aset') {
+          const isOutbound = oldTx?.tipe === 'Pengeluaran';
+          const partnerType = isOutbound ? 'Pemasukan' : 'Pengeluaran';
+          const partnerSumber = oldTx?.sumber === 'Bank' ? 'Cash' : 'Bank';
+
+          const partner = transactions.find(t =>
+            t.id !== id &&
+            (t.kategori || '').trim().toLowerCase() === 'transfer aset' &&
+            t.tanggal === oldTx?.tanggal &&
+            t.tipe === partnerType &&
+            t.sumber === partnerSumber &&
+            Number(t.nominal) === oldNominal
+          );
+
+          if (partner && !editedTransactions[partner.id]) {
+            await supabase.from('transaksi').update({
+              nominal: parsedNominal,
+              tanggal: updatedData.tanggal,
+              tenggat_waktu: ''
+            }).eq('id', partner.id);
+          }
+        }
+
         const updatePayload: any = {
           tanggal: updatedData.tanggal,
           kategori: updatedData.kategori,
