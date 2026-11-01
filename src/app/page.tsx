@@ -496,10 +496,10 @@ export default function Dashboard() {
               <button
                 onClick={() => { lockPrivacy(); setSecretCode(''); }}
                 className="flex items-center gap-1.5 ml-2 px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-bold hover:bg-emerald-500/20 transition cursor-pointer"
-                title="Akses data terbuka dengan password kedua. Klik untuk mengunci kembali"
+                title="Mode Non-Admin terbuka. Klik untuk mengunci kembali"
               >
                 <Key className="w-3.5 h-3.5 text-emerald-400" />
-                <span>Akses Terbuka</span>
+                <span>Mode Biasa (Terbuka)</span>
               </button>
             ) : (
               <button
@@ -548,11 +548,13 @@ export default function Dashboard() {
         {/* Left 2 Columns: Portfolios, Daily status, Simulator */}
         <div className="lg:col-span-2 space-y-8">
           {(() => {
-            const hasAccess = isPrivacyUnlocked(secretCode);
-            const displayedTotalAset = hasAccess ? totalAset : (fakeOffset + totalAset);
-            // Tabungan ikut menyesuaikan secara dinamis saat terkunci agar rasio tetap klop
-            const displayedTabungan = hasAccess ? tabungan : Math.max(0, displayedTotalAset - saldoOp);
-
+            const isMaster = isMasterAdmin(secretCode);
+            // Mode Admin ('naufal') menampilkan nominal asli.
+            // Mode Non-Admin (termasuk saat dibuka dengan password kedua 'rayhan') menampilkan nominal mode non-admin.
+            const displayedTotalAset = isMaster ? totalAset : (fakeOffset + totalAset);
+            // Tabungan ikut menyesuaikan secara dinamis agar rasio tetap klop:
+            // Saldo Aset dikurangi Tabungan = Dana Operasional (saldoOp)
+            const displayedTabungan = isMaster ? tabungan : Math.max(0, displayedTotalAset - saldoOp);
 
             return (
               <PortfolioGrid
@@ -564,7 +566,7 @@ export default function Dashboard() {
                 batasHr={batasHr}
                 sisaHari={sisaHari}
                 targetGajianFormatted={targetGajianFormatted}
-                isRealMode={isRealMode}
+                isRealMode={isMaster}
                 secretCode={secretCode}
                 setSecretCode={setSecretCode}
                 piutangSum={piutangSum}
