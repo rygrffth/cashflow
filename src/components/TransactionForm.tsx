@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import { PlusCircle, Calendar, Tag, CreditCard, PenTool, CheckCircle, Loader2, ChevronDown, ChevronUp } from 'lucide-react';
+import { PlusCircle, Calendar, Tag, CreditCard, PenTool, CheckCircle, Loader2, ChevronDown, ChevronUp, BookmarkPlus, RotateCcw, X as CloseIcon } from 'lucide-react';
 import { KATEGORI_OPTIONS } from '@/config/categories';
 import CurrencyInput from '@/components/CurrencyInput';
 
@@ -52,6 +52,72 @@ export default function TransactionForm({ saldoBank, uangCash, onSuccess, onClos
   const [titBank, setTitBank] = useState<string>('');
   const [titCash, setTitCash] = useState<string>('');
   const [titLunas, setTitLunas] = useState(true);
+
+  // Quick Preset Management
+  const DEFAULT_PRESETS = [
+    { label: '🍛 Makan 25k', tipe: 'Pengeluaran', kat: 'Makan', nom: '25000', note: 'Makan siang' },
+    { label: '☕ Kopi 20k', tipe: 'Pengeluaran', kat: 'Makan', nom: '20000', note: 'Kopi / Cemilan' },
+    { label: '⛽ Bensin 30k', tipe: 'Pengeluaran', kat: 'Bensin / Mobilitas', nom: '30000', note: 'Bensin' },
+    { label: '🛒 Mart 50k', tipe: 'Pengeluaran', kat: 'Belanja Dapur', nom: '50000', note: 'Minimarket' },
+    { label: '🅿️ Parkir 2k', tipe: 'Pengeluaran', kat: 'Bensin / Mobilitas', nom: '2000', note: 'Parkir' }
+  ];
+
+  const [presets, setPresets] = useState<any[]>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('custom_quick_presets');
+      if (saved) {
+        try {
+          return JSON.parse(saved);
+        } catch (e) {
+          console.error(e);
+        }
+      }
+    }
+    return DEFAULT_PRESETS;
+  });
+
+  const [isEditingPresets, setIsEditingPresets] = useState(false);
+
+  const handleSaveCurrentAsPreset = () => {
+    const pNom = Number(nominal);
+    if (!pNom || pNom <= 0) {
+      alert('Isi nominal terlebih dahulu untuk disimpan sebagai pintasan!');
+      return;
+    }
+    const noteText = catatan.trim() || kategori;
+    const shortNom = pNom >= 1000 ? `${Math.round(pNom / 1000)}k` : String(pNom);
+    const newPreset = {
+      label: `⭐ ${noteText.slice(0, 10)} ${shortNom}`,
+      tipe: tipe,
+      kat: kategori === 'Lainnya (Ketik Manual...)' ? customKategori : kategori,
+      nom: String(pNom),
+      note: catatan.trim() || noteText
+    };
+
+    const updated = [...presets, newPreset];
+    setPresets(updated);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('custom_quick_presets', JSON.stringify(updated));
+    }
+    setSuccessMsg('⭐ Pintasan baru berhasil disimpan!');
+    setTimeout(() => setSuccessMsg(''), 3000);
+  };
+
+  const handleDeletePreset = (index: number) => {
+    const updated = presets.filter((_, idx) => idx !== index);
+    setPresets(updated);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('custom_quick_presets', JSON.stringify(updated));
+    }
+  };
+
+  const handleResetPresets = () => {
+    setPresets(DEFAULT_PRESETS);
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('custom_quick_presets');
+    }
+    setIsEditingPresets(false);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -282,33 +348,72 @@ export default function TransactionForm({ saldoBank, uangCash, onSuccess, onClos
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-4">
-        {/* Quick Favorite Presets (1-Tap Fill) */}
+        {/* Quick Favorite Presets (1-Tap Fill & Custom Management) */}
         {tipe !== 'Transfer' && (
-          <div className="space-y-1.5 p-2.5 bg-slate-900/40 rounded-xl border border-slate-800/80">
-            <span className="text-[11px] font-semibold text-slate-400 flex items-center gap-1">
-              ⚡ Pintasan Cepat (1-Tap):
-            </span>
-            <div className="flex flex-wrap gap-1.5">
-              {[
-                { label: '🍛 Makan 25k', tipe: 'Pengeluaran', kat: 'Makan', nom: '25000', note: 'Makan siang' },
-                { label: '☕ Kopi 20k', tipe: 'Pengeluaran', kat: 'Makan', nom: '20000', note: 'Kopi / Cemilan' },
-                { label: '⛽ Bensin 30k', tipe: 'Pengeluaran', kat: 'Bensin / Mobilitas', nom: '30000', note: 'Bensin' },
-                { label: '🛒 Mart 50k', tipe: 'Pengeluaran', kat: 'Belanja Dapur', nom: '50000', note: 'Minimarket' },
-                { label: '🅿️ Parkir 2k', tipe: 'Pengeluaran', kat: 'Bensin / Mobilitas', nom: '2000', note: 'Parkir' }
-              ].map((p, idx) => (
+          <div className="space-y-2 p-3 bg-slate-900/60 rounded-xl border border-slate-800/80">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold text-slate-300 flex items-center gap-1.5">
+                ⚡ Pintasan Cepat (1-Tap):
+              </span>
+              <div className="flex items-center gap-1.5">
+                {nominal && Number(nominal) > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleSaveCurrentAsPreset}
+                    className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/15 text-amber-400 hover:bg-amber-500/25 border border-amber-500/30 transition cursor-pointer"
+                    title="Simpan form saat ini sebagai tombol pintasan"
+                  >
+                    <BookmarkPlus className="w-3 h-3" />
+                    <span>+ Simpan Pintasan</span>
+                  </button>
+                )}
                 <button
-                  key={idx}
                   type="button"
-                  onClick={() => {
-                    setTipe(p.tipe as any);
-                    setKategori(p.kat);
-                    setNominal(p.nom);
-                    setCatatan(p.note);
-                  }}
-                  className="px-2.5 py-1 bg-slate-800/80 hover:bg-emerald-950/40 text-slate-300 hover:text-emerald-300 border border-slate-700/60 hover:border-emerald-500/40 rounded-lg text-[11px] font-medium transition cursor-pointer active:scale-95 shadow-sm"
+                  onClick={() => setIsEditingPresets(!isEditingPresets)}
+                  className="px-1.5 py-0.5 text-[10px] font-semibold text-slate-400 hover:text-white rounded hover:bg-slate-800 transition cursor-pointer"
                 >
-                  {p.label}
+                  {isEditingPresets ? 'Selesai' : 'Kelola'}
                 </button>
+                {isEditingPresets && (
+                  <button
+                    type="button"
+                    onClick={handleResetPresets}
+                    className="flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-semibold text-rose-400 hover:text-rose-300 rounded hover:bg-rose-500/10 transition cursor-pointer"
+                    title="Kembalikan ke default"
+                  >
+                    <RotateCcw className="w-3 h-3" />
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div className="flex flex-wrap gap-1.5">
+              {presets.map((p, idx) => (
+                <div key={idx} className="relative inline-flex items-center">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTipe(p.tipe as any);
+                      setKategori(p.kat);
+                      setNominal(p.nom);
+                      setCatatan(p.note);
+                      if (p.sumber) setSumber(p.sumber);
+                    }}
+                    className="px-2.5 py-1 bg-slate-800/90 hover:bg-emerald-950/40 text-slate-300 hover:text-emerald-300 border border-slate-700/60 hover:border-emerald-500/40 rounded-lg text-[11px] font-medium transition cursor-pointer active:scale-95 shadow-sm"
+                  >
+                    {p.label}
+                  </button>
+                  {isEditingPresets && (
+                    <button
+                      type="button"
+                      onClick={() => handleDeletePreset(idx)}
+                      className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-rose-500 text-white flex items-center justify-center text-[10px] shadow cursor-pointer hover:bg-rose-600"
+                      title="Hapus pintasan ini"
+                    >
+                      <CloseIcon className="w-2.5 h-2.5" />
+                    </button>
+                  )}
+                </div>
               ))}
             </div>
           </div>

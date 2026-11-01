@@ -15,6 +15,7 @@ const geistMono = Geist_Mono({
 import Sidebar from "@/components/Sidebar";
 import RegisterSW from "@/components/RegisterSW";
 import NetworkStatus from "@/components/NetworkStatus";
+import AutoLockManager from "@/components/AutoLockManager";
 
 export const metadata: Metadata = {
   title: "Financial Dashboard",
@@ -68,6 +69,7 @@ export default function RootLayout({
       <body className="min-h-full flex flex-col md:flex-row bg-[color:var(--background)]">
         <RegisterSW />
         <NetworkStatus />
+        <AutoLockManager />
         <Sidebar />
         <div className="flex-1 min-w-0 main-content-wrapper">
           <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-[max(1.25rem,calc(env(safe-area-inset-top,0px)+0.75rem))] pb-28 md:py-6">

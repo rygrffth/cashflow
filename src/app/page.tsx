@@ -7,6 +7,7 @@ import { JAJAN_CATEGORIES } from '@/config/categories';
 import DailyLimitCard from '@/components/DailyLimitCard';
 import JajanSimulator from '@/components/JajanSimulator';
 import TransactionForm from '@/components/TransactionForm';
+import AssetAllocationChart from '@/components/AssetAllocationChart';
 import { RefreshCw, Clock, Landmark, Wallet, ListTodo, Lock, Unlock, Key, Pencil, Trash2, Target, TrendingUp, PlusCircle } from 'lucide-react';
 import { getWIBDateString, parseDateParts } from '@/lib/dateUtils';
 import { calculateGajianCycle } from '@/lib/gajianUtils';
@@ -557,25 +558,36 @@ export default function Dashboard() {
             const displayedTabungan = isMaster ? tabungan : Math.max(0, displayedTotalAset - saldoOp);
 
             return (
-              <PortfolioGrid
-                saldoBank={saldoBank}
-                uangCash={uangCash}
-                tabungan={displayedTabungan}
-                totalAset={displayedTotalAset}
-                saldoOp={saldoOp}
-                batasHr={batasHr}
-                sisaHari={sisaHari}
-                targetGajianFormatted={targetGajianFormatted}
-                isRealMode={isMaster}
-                secretCode={secretCode}
-                setSecretCode={setSecretCode}
-                piutangSum={piutangSum}
-                piutangCount={piutangCount}
-                settlementSum={settlementSum}
-                settlementCount={settlementCount}
-                urgentSettlementCount={urgentSettlementCount}
-                isPastRolledOver={isPastRolledOver}
-              />
+              <>
+                <PortfolioGrid
+                  saldoBank={saldoBank}
+                  uangCash={uangCash}
+                  tabungan={displayedTabungan}
+                  totalAset={displayedTotalAset}
+                  saldoOp={saldoOp}
+                  batasHr={batasHr}
+                  sisaHari={sisaHari}
+                  targetGajianFormatted={targetGajianFormatted}
+                  isRealMode={isMaster}
+                  secretCode={secretCode}
+                  setSecretCode={setSecretCode}
+                  piutangSum={piutangSum}
+                  piutangCount={piutangCount}
+                  settlementSum={settlementSum}
+                  settlementCount={settlementCount}
+                  urgentSettlementCount={urgentSettlementCount}
+                  isPastRolledOver={isPastRolledOver}
+                />
+
+                <AssetAllocationChart
+                  saldoBank={saldoBank}
+                  uangCash={uangCash}
+                  tabungan={displayedTabungan}
+                  investasi={totalInvestasi}
+                  piutang={piutangSum}
+                  isUnlocked={isPrivacyUnlocked(secretCode)}
+                />
+              </>
             );
           })()}
 

@@ -14,7 +14,10 @@ import {
   XAxis,
   YAxis,
   Tooltip,
-  CartesianGrid
+  CartesianGrid,
+  PieChart,
+  Pie,
+  Cell
 } from 'recharts';
 import CurrencyInput from '@/components/CurrencyInput';
 import { getWIBDateString } from '@/lib/dateUtils';
@@ -550,6 +553,42 @@ export default function InvestasiPage() {
     return { totalModal, totalSekarang, netGainLoss, gainLossPct };
   }, [investasiList]);
 
+  // Instrument breakdown for Donut Chart
+  const categoryAllocation = React.useMemo(() => {
+    const map: Record<string, { nominal: number; color: string; icon: string }> = {};
+    const catColors: Record<string, { color: string; icon: string }> = {
+      Saham: { color: '#6366f1', icon: '📈' },
+      Emas: { color: '#f59e0b', icon: '🪙' },
+      Crypto: { color: '#06b6d4', icon: '⚡' },
+      Reksadana: { color: '#10b981', icon: '🌱' },
+      Obligasi: { color: '#8b5cf6', icon: '📜' },
+      Lainnya: { color: '#ec4899', icon: '💎' },
+    };
+
+    investasiList.forEach(item => {
+      const cat = item.kategori || 'Lainnya';
+      const val = Number(item.nominal_sekarang ?? item.nominal_modal) || 0;
+      if (!map[cat]) {
+        map[cat] = {
+          nominal: 0,
+          color: catColors[cat]?.color || '#94a3b8',
+          icon: catColors[cat]?.icon || '📦'
+        };
+      }
+      map[cat].nominal += val;
+    });
+
+    const total = Object.values(map).reduce((sum, c) => sum + c.nominal, 0);
+
+    return Object.entries(map).map(([name, data]) => ({
+      name,
+      nominal: data.nominal,
+      color: data.color,
+      icon: data.icon,
+      pct: total > 0 ? (data.nominal / total) * 100 : 0
+    })).filter(c => c.nominal > 0);
+  }, [investasiList]);
+
   // Table setup SQL prompt
   if (dbError && dbError.includes('Tabel investasi belum dibuat')) {
     return (
@@ -713,6 +752,108 @@ export default function InvestasiPage() {
           </div>
         </div>
       </div>
+
+      {/* Investment Instrument Allocation Donut Card */}
+      {categoryAllocation.length > 0 && (
+        <div className="glass-card p-5 border-slate-700/50">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h3 className="text-sm font-bold text-white flex items-center gap-1.5">
+                <span>📊</span> Komposisi Portofolio per Instrumen
+              </h3>
+              <p className="text-[11px] text-slate-400">
+                Porsi pembagian aset modal & nilai pasar investasi
+              </p>
+            </div>
+            <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700">
+              {categoryAllocation.length} Instrumen Aktif
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-center">
+            {/* Donut Chart */}
+            <div className="md:col-span-5 relative flex items-center justify-center min-h-[180px]">
+              <ResponsiveContainer width="100%" height={180}>
+                <PieChart>
+                  <Tooltip
+                    content={({ active, payload }) => {
+                      if (active && payload && payload.length) {
+                        const data: any = payload[0].payload;
+                        return (
+                          <div className="bg-slate-900/95 border border-slate-700 p-2 rounded-xl text-xs space-y-0.5 shadow-xl">
+                            <p className="font-bold text-white flex items-center gap-1">
+                              <span>{data.icon}</span> {data.name}
+                            </p>
+                            <p className="text-emerald-400 font-mono font-semibold">
+                              {isUnlocked ? `Rp ${data.nominal.toLocaleString('id-ID')}` : 'Rp ••••••••'}
+                            </p>
+                            <p className="text-[10px] text-slate-400">
+                              Porsi: <span className="text-white font-bold">{data.pct.toFixed(1)}%</span>
+                            </p>
+                          </div>
+                        );
+                      }
+                      return null;
+                    }}
+                  />
+                  <Pie
+                    data={categoryAllocation}
+                    dataKey="nominal"
+                    nameKey="name"
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={50}
+                    outerRadius={75}
+                    paddingAngle={3}
+                    stroke="none"
+                  >
+                    {categoryAllocation.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.color} />
+                    ))}
+                  </Pie>
+                </PieChart>
+              </ResponsiveContainer>
+              <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none text-center">
+                <span className="text-[9px] uppercase font-bold text-slate-400">Total Portofolio</span>
+                <span className="text-xs font-black text-white mt-0.5">
+                  {isUnlocked ? `Rp ${portfolioSummary.totalSekarang.toLocaleString('id-ID')}` : 'Rp ••••••••'}
+                </span>
+              </div>
+            </div>
+
+            {/* Allocation Badges */}
+            <div className="md:col-span-7 grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              {categoryAllocation.map((cat, idx) => (
+                <div
+                  key={idx}
+                  className="p-2.5 rounded-xl bg-slate-900/60 border border-slate-800 flex items-center justify-between"
+                >
+                  <div className="flex items-center gap-2">
+                    <span
+                      className="w-2.5 h-2.5 rounded-full shrink-0"
+                      style={{ backgroundColor: cat.color }}
+                    />
+                    <div>
+                      <p className="text-xs font-bold text-slate-200 flex items-center gap-1">
+                        <span>{cat.icon}</span> {cat.name}
+                      </p>
+                      <p className="text-[11px] font-mono font-semibold text-emerald-400">
+                        {isUnlocked ? `Rp ${cat.nominal.toLocaleString('id-ID')}` : 'Rp ••••••••'}
+                      </p>
+                    </div>
+                  </div>
+                  <span
+                    className="px-2 py-0.5 rounded text-[11px] font-black font-mono"
+                    style={{ color: cat.color, backgroundColor: `${cat.color}15` }}
+                  >
+                    {cat.pct.toFixed(1)}%
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Stockbit-Style General Market Trends Chart */}
       {(() => {
