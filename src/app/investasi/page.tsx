@@ -49,9 +49,13 @@ export default function InvestasiPage() {
   const [syncingAll, setSyncingAll] = useState(false);
   const [livePricesCache, setLivePricesCache] = useState<Record<string, { price: number; change24h: number; name?: string }>>({});
 
-  // Market Benchmark & Interactive Chart Modal States
+  // Market Benchmark & Interactive Chart States
   const [marketOverview, setMarketOverview] = useState<any | null>(null);
   const [overviewLoading, setOverviewLoading] = useState(false);
+  const [selectedMarketTab, setSelectedMarketTab] = useState<'EMAS' | 'USDIDR' | 'IHSG' | 'BTC'>('EMAS');
+  const [marketRange, setMarketRange] = useState<'7d' | '1mo'>('7d');
+  const [marketChartCache, setMarketChartCache] = useState<Record<string, Array<{ date: string; price: number }>>>({});
+  const [loadingMarketChart, setLoadingMarketChart] = useState(false);
   const [activeChart, setActiveChart] = useState<{
     symbol: string;
     name: string;
@@ -275,9 +279,35 @@ export default function InvestasiPage() {
     }
   }, []);
 
+  // Fetch general market chart for selected tab & range
+  const fetchMarketChart = useCallback(async (symbol: string, range: string) => {
+    const key = `${symbol}_${range}`;
+    if (marketChartCache[key] && marketChartCache[key].length > 0) return;
+
+    setLoadingMarketChart(true);
+    try {
+      const res = await fetch(`/api/market-price?symbol=${encodeURIComponent(symbol)}&range=${range}`);
+      const data = await res.json();
+      if (data && data.success && Array.isArray(data.chartData)) {
+        setMarketChartCache(prev => ({
+          ...prev,
+          [key]: data.chartData
+        }));
+      }
+    } catch (e) {
+      console.warn('Failed to load market chart:', e);
+    } finally {
+      setLoadingMarketChart(false);
+    }
+  }, [marketChartCache]);
+
   useEffect(() => {
     fetchMarketOverview();
   }, [fetchMarketOverview]);
+
+  useEffect(() => {
+    fetchMarketChart(selectedMarketTab, marketRange);
+  }, [selectedMarketTab, marketRange, fetchMarketChart]);
 
   // Open interactive chart modal for an asset or market index
   const openChartModal = async (symbol: string, name: string, unit: string, range = '7d') => {
@@ -622,117 +652,214 @@ export default function InvestasiPage() {
         </div>
       </div>
 
-      {/* Market Benchmark Strip (IHSG, Emas, BTC, USD/IDR) */}
-      <div className="glass-card p-4 border-slate-800/80 bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950 space-y-3">
-        <div className="flex justify-between items-center">
-          <h3 className="text-xs font-extrabold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-            <Activity className="w-3.5 h-3.5 text-emerald-400" /> Acuan Pasar Realtime (Live Market Benchmark)
-          </h3>
-          <span className="text-[10px] text-slate-500 font-mono">Klik kartu untuk melihat grafik tren</span>
-        </div>
+      {/* General Market Trends Chart Panel (Separated by Instrument) */}
+      {(() => {
+        const INSTRUMENTS = {
+          EMAS: {
+            name: 'Emas Logam Mulia (Spot IDR)',
+            unit: 'Rp / gram',
+            icon: '🪙',
+            color: '#f59e0b',
+            accent: 'from-amber-500/20 to-transparent',
+            dataObj: marketOverview?.gold
+          },
+          USDIDR: {
+            name: 'Nilai Tukar Dollar (USD / IDR)',
+            unit: 'Rupiah per USD',
+            icon: '💵',
+            color: '#06b6d4',
+            accent: 'from-cyan-500/20 to-transparent',
+            dataObj: marketOverview?.usdidr
+          },
+          IHSG: {
+            name: 'IHSG (Indeks Saham Indonesia)',
+            unit: 'Poin Indeks',
+            icon: '🏛️',
+            color: '#10b981',
+            accent: 'from-emerald-500/20 to-transparent',
+            dataObj: marketOverview?.ihsg
+          },
+          BTC: {
+            name: 'Bitcoin (BTC / IDR)',
+            unit: 'Rupiah per Koin',
+            icon: '⚡',
+            color: '#f97316',
+            accent: 'from-orange-500/20 to-transparent',
+            dataObj: marketOverview?.btc
+          }
+        };
 
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          {/* IHSG */}
-          <div
-            onClick={() => openChartModal('IHSG', 'IHSG (Indeks Saham Indonesia)', 'poin', '7d')}
-            className="p-3 bg-slate-900/60 hover:bg-slate-900/90 border border-slate-800 rounded-xl transition cursor-pointer group flex flex-col justify-between"
-          >
-            <div className="flex justify-between items-start">
-              <span className="text-[10px] text-slate-400 font-bold flex items-center gap-1">
-                🏛️ IHSG
-              </span>
-              {marketOverview?.ihsg && (
-                <span className={`text-[9px] font-mono font-bold px-1 py-0.2 rounded ${marketOverview.ihsg.change24h >= 0 ? 'text-emerald-400 bg-emerald-500/10' : 'text-rose-400 bg-rose-500/10'}`}>
-                  {marketOverview.ihsg.change24h >= 0 ? '+' : ''}{marketOverview.ihsg.change24h}%
-                </span>
+        const activeInst = INSTRUMENTS[selectedMarketTab];
+        const chartPoints = marketChartCache[`${selectedMarketTab}_${marketRange}`] || [];
+        const prices = chartPoints.map(p => p.price);
+        const minPrice = prices.length > 0 ? Math.min(...prices) : 0;
+        const maxPrice = prices.length > 0 ? Math.max(...prices) : 0;
+        const latestPrice = prices.length > 0 ? prices[prices.length - 1] : (activeInst?.dataObj?.price || 0);
+        const firstPrice = prices.length > 0 ? prices[0] : latestPrice;
+        const netDiff = latestPrice - firstPrice;
+        const netPct = firstPrice > 0 ? (netDiff / firstPrice) * 100 : 0;
+
+        return (
+          <div className="glass-card p-5 border-slate-800 bg-slate-950/70 space-y-4">
+            {/* Header & Controls */}
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-slate-800/80 pb-3">
+              <div>
+                <h3 className="text-sm font-extrabold text-white flex items-center gap-2">
+                  <Activity className="w-4 h-4 text-emerald-400" /> Tren Harga Pasar & Nilai Tukar Umum
+                </h3>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Grafik acuan pasar independen — pantau tren harga emas, kurs rupiah, saham nasional, & crypto secara langsung.
+                </p>
+              </div>
+
+              {/* Range switcher */}
+              <div className="bg-slate-900 border border-slate-800 rounded-lg p-0.5 flex gap-1 text-[11px] font-mono self-end sm:self-auto">
+                <button
+                  onClick={() => setMarketRange('7d')}
+                  className={`px-3 py-1 rounded font-bold transition cursor-pointer ${marketRange === '7d' ? 'bg-emerald-500 text-slate-950' : 'text-slate-400 hover:text-white'}`}
+                >
+                  7 Hari
+                </button>
+                <button
+                  onClick={() => setMarketRange('1mo')}
+                  className={`px-3 py-1 rounded font-bold transition cursor-pointer ${marketRange === '1mo' ? 'bg-emerald-500 text-slate-950' : 'text-slate-400 hover:text-white'}`}
+                >
+                  30 Hari
+                </button>
+              </div>
+            </div>
+
+            {/* Instrument Tabs */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+              {(Object.keys(INSTRUMENTS) as Array<keyof typeof INSTRUMENTS>).map((key) => {
+                const inst = INSTRUMENTS[key];
+                const isSelected = selectedMarketTab === key;
+                const change = inst.dataObj?.change24h;
+
+                return (
+                  <button
+                    key={key}
+                    onClick={() => setSelectedMarketTab(key)}
+                    className={`p-3 rounded-xl border text-left transition cursor-pointer flex flex-col justify-between ${
+                      isSelected
+                        ? 'bg-slate-900 border-emerald-500/60 shadow-lg shadow-emerald-950/30'
+                        : 'bg-slate-950/40 hover:bg-slate-900/60 border-slate-800/70 opacity-80 hover:opacity-100'
+                    }`}
+                  >
+                    <div className="flex justify-between items-center w-full">
+                      <span className="text-xs font-bold text-white flex items-center gap-1.5">
+                        <span>{inst.icon}</span> {inst.name.split(' (')[0]}
+                      </span>
+                      {change !== undefined && (
+                        <span className={`text-[10px] font-mono font-bold px-1.5 py-0.2 rounded ${change >= 0 ? 'text-emerald-400 bg-emerald-500/10' : 'text-rose-400 bg-rose-500/10'}`}>
+                          {change >= 0 ? '+' : ''}{change}%
+                        </span>
+                      )}
+                    </div>
+                    <div className="mt-2">
+                      <p className="text-sm font-black font-mono text-white">
+                        {inst.dataObj ? (key === 'BTC' ? `Rp ${(inst.dataObj.price / 1000000).toFixed(1)} Jt` : `Rp ${inst.dataObj.price.toLocaleString('id-ID')}`) : 'Memuat...'}
+                      </p>
+                      <span className="text-[10px] text-slate-500 font-mono mt-0.5 block truncate">
+                        {inst.unit}
+                      </span>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Active Instrument Stats Banner */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 p-3 bg-slate-900/60 border border-slate-800/80 rounded-xl text-xs">
+              <div>
+                <span className="text-[10px] text-slate-400 font-semibold">Instrumen Terpilih:</span>
+                <p className="text-xs font-bold text-white flex items-center gap-1 mt-0.5">
+                  <span>{activeInst.icon}</span> {activeInst.name}
+                </p>
+              </div>
+              <div>
+                <span className="text-[10px] text-slate-400 font-semibold">Harga Pasar Terkini:</span>
+                <p className="text-sm font-black font-mono text-emerald-400 mt-0.5">
+                  Rp {latestPrice.toLocaleString('id-ID')}
+                </p>
+              </div>
+              <div>
+                <span className="text-[10px] text-slate-400 font-semibold">Rentang Terendah - Tertinggi:</span>
+                <p className="text-xs font-mono text-slate-300 mt-0.5">
+                  {minPrice.toLocaleString('id-ID')} - {maxPrice.toLocaleString('id-ID')}
+                </p>
+              </div>
+              <div>
+                <span className="text-[10px] text-slate-400 font-semibold">Perubahan Periode:</span>
+                <p className={`text-xs font-black font-mono flex items-center gap-0.5 mt-0.5 ${netDiff >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                  {netDiff >= 0 ? '+' : ''}{netDiff.toLocaleString('id-ID')} ({netDiff >= 0 ? '+' : ''}{netPct.toFixed(2)}%)
+                </p>
+              </div>
+            </div>
+
+            {/* Embedded Recharts Area Chart */}
+            <div className="h-64 w-full bg-slate-950/70 rounded-xl p-3 border border-slate-900 flex items-center justify-center">
+              {loadingMarketChart ? (
+                <div className="text-xs text-emerald-400 animate-pulse flex items-center gap-2">
+                  <Activity className="w-4 h-4 animate-spin" /> Mengambil tren data harga pasar {activeInst.name}...
+                </div>
+              ) : chartPoints.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={chartPoints} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id={`grad_${selectedMarketTab}`} x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor={activeInst.color} stopOpacity={0.4} />
+                        <stop offset="95%" stopColor={activeInst.color} stopOpacity={0.0} />
+                      </linearGradient>
+                    </defs>
+                    <XAxis
+                      dataKey="date"
+                      tick={{ fill: '#64748b', fontSize: 10 }}
+                      tickLine={false}
+                      axisLine={{ stroke: '#334155' }}
+                      tickFormatter={(val: string) => (val ? val.slice(5) : '')}
+                    />
+                    <YAxis
+                      domain={['auto', 'auto']}
+                      tick={{ fill: '#64748b', fontSize: 10 }}
+                      tickLine={false}
+                      axisLine={false}
+                      orientation="right"
+                      tickFormatter={(val: number) => {
+                        if (val >= 1000000000) return `${(val / 1000000000).toFixed(1)}B`;
+                        if (val >= 1000000) return `${(val / 1000000).toFixed(1)}M`;
+                        if (val >= 1000) return `${(val / 1000).toFixed(0)}k`;
+                        return String(val);
+                      }}
+                    />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: '#0f172a',
+                        borderColor: '#334155',
+                        borderRadius: '0.5rem',
+                        fontSize: '11px',
+                        color: '#f8fafc'
+                      }}
+                      formatter={(val: any) => [`Rp ${Number(val).toLocaleString('id-ID')}`, activeInst.name]}
+                      labelFormatter={(label: any) => `Tanggal: ${label}`}
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="price"
+                      stroke={activeInst.color}
+                      strokeWidth={2}
+                      fillOpacity={1}
+                      fill={`url(#grad_${selectedMarketTab})`}
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              ) : (
+                <p className="text-xs text-slate-500 italic">Data grafik pasar sedang dipersiapkan...</p>
               )}
             </div>
-            <div className="mt-2">
-              <p className="text-sm font-black font-mono text-white group-hover:text-emerald-400 transition">
-                {marketOverview?.ihsg ? marketOverview.ihsg.price.toLocaleString('id-ID') : 'Memuat...'}
-              </p>
-              <span className="text-[9px] text-slate-500 font-mono flex items-center gap-1 mt-0.5">
-                <ChartIcon className="w-2.5 h-2.5" /> Lihat Grafik
-              </span>
-            </div>
           </div>
-
-          {/* Emas Logam Mulia */}
-          <div
-            onClick={() => openChartModal('EMAS', 'Emas Logam Mulia (Spot IDR)', 'Rp / gram', '7d')}
-            className="p-3 bg-slate-900/60 hover:bg-slate-900/90 border border-slate-800 rounded-xl transition cursor-pointer group flex flex-col justify-between"
-          >
-            <div className="flex justify-between items-start">
-              <span className="text-[10px] text-amber-300 font-bold flex items-center gap-1">
-                🪙 Emas Antam
-              </span>
-              {marketOverview?.gold && (
-                <span className={`text-[9px] font-mono font-bold px-1 py-0.2 rounded ${marketOverview.gold.change24h >= 0 ? 'text-emerald-400 bg-emerald-500/10' : 'text-rose-400 bg-rose-500/10'}`}>
-                  {marketOverview.gold.change24h >= 0 ? '+' : ''}{marketOverview.gold.change24h}%
-                </span>
-              )}
-            </div>
-            <div className="mt-2">
-              <p className="text-sm font-black font-mono text-white group-hover:text-amber-300 transition">
-                {marketOverview?.gold ? `Rp ${marketOverview.gold.price.toLocaleString('id-ID')}` : 'Memuat...'}
-              </p>
-              <span className="text-[9px] text-slate-500 font-mono flex items-center gap-1 mt-0.5">
-                <ChartIcon className="w-2.5 h-2.5" /> /gram • Grafik
-              </span>
-            </div>
-          </div>
-
-          {/* Bitcoin BTC */}
-          <div
-            onClick={() => openChartModal('BTC', 'Bitcoin (BTC / IDR)', 'IDR', '7d')}
-            className="p-3 bg-slate-900/60 hover:bg-slate-900/90 border border-slate-800 rounded-xl transition cursor-pointer group flex flex-col justify-between"
-          >
-            <div className="flex justify-between items-start">
-              <span className="text-[10px] text-amber-400 font-bold flex items-center gap-1">
-                ⚡ Bitcoin
-              </span>
-              {marketOverview?.btc && (
-                <span className={`text-[9px] font-mono font-bold px-1 py-0.2 rounded ${marketOverview.btc.change24h >= 0 ? 'text-emerald-400 bg-emerald-500/10' : 'text-rose-400 bg-rose-500/10'}`}>
-                  {marketOverview.btc.change24h >= 0 ? '+' : ''}{marketOverview.btc.change24h}%
-                </span>
-              )}
-            </div>
-            <div className="mt-2">
-              <p className="text-sm font-black font-mono text-white group-hover:text-amber-400 transition truncate">
-                {marketOverview?.btc ? `Rp ${(marketOverview.btc.price / 1000000).toFixed(1)} Jt` : 'Memuat...'}
-              </p>
-              <span className="text-[9px] text-slate-500 font-mono flex items-center gap-1 mt-0.5">
-                <ChartIcon className="w-2.5 h-2.5" /> Lihat Grafik
-              </span>
-            </div>
-          </div>
-
-          {/* USD / IDR */}
-          <div
-            onClick={() => openChartModal('USDIDR', 'Kurs USD / IDR', 'IDR', '7d')}
-            className="p-3 bg-slate-900/60 hover:bg-slate-900/90 border border-slate-800 rounded-xl transition cursor-pointer group flex flex-col justify-between"
-          >
-            <div className="flex justify-between items-start">
-              <span className="text-[10px] text-emerald-400 font-bold flex items-center gap-1">
-                💵 USD / IDR
-              </span>
-              {marketOverview?.usdidr && (
-                <span className={`text-[9px] font-mono font-bold px-1 py-0.2 rounded ${marketOverview.usdidr.change24h >= 0 ? 'text-emerald-400 bg-emerald-500/10' : 'text-rose-400 bg-rose-500/10'}`}>
-                  {marketOverview.usdidr.change24h >= 0 ? '+' : ''}{marketOverview.usdidr.change24h}%
-                </span>
-              )}
-            </div>
-            <div className="mt-2">
-              <p className="text-sm font-black font-mono text-white group-hover:text-emerald-400 transition">
-                {marketOverview?.usdidr ? `Rp ${marketOverview.usdidr.price.toLocaleString('id-ID')}` : 'Memuat...'}
-              </p>
-              <span className="text-[9px] text-slate-500 font-mono flex items-center gap-1 mt-0.5">
-                <ChartIcon className="w-2.5 h-2.5" /> Lihat Grafik
-              </span>
-            </div>
-          </div>
-        </div>
-      </div>
+        );
+      })()}
 
       {/* Main Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
