@@ -4,7 +4,8 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import {
   TrendingUp, TrendingDown, Briefcase, PlusCircle, Trash2,
-  Pencil, RefreshCw, AlertTriangle, CheckCircle, Database, HelpCircle
+  Pencil, RefreshCw, AlertTriangle, CheckCircle, Database, HelpCircle,
+  Zap, Search, Activity, Sparkles
 } from 'lucide-react';
 import CurrencyInput from '@/components/CurrencyInput';
 import { getWIBDateString } from '@/lib/dateUtils';
@@ -30,6 +31,15 @@ export default function InvestasiPage() {
   const [formLoading, setFormLoading] = useState(false);
   const [formError, setFormError] = useState('');
   const [formSuccess, setFormSuccess] = useState('');
+
+  // Live Market Price States
+  const [tickerSymbol, setTickerSymbol] = useState('');
+  const [checkingPrice, setCheckingPrice] = useState(false);
+  const [liveQuote, setLiveQuote] = useState<{ price: number; change24h: number; name: string; currency: string; unit: string } | null>(null);
+  const [quoteError, setQuoteError] = useState('');
+  const [quantity, setQuantity] = useState('');
+  const [syncingAll, setSyncingAll] = useState(false);
+  const [livePricesCache, setLivePricesCache] = useState<Record<string, { price: number; change24h: number; name?: string }>>({});
 
   // Editing state
   const [editingAsset, setEditingAsset] = useState<any | null>(null);
@@ -87,9 +97,107 @@ export default function InvestasiPage() {
     }
   }, []);
 
-  useEffect(() => {
-    fetchInvestasi();
-  }, [fetchInvestasi]);
+  // Helper to extract ticker from asset name/category
+  const extractTicker = useCallback((assetName: string, assetCat: string): string | null => {
+    const upper = assetName.toUpperCase();
+    if (assetCat === 'Emas' || upper.includes('EMAS') || upper.includes('ANTAM') || upper.includes('LOGAM MULIA')) return 'EMAS';
+    if (upper.includes('BTC') || upper.includes('BITCOIN')) return 'BTC';
+    if (upper.includes('ETH') || upper.includes('ETHEREUM')) return 'ETH';
+    if (upper.includes('SOL') || upper.includes('SOLANA')) return 'SOL';
+    if (upper.includes('DOGE')) return 'DOGE';
+    if (upper.includes('USDT')) return 'USDT';
+    if (upper.includes('BNB')) return 'BNB';
+    if (upper.includes('XRP')) return 'XRP';
+
+    // Match 4-letter stock code like BBCA, BBRI, BMRI, GOTO, TLKM, ASII
+    const stockMatch = upper.match(/\b([A-Z]{4})\b/);
+    if (stockMatch) return stockMatch[1];
+    return null;
+  }, []);
+
+  // Check live market price from our Next.js API route
+  const handleCheckPrice = async (symbolOverride?: string) => {
+    const sym = (symbolOverride || tickerSymbol || extractTicker(nama, kategori) || '').trim();
+    if (!sym) {
+      setQuoteError('⚠️ Masukkan kode ticker simbol (misal: BBCA, BTC, EMAS)');
+      return;
+    }
+
+    setCheckingPrice(true);
+    setQuoteError('');
+    try {
+      const res = await fetch(`/api/market-price?symbol=${encodeURIComponent(sym)}`);
+      const data = await res.json();
+      if (!data.success) {
+        setQuoteError(data.error || 'Simbol pasar tidak ditemukan.');
+        setLiveQuote(null);
+      } else {
+        setLiveQuote(data);
+        setQuoteError('');
+        if (!tickerSymbol) setTickerSymbol(sym);
+
+        // Auto-calculate nominal sekarang if quantity is already entered
+        if (quantity && Number(quantity) > 0) {
+          const qty = Number(quantity);
+          const isSaham = kategori === 'Saham' || data.category === 'Saham';
+          const calculatedVal = isSaham ? Math.round(qty * 100 * data.price) : Math.round(qty * data.price);
+          setNominalSekarang(String(calculatedVal));
+        }
+      }
+    } catch (e: any) {
+      setQuoteError('Gagal menghubungi live server pasar.');
+    } finally {
+      setCheckingPrice(false);
+    }
+  };
+
+  // Sync live market prices for all tracked portfolio assets
+  const handleSyncAllLivePrices = async () => {
+    if (investasiList.length === 0) return;
+    setSyncingAll(true);
+    const updatedCache: Record<string, { price: number; change24h: number; name?: string }> = { ...livePricesCache };
+
+    try {
+      for (const item of investasiList) {
+        const sym = extractTicker(item.nama, item.kategori);
+        if (sym && !updatedCache[sym]) {
+          try {
+            const res = await fetch(`/api/market-price?symbol=${encodeURIComponent(sym)}`);
+            const data = await res.json();
+            if (data.success) {
+              updatedCache[sym] = {
+                price: data.price,
+                change24h: data.change24h,
+                name: data.name
+              };
+            }
+          } catch (fetchErr) {
+            console.warn(`Sync failed for ${sym}:`, fetchErr);
+          }
+        }
+      }
+      setLivePricesCache(updatedCache);
+    } finally {
+      setSyncingAll(false);
+    }
+  };
+
+  // Quick apply live value to an individual asset in database
+  const handleQuickUpdateAssetValue = async (asset: any, newNominal: number) => {
+    try {
+      const { error } = await supabase
+        .from('investasi')
+        .update({ nominal_sekarang: newNominal })
+        .eq('id', asset.id);
+
+      if (error) throw error;
+      fetchInvestasi(true);
+      alert(`✅ Nilai pasar "${asset.nama}" berhasil diperbarui ke Rp ${newNominal.toLocaleString('id-ID')}!`);
+    } catch (err: any) {
+      console.error(err);
+      alert(`Gagal memperbarui nilai pasar: ${err.message}`);
+    }
+  };
 
   // Handle Add Asset
   const handleAddAsset = async (e: React.FormEvent) => {
@@ -332,20 +440,31 @@ export default function InvestasiPage() {
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
 
       {/* Header */}
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
         <div>
           <h1 className="text-2xl font-bold text-white flex items-center gap-2">
             <Briefcase className="w-6 h-6 text-emerald-400" /> Portofolio Investasi
           </h1>
-          <p className="text-sm text-slate-400">Catat dan pantau pertumbuhan modal investasi Anda.</p>
+          <p className="text-sm text-slate-400">Pantau pertumbuhan modal & harga pasar langsung (IHSG, Crypto, Emas Antam).</p>
         </div>
-        <button
-          onClick={() => fetchInvestasi(true)}
-          className="p-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg transition"
-          title="Refresh Data"
-        >
-          <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleSyncAllLivePrices}
+            disabled={syncingAll || investasiList.length === 0}
+            className="px-3 py-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+            title="Cek harga pasar live untuk semua aset"
+          >
+            <Activity className={`w-3.5 h-3.5 ${syncingAll ? 'animate-spin' : ''}`} />
+            {syncingAll ? 'Menghubungkan...' : '⚡ Cek Harga Live'}
+          </button>
+          <button
+            onClick={() => fetchInvestasi(true)}
+            className="p-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg transition"
+            title="Refresh Data"
+          >
+            <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+          </button>
+        </div>
       </div>
 
       {/* Summary Cards */}
@@ -411,11 +530,85 @@ export default function InvestasiPage() {
               <label className="text-slate-400 font-semibold">Nama Aset Investasi</label>
               <input
                 type="text"
-                placeholder="Contoh: Saham BBRI, Reksadana Sucor"
+                placeholder="Contoh: Saham BBCA, Bitcoin, Emas Antam"
                 value={nama}
-                onChange={(e) => setNama(e.target.value)}
+                onChange={(e) => {
+                  setNama(e.target.value);
+                  const detected = extractTicker(e.target.value, kategori);
+                  if (detected && !tickerSymbol) setTickerSymbol(detected);
+                }}
                 className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 w-full text-white focus:outline-none focus:border-emerald-500"
               />
+            </div>
+
+            {/* Live Market Price Helper */}
+            <div className="p-3 bg-slate-950/70 border border-slate-800/80 rounded-xl space-y-2">
+              <div className="flex justify-between items-center">
+                <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-1">
+                  <Sparkles className="w-3 h-3" /> Live Market Price (Gratis)
+                </span>
+                <span className="text-[9px] text-slate-500 font-mono">IDX • Crypto • Emas</span>
+              </div>
+
+              <div className="flex gap-1.5">
+                <input
+                  type="text"
+                  placeholder="Ticker: BBCA, BTC, EMAS..."
+                  value={tickerSymbol}
+                  onChange={(e) => setTickerSymbol(e.target.value.toUpperCase())}
+                  className="bg-slate-900 border border-slate-700 rounded px-2.5 py-1 text-white text-xs font-mono uppercase focus:outline-none focus:border-emerald-500 flex-1"
+                />
+                <button
+                  type="button"
+                  onClick={() => handleCheckPrice()}
+                  disabled={checkingPrice}
+                  className="px-3 py-1 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/30 rounded text-xs font-bold transition flex items-center gap-1 cursor-pointer"
+                >
+                  <Search className={`w-3 h-3 ${checkingPrice ? 'animate-spin' : ''}`} />
+                  {checkingPrice ? 'Cek...' : 'Cari'}
+                </button>
+              </div>
+
+              {quoteError && <p className="text-[10px] text-rose-400">{quoteError}</p>}
+
+              {liveQuote && (
+                <div className="pt-1.5 border-t border-slate-800/60 space-y-2 text-[11px]">
+                  <div className="flex justify-between items-center">
+                    <span className="text-slate-300 font-bold">{liveQuote.name}</span>
+                    <span className={`font-mono font-bold px-1.5 py-0.5 rounded text-[10px] ${liveQuote.change24h >= 0 ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'}`}>
+                      {liveQuote.change24h >= 0 ? '+' : ''}{liveQuote.change24h}%
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="text-slate-400">Harga Terkini ({liveQuote.unit}):</span>
+                    <span className="font-mono font-extrabold text-white">Rp {liveQuote.price.toLocaleString('id-ID')}</span>
+                  </div>
+
+                  {/* Quantity calculator */}
+                  <div className="flex items-center gap-2 pt-1 border-t border-slate-800/40">
+                    <input
+                      type="number"
+                      step="any"
+                      placeholder={kategori === 'Saham' ? 'Jumlah Lot...' : 'Jumlah Unit / Gram...'}
+                      value={quantity}
+                      onChange={(e) => {
+                        const q = e.target.value;
+                        setQuantity(q);
+                        const num = Number(q) || 0;
+                        if (num > 0 && liveQuote) {
+                          const isSaham = kategori === 'Saham' || liveQuote.category === 'Saham';
+                          const calc = isSaham ? Math.round(num * 100 * liveQuote.price) : Math.round(num * liveQuote.price);
+                          setNominalSekarang(String(calc));
+                        }
+                      }}
+                      className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-white text-xs w-36 focus:outline-none font-mono"
+                    />
+                    <span className="text-[10px] text-slate-400">
+                      {kategori === 'Saham' ? 'lot (x100 lembar)' : 'unit'}
+                    </span>
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="space-y-1">
@@ -508,14 +701,28 @@ export default function InvestasiPage() {
                 const sekarang = Number(item.nominal_sekarang) || 0;
                 const diff = sekarang - modal;
                 const pct = modal > 0 ? (diff / modal) * 100 : 0;
+                const ticker = extractTicker(item.nama, item.kategori);
+                const liveData = ticker ? livePricesCache[ticker] : null;
 
                 return (
                   <div key={item.id} className="glass-card p-4 border-slate-700/50 flex flex-col justify-between space-y-3 text-xs relative group">
                     <div className="flex justify-between items-start">
                       <div>
-                        <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700 font-mono">
-                          {item.kategori}
-                        </span>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700 font-mono">
+                            {item.kategori}
+                          </span>
+                          {ticker && (
+                            <span className="text-[10px] font-bold text-emerald-400 font-mono bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">
+                              {ticker}
+                            </span>
+                          )}
+                          {liveData && (
+                            <span className={`text-[9px] font-mono font-bold px-1.5 py-0.5 rounded flex items-center gap-0.5 ${liveData.change24h >= 0 ? 'bg-emerald-500/20 text-emerald-300' : 'bg-rose-500/20 text-rose-300'}`}>
+                              Live: Rp {liveData.price.toLocaleString('id-ID')} ({liveData.change24h >= 0 ? '+' : ''}{liveData.change24h}%)
+                            </span>
+                          )}
+                        </div>
                         <h4 className="text-sm font-bold text-white mt-1.5">{item.nama}</h4>
                         {item.catatan && <p className="text-[10px] text-slate-500 mt-1 italic leading-tight">{item.catatan}</p>}
                       </div>
