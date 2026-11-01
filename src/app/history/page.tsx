@@ -6,6 +6,7 @@ import { KATEGORI_HISTORY_OPTIONS as KATEGORI_OPTIONS } from '@/config/categorie
 import { RefreshCw, Trash2, Calendar, Filter, Download, History, Search, CreditCard, Tag, ChevronLeft, ChevronRight } from 'lucide-react';
 import CurrencyInput from '@/components/CurrencyInput';
 import { getPaydayCycleRange } from '@/lib/gajianUtils';
+import { getWIBDateString } from '@/lib/dateUtils';
 
 export default function HistoryPage() {
   const [loading, setLoading] = useState(true);
@@ -17,7 +18,7 @@ export default function HistoryPage() {
   const [filterSumber, setFilterSumber] = useState('Semua');
   const [filterKategori, setFilterKategori] = useState('Semua');
   const [searchQuery, setSearchQuery] = useState('');
-  const [filterMonth, setFilterMonth] = useState(() => new Date().toISOString().split('T')[0].substring(0, 7)); // YYYY-MM
+  const [filterMonth, setFilterMonth] = useState(() => getWIBDateString().substring(0, 7)); // YYYY-MM (WIB)
   const [filterDateMode, setFilterDateMode] = useState<'bulan' | 'gajian' | 'range'>('bulan');
   const [customStartDate, setCustomStartDate] = useState('');
   const [customEndDate, setCustomEndDate] = useState('');
@@ -424,8 +425,10 @@ export default function HistoryPage() {
   });
 
   // Calculate summaries
-  const totalIn = filteredData.filter(t => t.tipe === 'Pemasukan').reduce((sum, t) => sum + Number(t.nominal), 0);
-  const totalOut = filteredData.filter(t => t.tipe === 'Pengeluaran').reduce((sum, t) => sum + Number(t.nominal), 0);
+  // Transfer Aset hanya pemindahan Bank<->Cash, bukan pemasukan/pengeluaran riil
+  const summaryData = filteredData.filter(t => (t.kategori || '').trim().toLowerCase() !== 'transfer aset');
+  const totalIn = summaryData.filter(t => t.tipe === 'Pemasukan').reduce((sum, t) => sum + Number(t.nominal), 0);
+  const totalOut = summaryData.filter(t => t.tipe === 'Pengeluaran').reduce((sum, t) => sum + Number(t.nominal), 0);
 
   if (loading) {
     return <div className="text-center text-emerald-400 py-20 animate-pulse">Memuat riwayat...</div>;

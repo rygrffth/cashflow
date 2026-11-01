@@ -290,11 +290,11 @@ export default function TransactionForm({ saldoBank, uangCash, onSuccess, onClos
             </span>
             <div className="flex flex-wrap gap-1.5">
               {[
-                { label: '🍛 Makan 25k', tipe: 'Pengeluaran', kat: 'Makan & Minum', nom: '25000', note: 'Makan siang' },
-                { label: '☕ Kopi 20k', tipe: 'Pengeluaran', kat: 'Makan & Minum', nom: '20000', note: 'Kopi / Cemilan' },
-                { label: '⛽ Bensin 30k', tipe: 'Pengeluaran', kat: 'Kendaraan', nom: '30000', note: 'Bensin' },
-                { label: '🛒 Mart 50k', tipe: 'Pengeluaran', kat: 'Belanja', nom: '50000', note: 'Minimarket' },
-                { label: '🅿️ Parkir 2k', tipe: 'Pengeluaran', kat: 'Kendaraan', nom: '2000', note: 'Parkir' }
+                { label: '🍛 Makan 25k', tipe: 'Pengeluaran', kat: 'Makan', nom: '25000', note: 'Makan siang' },
+                { label: '☕ Kopi 20k', tipe: 'Pengeluaran', kat: 'Makan', nom: '20000', note: 'Kopi / Cemilan' },
+                { label: '⛽ Bensin 30k', tipe: 'Pengeluaran', kat: 'Bensin / Mobilitas', nom: '30000', note: 'Bensin' },
+                { label: '🛒 Mart 50k', tipe: 'Pengeluaran', kat: 'Belanja Dapur', nom: '50000', note: 'Minimarket' },
+                { label: '🅿️ Parkir 2k', tipe: 'Pengeluaran', kat: 'Bensin / Mobilitas', nom: '2000', note: 'Parkir' }
               ].map((p, idx) => (
                 <button
                   key={idx}

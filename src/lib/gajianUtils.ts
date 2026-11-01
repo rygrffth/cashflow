@@ -220,9 +220,10 @@ export function getPaydayCycleRange(
   const daysInStartMonth = new Date(startYear, startMonth, 0).getDate();
   const clampedStartDay = Math.min(paydayDay, daysInStartMonth);
 
+  // End = day before the next cycle's (clamped) start, so cycles never overlap or leave gaps
   const daysInEndMonth = new Date(endYear, endMonth, 0).getDate();
-  const targetEndDay = paydayDay - 1;
-  const clampedEndDay = Math.min(targetEndDay, daysInEndMonth);
+  const nextStartDay = Math.min(paydayDay, daysInEndMonth);
+  const clampedEndDay = nextStartDay - 1 >= 1 ? nextStartDay - 1 : daysInEndMonth;
 
   const startDate = `${startYear}-${String(startMonth).padStart(2, '0')}-${String(clampedStartDay).padStart(2, '0')}`;
   const endDate = `${endYear}-${String(endMonth).padStart(2, '0')}-${String(clampedEndDay).padStart(2, '0')}`;
