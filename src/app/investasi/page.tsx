@@ -135,6 +135,50 @@ export default function InvestasiPage() {
     return null;
   }, []);
 
+  // Helper to determine unit type and multiplier (Lot vs Gram vs Koin)
+  const getUnitSpec = useCallback((cat: string, quote?: any) => {
+    const isEmas = cat === 'Emas' || quote?.symbol === 'EMAS' || quote?.category === 'Emas';
+    if (isEmas) {
+      return {
+        unitName: 'gram',
+        label: 'gram emas',
+        placeholder: 'Jumlah Gram...',
+        hint: '1 gram × harga pasar',
+        multiplier: 1
+      };
+    }
+
+    const isCrypto = cat === 'Crypto' || quote?.category === 'Crypto';
+    if (isCrypto) {
+      return {
+        unitName: 'koin',
+        label: 'koin / token',
+        placeholder: 'Jumlah Koin (BTC/ETH)...',
+        hint: 'koin × harga pasar',
+        multiplier: 1
+      };
+    }
+
+    const isSaham = cat === 'Saham' || quote?.category === 'Saham';
+    if (isSaham) {
+      return {
+        unitName: 'lot',
+        label: 'lot saham (1 lot = 100 lbr)',
+        placeholder: 'Jumlah Lot...',
+        hint: '1 lot = 100 lembar × harga',
+        multiplier: 100
+      };
+    }
+
+    return {
+      unitName: 'unit',
+      label: 'unit penyertaan',
+      placeholder: 'Jumlah Unit...',
+      hint: 'unit × harga per unit',
+      multiplier: 1
+    };
+  }, []);
+
   // Check live market price from our Next.js API route
   const handleCheckPrice = async (symbolOverride?: string) => {
     const sym = (symbolOverride || tickerSymbol || extractTicker(nama, kategori) || '').trim();
@@ -156,11 +200,24 @@ export default function InvestasiPage() {
         setQuoteError('');
         if (!tickerSymbol) setTickerSymbol(sym);
 
+        // Auto-switch category based on live quote
+        let targetCat = kategori;
+        if (data.symbol === 'EMAS' || data.category === 'Emas') {
+          targetCat = 'Emas';
+          setKategori('Emas');
+        } else if (data.category === 'Crypto') {
+          targetCat = 'Crypto';
+          setKategori('Crypto');
+        } else if (data.category === 'Saham') {
+          targetCat = 'Saham';
+          setKategori('Saham');
+        }
+
         // Auto-calculate nominal sekarang if quantity is already entered
         if (quantity && Number(quantity) > 0) {
           const qty = Number(quantity);
-          const isSaham = kategori === 'Saham' || data.category === 'Saham';
-          const calculatedVal = isSaham ? Math.round(qty * 100 * data.price) : Math.round(qty * data.price);
+          const spec = getUnitSpec(targetCat, data);
+          const calculatedVal = Math.round(qty * spec.multiplier * data.price);
           setNominalSekarang(String(calculatedVal));
         }
       }
@@ -749,28 +806,39 @@ export default function InvestasiPage() {
                   </div>
 
                   {/* Quantity calculator */}
-                  <div className="flex items-center gap-2 pt-1 border-t border-slate-800/40">
-                    <input
-                      type="number"
-                      step="any"
-                      placeholder={kategori === 'Saham' ? 'Jumlah Lot...' : 'Jumlah Unit / Gram...'}
-                      value={quantity}
-                      onChange={(e) => {
-                        const q = e.target.value;
-                        setQuantity(q);
-                        const num = Number(q) || 0;
-                        if (num > 0 && liveQuote) {
-                          const isSaham = kategori === 'Saham' || liveQuote.category === 'Saham';
-                          const calc = isSaham ? Math.round(num * 100 * liveQuote.price) : Math.round(num * liveQuote.price);
-                          setNominalSekarang(String(calc));
-                        }
-                      }}
-                      className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-white text-xs w-36 focus:outline-none font-mono"
-                    />
-                    <span className="text-[10px] text-slate-400">
-                      {kategori === 'Saham' ? 'lot (x100 lembar)' : 'unit'}
-                    </span>
-                  </div>
+                  {(() => {
+                    const unitSpec = getUnitSpec(kategori, liveQuote);
+                    return (
+                      <div className="flex flex-col gap-1.5 pt-1.5 border-t border-slate-800/40">
+                        <div className="flex justify-between items-center text-[10px]">
+                          <span className="text-slate-400 font-semibold">Hitung Otomatis Berdasarkan Jumlah Unit:</span>
+                          <span className="text-emerald-400 font-mono text-[9px]">{unitSpec.hint}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="number"
+                            step="any"
+                            placeholder={unitSpec.placeholder}
+                            value={quantity}
+                            onChange={(e) => {
+                              const q = e.target.value;
+                              setQuantity(q);
+                              const num = Number(q) || 0;
+                              if (num > 0 && liveQuote) {
+                                const spec = getUnitSpec(kategori, liveQuote);
+                                const calc = Math.round(num * spec.multiplier * liveQuote.price);
+                                setNominalSekarang(String(calc));
+                              }
+                            }}
+                            className="bg-slate-900 border border-slate-700 rounded px-2.5 py-1 text-white text-xs w-40 focus:outline-none focus:border-emerald-500 font-mono"
+                          />
+                          <span className="text-xs text-slate-300 font-bold bg-slate-900 px-2 py-1 rounded border border-slate-800">
+                            {unitSpec.label}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
               )}
             </div>
@@ -779,7 +847,15 @@ export default function InvestasiPage() {
               <label className="text-slate-400 font-semibold">Kategori</label>
               <select
                 value={kategori}
-                onChange={(e) => setKategori(e.target.value)}
+                onChange={(e) => {
+                  const newCat = e.target.value;
+                  setKategori(newCat);
+                  if (quantity && Number(quantity) > 0 && liveQuote) {
+                    const spec = getUnitSpec(newCat, liveQuote);
+                    const calc = Math.round(Number(quantity) * spec.multiplier * liveQuote.price);
+                    setNominalSekarang(String(calc));
+                  }
+                }}
                 className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 w-full text-white focus:outline-none focus:border-emerald-500"
               >
                 <option value="Saham">Saham</option>
