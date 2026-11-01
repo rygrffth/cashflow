@@ -3,8 +3,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { KATEGORI_HISTORY_OPTIONS as KATEGORI_OPTIONS } from '@/config/categories';
-import { RefreshCw, Trash2, Calendar, Filter, Download, History, Search, CreditCard, Tag } from 'lucide-react';
+import { RefreshCw, Trash2, Calendar, Filter, Download, History, Search, CreditCard, Tag, ChevronLeft, ChevronRight } from 'lucide-react';
 import CurrencyInput from '@/components/CurrencyInput';
+import { getPaydayCycleRange } from '@/lib/gajianUtils';
 
 export default function HistoryPage() {
   const [loading, setLoading] = useState(true);
@@ -17,9 +18,11 @@ export default function HistoryPage() {
   const [filterKategori, setFilterKategori] = useState('Semua');
   const [searchQuery, setSearchQuery] = useState('');
   const [filterMonth, setFilterMonth] = useState(() => new Date().toISOString().split('T')[0].substring(0, 7)); // YYYY-MM
-  const [filterDateMode, setFilterDateMode] = useState<'bulan' | 'range'>('bulan');
+  const [filterDateMode, setFilterDateMode] = useState<'bulan' | 'gajian' | 'range'>('bulan');
   const [customStartDate, setCustomStartDate] = useState('');
   const [customEndDate, setCustomEndDate] = useState('');
+  const [gajianDate, setGajianDate] = useState('25');
+  const [gajianCycleOffset, setGajianCycleOffset] = useState(0);
 
   // Edit Mode States
   const [isEditMode, setIsEditMode] = useState(false);
@@ -45,6 +48,13 @@ export default function HistoryPage() {
 
       if (error) throw error;
       setTransactions(data || []);
+
+      // Fetch settings for payday cycle
+      const { data: setts } = await supabase.from('settings').select('*');
+      if (setts) {
+        const gSet = setts.find(s => s.key === 'tanggal_gajian');
+        if (gSet && gSet.value) setGajianDate(gSet.value);
+      }
     } catch (e) {
       console.error(e);
     } finally {
@@ -368,14 +378,22 @@ export default function HistoryPage() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.setAttribute("href", url);
-    const downloadName = filterDateMode === 'bulan'
-      ? `riwayat_transaksi_${filterMonth || 'semua'}.csv`
-      : `riwayat_transaksi_${customStartDate || 'awal'}_sd_${customEndDate || 'akhir'}.csv`;
+    let downloadName = `riwayat_transaksi_${filterMonth || 'semua'}.csv`;
+    if (filterDateMode === 'gajian') {
+      downloadName = `riwayat_transaksi_siklus_gajian_${activePaydayCycle.startDate}_sd_${activePaydayCycle.endDate}.csv`;
+    } else if (filterDateMode === 'range') {
+      downloadName = `riwayat_transaksi_${customStartDate || 'awal'}_sd_${customEndDate || 'akhir'}.csv`;
+    }
     link.setAttribute("download", downloadName);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
   };
+
+  // Active Payday Cycle range based on settings and offset
+  const activePaydayCycle = React.useMemo(() => {
+    return getPaydayCycleRange(gajianDate, undefined, gajianCycleOffset);
+  }, [gajianDate, gajianCycleOffset]);
 
   // Derived filtered data
   const filteredData = transactions.filter(t => {
@@ -385,6 +403,12 @@ export default function HistoryPage() {
     let matchDate = true;
     if (filterDateMode === 'bulan') {
       matchDate = !filterMonth || (t.tanggal ? t.tanggal.startsWith(filterMonth) : false);
+    } else if (filterDateMode === 'gajian') {
+      if (t.tanggal) {
+        matchDate = t.tanggal >= activePaydayCycle.startDate && t.tanggal <= activePaydayCycle.endDate;
+      } else {
+        matchDate = false;
+      }
     } else {
       if (customStartDate && (!t.tanggal || t.tanggal < customStartDate)) matchDate = false;
       if (customEndDate && (!t.tanggal || t.tanggal > customEndDate)) matchDate = false;
@@ -439,13 +463,13 @@ export default function HistoryPage() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="glass-card p-4 border-slate-700/50">
           <p className="text-xs text-slate-400 font-semibold mb-1">
-            PEMASUKAN {filterSumber !== 'Semua' ? filterSumber.toUpperCase() : ''} {filterDateMode === 'bulan' ? 'BULAN INI' : 'PERIODE TERPILIH'}
+            PEMASUKAN {filterSumber !== 'Semua' ? filterSumber.toUpperCase() : ''} {filterDateMode === 'bulan' ? 'BULAN INI' : filterDateMode === 'gajian' ? `SIKLUS GAJIAN (${activePaydayCycle.formattedLabel})` : 'PERIODE TERPILIH'}
           </p>
           <p className="text-xl font-bold text-emerald-400">Rp {totalIn.toLocaleString('id-ID')}</p>
         </div>
         <div className="glass-card p-4 border-slate-700/50">
           <p className="text-xs text-slate-400 font-semibold mb-1">
-            PENGELUARAN {filterSumber !== 'Semua' ? filterSumber.toUpperCase() : ''} {filterDateMode === 'bulan' ? 'BULAN INI' : 'PERIODE TERPILIH'}
+            PENGELUARAN {filterSumber !== 'Semua' ? filterSumber.toUpperCase() : ''} {filterDateMode === 'bulan' ? 'BULAN INI' : filterDateMode === 'gajian' ? `SIKLUS GAJIAN (${activePaydayCycle.formattedLabel})` : 'PERIODE TERPILIH'}
           </p>
           <p className="text-xl font-bold text-rose-400">Rp {totalOut.toLocaleString('id-ID')}</p>
         </div>
@@ -462,21 +486,28 @@ export default function HistoryPage() {
       {/* Filters & Bulk Operations bar */}
       <div className="glass-card p-4 border-slate-700/50 flex flex-col gap-3">
         <div className="flex flex-wrap items-center gap-3">
-          {/* Mode Switcher: Bulan vs Rentang Tanggal */}
+          {/* Mode Switcher: 3 Modes */}
           <div className="flex items-center bg-slate-900 border border-slate-700 rounded-lg p-0.5 text-xs">
             <button
               type="button"
               onClick={() => setFilterDateMode('bulan')}
               className={`px-2.5 py-1 rounded-md font-semibold transition cursor-pointer ${filterDateMode === 'bulan' ? 'bg-emerald-500 text-slate-950 shadow' : 'text-slate-400 hover:text-white'}`}
             >
-              Per Bulan
+              🗓️ Per Bulan
+            </button>
+            <button
+              type="button"
+              onClick={() => setFilterDateMode('gajian')}
+              className={`px-2.5 py-1 rounded-md font-semibold transition cursor-pointer ${filterDateMode === 'gajian' ? 'bg-emerald-500 text-slate-950 shadow' : 'text-slate-400 hover:text-white'}`}
+            >
+              💰 Siklus Gajian
             </button>
             <button
               type="button"
               onClick={() => setFilterDateMode('range')}
               className={`px-2.5 py-1 rounded-md font-semibold transition cursor-pointer ${filterDateMode === 'range' ? 'bg-emerald-500 text-slate-950 shadow' : 'text-slate-400 hover:text-white'}`}
             >
-              Rentang Tanggal
+              🔍 Rentang Bebas
             </button>
           </div>
 
@@ -491,6 +522,39 @@ export default function HistoryPage() {
                 onClick={(e) => (e.target as any).showPicker()}
                 className="bg-slate-900 border border-slate-700 rounded px-2.5 py-1.5 text-xs text-white focus:border-emerald-500 outline-none w-36 cursor-pointer"
               />
+            </div>
+          ) : filterDateMode === 'gajian' ? (
+            <div className="flex items-center gap-1.5 bg-slate-900/80 border border-emerald-500/30 rounded-lg px-2.5 py-1 text-xs">
+              <button
+                type="button"
+                onClick={() => setGajianCycleOffset(prev => prev + 1)}
+                className="p-1 text-slate-400 hover:text-white hover:bg-slate-800 rounded transition cursor-pointer"
+                title="Siklus Sebelumnya"
+              >
+                <ChevronLeft className="w-3.5 h-3.5" />
+              </button>
+              <span className="font-semibold text-emerald-300 px-1 select-none text-[11px] sm:text-xs">
+                {activePaydayCycle.formattedLabel}
+                {gajianCycleOffset > 0 ? ` (${gajianCycleOffset} siklus lalu)` : ' (Aktif)'}
+              </span>
+              <button
+                type="button"
+                onClick={() => setGajianCycleOffset(prev => Math.max(0, prev - 1))}
+                disabled={gajianCycleOffset === 0}
+                className="p-1 text-slate-400 hover:text-white hover:bg-slate-800 rounded transition cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+                title="Siklus Berikutnya"
+              >
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+              {gajianCycleOffset > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setGajianCycleOffset(0)}
+                  className="text-[10px] text-emerald-400 hover:underline ml-1 font-bold cursor-pointer"
+                >
+                  Reset
+                </button>
+              )}
             </div>
           ) : (
             <div className="flex flex-wrap items-center gap-1.5 bg-slate-900/60 border border-slate-800 rounded-lg p-1">

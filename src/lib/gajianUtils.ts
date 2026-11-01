@@ -127,3 +127,112 @@ export function calculateGajianCycle(
     dayOfMonth: paydayDay,
   };
 }
+
+export interface PaydayCycleRange {
+  startDate: string; // "YYYY-MM-DD"
+  endDate: string;   // "YYYY-MM-DD"
+  formattedLabel: string; // e.g. "25 Okt - 24 Nov 2026"
+  paydayDay: number;
+}
+
+/**
+ * Calculates the exact Start and End dates for a Payday Cycle.
+ * E.g. If payday is on the 25th, on 1 Nov 2026 the active cycle is 25 Oct 2026 - 24 Nov 2026.
+ * Supports cycleOffset: 0 = current cycle, 1 = 1 cycle ago, 2 = 2 cycles ago, etc.
+ */
+export function getPaydayCycleRange(
+  storedValue: string | null | undefined,
+  currentDateStr?: string,
+  cycleOffset: number = 0
+): PaydayCycleRange {
+  // 1. Get reference date
+  let todayStr = currentDateStr;
+  if (!todayStr) {
+    const now = new Date();
+    const wibTime = new Date(now.getTime() + 3600000 * 7);
+    todayStr = wibTime.toISOString().split('T')[0];
+  }
+
+  const [refYear, refMonth, refDay] = todayStr.split('-').map(Number);
+
+  // 2. Parse payday day number
+  let paydayDay = 25;
+  if (storedValue && storedValue.trim()) {
+    const cleanVal = storedValue.trim();
+    if (cleanVal.includes('-')) {
+      const parts = cleanVal.split('-');
+      if (parts.length === 3) {
+        const p = parseInt(parts[2], 10);
+        if (!isNaN(p) && p >= 1 && p <= 31) paydayDay = p;
+      }
+    } else {
+      const p = parseInt(cleanVal, 10);
+      if (!isNaN(p) && p >= 1 && p <= 31) paydayDay = p;
+    }
+  }
+
+  const monthNamesId = [
+    'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun',
+    'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'
+  ];
+
+  // If payday is day 1, cycle is always calendar month
+  if (paydayDay === 1) {
+    let targetYear = refYear;
+    let targetMonth = refMonth - cycleOffset;
+    while (targetMonth < 1) {
+      targetMonth += 12;
+      targetYear -= 1;
+    }
+    const daysInMonth = new Date(targetYear, targetMonth, 0).getDate();
+    const startStr = `${targetYear}-${String(targetMonth).padStart(2, '0')}-01`;
+    const endStr = `${targetYear}-${String(targetMonth).padStart(2, '0')}-${String(daysInMonth).padStart(2, '0')}`;
+    const label = `1 - ${daysInMonth} ${monthNamesId[targetMonth - 1]} ${targetYear}`;
+    return { startDate: startStr, endDate: endStr, formattedLabel: label, paydayDay };
+  }
+
+  // Base start month and year
+  // If today is before payday, cycle started in previous month
+  let baseStartYear = refYear;
+  let baseStartMonth = refDay < paydayDay ? refMonth - 1 : refMonth;
+  if (baseStartMonth < 1) {
+    baseStartMonth += 12;
+    baseStartYear -= 1;
+  }
+
+  // Apply cycleOffset
+  let startYear = baseStartYear;
+  let startMonth = baseStartMonth - cycleOffset;
+  while (startMonth < 1) {
+    startMonth += 12;
+    startYear -= 1;
+  }
+
+  // End month is 1 month after start month
+  let endYear = startYear;
+  let endMonth = startMonth + 1;
+  if (endMonth > 12) {
+    endMonth = 1;
+    endYear += 1;
+  }
+
+  // Clamp days
+  const daysInStartMonth = new Date(startYear, startMonth, 0).getDate();
+  const clampedStartDay = Math.min(paydayDay, daysInStartMonth);
+
+  const daysInEndMonth = new Date(endYear, endMonth, 0).getDate();
+  const targetEndDay = paydayDay - 1;
+  const clampedEndDay = Math.min(targetEndDay, daysInEndMonth);
+
+  const startDate = `${startYear}-${String(startMonth).padStart(2, '0')}-${String(clampedStartDay).padStart(2, '0')}`;
+  const endDate = `${endYear}-${String(endMonth).padStart(2, '0')}-${String(clampedEndDay).padStart(2, '0')}`;
+
+  const formattedLabel = `${clampedStartDay} ${monthNamesId[startMonth - 1]} - ${clampedEndDay} ${monthNamesId[endMonth - 1]} ${endYear}`;
+
+  return {
+    startDate,
+    endDate,
+    formattedLabel,
+    paydayDay
+  };
+}

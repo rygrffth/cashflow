@@ -14,7 +14,7 @@ import {
   AreaChart, Area
 } from 'recharts';
 import { getWIBDateString, parseDateParts } from '@/lib/dateUtils';
-import { calculateGajianCycle } from '@/lib/gajianUtils';
+import { calculateGajianCycle, getPaydayCycleRange } from '@/lib/gajianUtils';
 import { computeFinancialBalances } from '@/lib/balanceUtils';
 
 export default function AnalyticsPage() {
@@ -30,7 +30,7 @@ export default function AnalyticsPage() {
   const [activeTab, setActiveTab] = useState<'grafik' | 'laporan'>('grafik');
 
   // Grafik Filter States
-  const [graphRange, setGraphRange] = useState<'hari' | 'minggu' | 'bulan' | 'tahun' | 'semua' | 'custom'>('bulan');
+  const [graphRange, setGraphRange] = useState<'hari' | 'minggu' | 'bulan' | 'gajian' | 'tahun' | 'semua' | 'custom'>('bulan');
   const [customStart, setCustomStart] = useState(() => {
     const d = new Date();
     d.setDate(d.getDate() - 30);
@@ -39,9 +39,10 @@ export default function AnalyticsPage() {
   const [customEnd, setCustomEnd] = useState(() => getWIBDateString());
 
   // Laporan Filter States
-  const [laporanMode, setLaporanMode] = useState<'minggu' | 'bulan' | 'custom'>('bulan');
+  const [laporanMode, setLaporanMode] = useState<'minggu' | 'bulan' | 'gajian' | 'custom'>('bulan');
   const [selectedBulanOffset, setSelectedBulanOffset] = useState(0); // 0 = Bulan ini, 1 = 1 bulan lalu, dst.
   const [selectedMingguOffset, setSelectedMingguOffset] = useState(0); // 0 = Minggu ini, 1 = 1 minggu lalu, dst.
+  const [selectedGajianOffset, setSelectedGajianOffset] = useState(0); // 0 = Siklus gajian ini, 1 = 1 siklus lalu, dst.
   const [laporanCustomStart, setLaporanCustomStart] = useState(() => {
     const d = new Date();
     d.setDate(d.getDate() - 30);
@@ -307,6 +308,10 @@ export default function AnalyticsPage() {
     } else if (graphRange === 'bulan') {
       startLimit = new Date(today.getFullYear(), today.getMonth(), 1);
       endLimit = new Date();
+    } else if (graphRange === 'gajian') {
+      const gCycle = getPaydayCycleRange(gajianDate, getWIBDateString(), 0);
+      startLimit = new Date(gCycle.startDate + 'T00:00:00');
+      endLimit = new Date(gCycle.endDate + 'T23:59:59.999');
     } else if (graphRange === 'tahun') {
       startLimit = new Date(today.getFullYear(), 0, 1);
       endLimit = new Date();
@@ -326,7 +331,7 @@ export default function AnalyticsPage() {
       const d = new Date(t.tanggal);
       return d >= startLimit && d <= endLimit;
     });
-  }, [transactions, graphRange, customStart, customEnd]);
+  }, [transactions, graphRange, customStart, customEnd, gajianDate]);
 
   // 1. Chart: Daily spending trend (Bank vs Cash stacked + Total Line)
   const dailyTrendChartData = useMemo(() => {
@@ -547,6 +552,11 @@ export default function AnalyticsPage() {
       start = new Date(targetYear, targetMonth, 1);
       end = new Date(targetYear, targetMonth + 1, 0);
       label = start.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
+    } else if (laporanMode === 'gajian') {
+      const gCycle = getPaydayCycleRange(gajianDate, getWIBDateString(), selectedGajianOffset);
+      start = new Date(gCycle.startDate + 'T00:00:00');
+      end = new Date(gCycle.endDate + 'T23:59:59.999');
+      label = `Siklus ${selectedGajianOffset === 0 ? 'Aktif' : `${selectedGajianOffset} Lalu`} (${gCycle.formattedLabel})`;
     } else {
       start = new Date(laporanCustomStart);
       end = new Date(laporanCustomEnd);
@@ -556,7 +566,7 @@ export default function AnalyticsPage() {
     start.setHours(0, 0, 0, 0);
     end.setHours(23, 59, 59, 999);
     return { start, end, label };
-  }, [laporanMode, selectedBulanOffset, selectedMingguOffset, laporanCustomStart, laporanCustomEnd]);
+  }, [laporanMode, selectedBulanOffset, selectedMingguOffset, selectedGajianOffset, gajianDate, laporanCustomStart, laporanCustomEnd]);
 
   // Report calculations based on period limit
   const reportStats = useMemo(() => {
@@ -584,6 +594,19 @@ export default function AnalyticsPage() {
 
     return { totalIn, totalOut, avgHarian, netFlow, diffDays };
   }, [transactions, reportPeriodLimits]);
+
+  // Generating payday options dynamically (up to 6 cycles)
+  const gajianOptions = useMemo(() => {
+    const options = [];
+    for (let i = 0; i < 6; i++) {
+      const c = getPaydayCycleRange(gajianDate, undefined, i);
+      options.push({
+        value: i,
+        label: `Siklus ${i === 0 ? 'Aktif' : `${i} Lalu`} (${c.formattedLabel})`
+      });
+    }
+    return options;
+  }, [gajianDate]);
 
   // Generating monthly options dynamically for select box
   const monthOptions = useMemo(() => {
@@ -673,12 +696,19 @@ export default function AnalyticsPage() {
               >
                 <option value="hari">Hari Ini</option>
                 <option value="minggu">Minggu Ini</option>
-                <option value="bulan">Bulan Ini</option>
+                <option value="bulan">Bulan Ini (Kalender)</option>
+                <option value="gajian">💰 Siklus Gajian Aktif</option>
                 <option value="tahun">Tahun Ini</option>
                 <option value="semua">Semua Rentang</option>
                 <option value="custom">Rentang Kustom</option>
               </select>
             </div>
+
+            {graphRange === 'gajian' && (
+              <span className="px-2.5 py-1 bg-emerald-950/40 text-emerald-300 border border-emerald-500/30 rounded-lg text-xs font-semibold whitespace-nowrap">
+                📅 {getPaydayCycleRange(gajianDate, getWIBDateString(), 0).formattedLabel}
+              </span>
+            )}
 
             {graphRange === 'custom' && (
               <div className="flex items-center gap-2 w-full md:w-auto animate-fadeIn text-xs">
@@ -1141,6 +1171,12 @@ export default function AnalyticsPage() {
                   Bulanan
                 </button>
                 <button
+                  onClick={() => setLaporanMode('gajian')}
+                  className={`px-3 py-1 rounded text-[11px] font-bold ${laporanMode === 'gajian' ? 'bg-emerald-500 text-slate-950 shadow' : 'text-slate-400'}`}
+                >
+                  Siklus Gajian
+                </button>
+                <button
                   onClick={() => setLaporanMode('custom')}
                   className={`px-3 py-1 rounded text-[11px] font-bold ${laporanMode === 'custom' ? 'bg-slate-800 text-white' : 'text-slate-400'}`}
                 >
@@ -1148,6 +1184,21 @@ export default function AnalyticsPage() {
                 </button>
               </div>
             </div>
+
+            {laporanMode === 'gajian' && (
+              <div className="flex items-center gap-2 w-full md:w-auto animate-fadeIn text-xs">
+                <span className="text-slate-400 font-semibold whitespace-nowrap">Pilih Siklus Gajian:</span>
+                <select
+                  value={selectedGajianOffset}
+                  onChange={(e) => setSelectedGajianOffset(Number(e.target.value))}
+                  className="bg-slate-900 border border-emerald-500/40 text-emerald-300 font-medium rounded-lg px-2.5 py-1.5 focus:outline-none w-full cursor-pointer"
+                >
+                  {gajianOptions.map(opt => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             {laporanMode === 'minggu' && (
               <div className="flex items-center gap-2 w-full md:w-auto animate-fadeIn text-xs">
