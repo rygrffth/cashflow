@@ -5,8 +5,16 @@ import { supabase } from '@/lib/supabase';
 import {
   TrendingUp, TrendingDown, Briefcase, PlusCircle, Trash2,
   Pencil, RefreshCw, AlertTriangle, CheckCircle, Database, HelpCircle,
-  Zap, Search, Activity, Sparkles
+  Zap, Search, Activity, Sparkles, LineChart as ChartIcon, X
 } from 'lucide-react';
+import {
+  ResponsiveContainer,
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  Tooltip
+} from 'recharts';
 import CurrencyInput from '@/components/CurrencyInput';
 import { getWIBDateString } from '@/lib/dateUtils';
 import { computeFinancialBalances } from '@/lib/balanceUtils';
@@ -40,6 +48,18 @@ export default function InvestasiPage() {
   const [quantity, setQuantity] = useState('');
   const [syncingAll, setSyncingAll] = useState(false);
   const [livePricesCache, setLivePricesCache] = useState<Record<string, { price: number; change24h: number; name?: string }>>({});
+
+  // Market Benchmark & Interactive Chart Modal States
+  const [marketOverview, setMarketOverview] = useState<any | null>(null);
+  const [overviewLoading, setOverviewLoading] = useState(false);
+  const [activeChart, setActiveChart] = useState<{
+    symbol: string;
+    name: string;
+    unit: string;
+    range: string;
+    points: Array<{ date: string; price: number }>;
+    loading: boolean;
+  } | null>(null);
 
   // Editing state
   const [editingAsset, setEditingAsset] = useState<any | null>(null);
@@ -182,20 +202,52 @@ export default function InvestasiPage() {
     }
   };
 
-  // Quick apply live value to an individual asset in database
-  const handleQuickUpdateAssetValue = async (asset: any, newNominal: number) => {
+  // Fetch market overview benchmark
+  const fetchMarketOverview = useCallback(async () => {
+    setOverviewLoading(true);
     try {
-      const { error } = await supabase
-        .from('investasi')
-        .update({ nominal_sekarang: newNominal })
-        .eq('id', asset.id);
+      const res = await fetch('/api/market-price?overview=true');
+      const data = await res.json();
+      if (data && data.success) {
+        setMarketOverview(data);
+      }
+    } catch (e) {
+      console.warn('Failed to load market overview:', e);
+    } finally {
+      setOverviewLoading(false);
+    }
+  }, []);
 
-      if (error) throw error;
-      fetchInvestasi(true);
-      alert(`✅ Nilai pasar "${asset.nama}" berhasil diperbarui ke Rp ${newNominal.toLocaleString('id-ID')}!`);
-    } catch (err: any) {
-      console.error(err);
-      alert(`Gagal memperbarui nilai pasar: ${err.message}`);
+  useEffect(() => {
+    fetchMarketOverview();
+  }, [fetchMarketOverview]);
+
+  // Open interactive chart modal for an asset or market index
+  const openChartModal = async (symbol: string, name: string, unit: string, range = '7d') => {
+    setActiveChart({
+      symbol,
+      name,
+      unit,
+      range,
+      points: [],
+      loading: true
+    });
+
+    try {
+      const res = await fetch(`/api/market-price?symbol=${encodeURIComponent(symbol)}&range=${range}`);
+      const data = await res.json();
+      if (data.success && Array.isArray(data.chartData)) {
+        setActiveChart(prev => prev ? {
+          ...prev,
+          points: data.chartData,
+          loading: false
+        } : null);
+      } else {
+        setActiveChart(prev => prev ? { ...prev, loading: false } : null);
+      }
+    } catch (err) {
+      console.error('Failed to load chart data:', err);
+      setActiveChart(prev => prev ? { ...prev, loading: false } : null);
     }
   };
 
@@ -513,6 +565,118 @@ export default function InvestasiPage() {
         </div>
       </div>
 
+      {/* Market Benchmark Strip (IHSG, Emas, BTC, USD/IDR) */}
+      <div className="glass-card p-4 border-slate-800/80 bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950 space-y-3">
+        <div className="flex justify-between items-center">
+          <h3 className="text-xs font-extrabold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+            <Activity className="w-3.5 h-3.5 text-emerald-400" /> Acuan Pasar Realtime (Live Market Benchmark)
+          </h3>
+          <span className="text-[10px] text-slate-500 font-mono">Klik kartu untuk melihat grafik tren</span>
+        </div>
+
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {/* IHSG */}
+          <div
+            onClick={() => openChartModal('IHSG', 'IHSG (Indeks Saham Indonesia)', 'poin', '7d')}
+            className="p-3 bg-slate-900/60 hover:bg-slate-900/90 border border-slate-800 rounded-xl transition cursor-pointer group flex flex-col justify-between"
+          >
+            <div className="flex justify-between items-start">
+              <span className="text-[10px] text-slate-400 font-bold flex items-center gap-1">
+                🏛️ IHSG
+              </span>
+              {marketOverview?.ihsg && (
+                <span className={`text-[9px] font-mono font-bold px-1 py-0.2 rounded ${marketOverview.ihsg.change24h >= 0 ? 'text-emerald-400 bg-emerald-500/10' : 'text-rose-400 bg-rose-500/10'}`}>
+                  {marketOverview.ihsg.change24h >= 0 ? '+' : ''}{marketOverview.ihsg.change24h}%
+                </span>
+              )}
+            </div>
+            <div className="mt-2">
+              <p className="text-sm font-black font-mono text-white group-hover:text-emerald-400 transition">
+                {marketOverview?.ihsg ? marketOverview.ihsg.price.toLocaleString('id-ID') : 'Memuat...'}
+              </p>
+              <span className="text-[9px] text-slate-500 font-mono flex items-center gap-1 mt-0.5">
+                <ChartIcon className="w-2.5 h-2.5" /> Lihat Grafik
+              </span>
+            </div>
+          </div>
+
+          {/* Emas Logam Mulia */}
+          <div
+            onClick={() => openChartModal('EMAS', 'Emas Logam Mulia (Spot IDR)', 'Rp / gram', '7d')}
+            className="p-3 bg-slate-900/60 hover:bg-slate-900/90 border border-slate-800 rounded-xl transition cursor-pointer group flex flex-col justify-between"
+          >
+            <div className="flex justify-between items-start">
+              <span className="text-[10px] text-amber-300 font-bold flex items-center gap-1">
+                🪙 Emas Antam
+              </span>
+              {marketOverview?.gold && (
+                <span className={`text-[9px] font-mono font-bold px-1 py-0.2 rounded ${marketOverview.gold.change24h >= 0 ? 'text-emerald-400 bg-emerald-500/10' : 'text-rose-400 bg-rose-500/10'}`}>
+                  {marketOverview.gold.change24h >= 0 ? '+' : ''}{marketOverview.gold.change24h}%
+                </span>
+              )}
+            </div>
+            <div className="mt-2">
+              <p className="text-sm font-black font-mono text-white group-hover:text-amber-300 transition">
+                {marketOverview?.gold ? `Rp ${marketOverview.gold.price.toLocaleString('id-ID')}` : 'Memuat...'}
+              </p>
+              <span className="text-[9px] text-slate-500 font-mono flex items-center gap-1 mt-0.5">
+                <ChartIcon className="w-2.5 h-2.5" /> /gram • Grafik
+              </span>
+            </div>
+          </div>
+
+          {/* Bitcoin BTC */}
+          <div
+            onClick={() => openChartModal('BTC', 'Bitcoin (BTC / IDR)', 'IDR', '7d')}
+            className="p-3 bg-slate-900/60 hover:bg-slate-900/90 border border-slate-800 rounded-xl transition cursor-pointer group flex flex-col justify-between"
+          >
+            <div className="flex justify-between items-start">
+              <span className="text-[10px] text-amber-400 font-bold flex items-center gap-1">
+                ⚡ Bitcoin
+              </span>
+              {marketOverview?.btc && (
+                <span className={`text-[9px] font-mono font-bold px-1 py-0.2 rounded ${marketOverview.btc.change24h >= 0 ? 'text-emerald-400 bg-emerald-500/10' : 'text-rose-400 bg-rose-500/10'}`}>
+                  {marketOverview.btc.change24h >= 0 ? '+' : ''}{marketOverview.btc.change24h}%
+                </span>
+              )}
+            </div>
+            <div className="mt-2">
+              <p className="text-sm font-black font-mono text-white group-hover:text-amber-400 transition truncate">
+                {marketOverview?.btc ? `Rp ${(marketOverview.btc.price / 1000000).toFixed(1)} Jt` : 'Memuat...'}
+              </p>
+              <span className="text-[9px] text-slate-500 font-mono flex items-center gap-1 mt-0.5">
+                <ChartIcon className="w-2.5 h-2.5" /> Lihat Grafik
+              </span>
+            </div>
+          </div>
+
+          {/* USD / IDR */}
+          <div
+            onClick={() => openChartModal('USDIDR', 'Kurs USD / IDR', 'IDR', '7d')}
+            className="p-3 bg-slate-900/60 hover:bg-slate-900/90 border border-slate-800 rounded-xl transition cursor-pointer group flex flex-col justify-between"
+          >
+            <div className="flex justify-between items-start">
+              <span className="text-[10px] text-emerald-400 font-bold flex items-center gap-1">
+                💵 USD / IDR
+              </span>
+              {marketOverview?.usdidr && (
+                <span className={`text-[9px] font-mono font-bold px-1 py-0.2 rounded ${marketOverview.usdidr.change24h >= 0 ? 'text-emerald-400 bg-emerald-500/10' : 'text-rose-400 bg-rose-500/10'}`}>
+                  {marketOverview.usdidr.change24h >= 0 ? '+' : ''}{marketOverview.usdidr.change24h}%
+                </span>
+              )}
+            </div>
+            <div className="mt-2">
+              <p className="text-sm font-black font-mono text-white group-hover:text-emerald-400 transition">
+                {marketOverview?.usdidr ? `Rp ${marketOverview.usdidr.price.toLocaleString('id-ID')}` : 'Memuat...'}
+              </p>
+              <span className="text-[9px] text-slate-500 font-mono flex items-center gap-1 mt-0.5">
+                <ChartIcon className="w-2.5 h-2.5" /> Lihat Grafik
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* Main Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
 
@@ -728,7 +892,16 @@ export default function InvestasiPage() {
                       </div>
 
                       {/* Action buttons */}
-                      <div className="flex gap-1.5">
+                      <div className="flex gap-1.5 items-center">
+                        {ticker && (
+                          <button
+                            onClick={() => openChartModal(ticker, item.nama, item.kategori === 'Saham' ? 'Rp / lembar' : 'IDR', '7d')}
+                            className="p-1 hover:bg-emerald-500/10 rounded text-slate-400 hover:text-emerald-400 transition cursor-pointer"
+                            title={`Lihat Grafik Tren ${ticker}`}
+                          >
+                            <ChartIcon className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                         <button
                           onClick={() => openEditModal(item)}
                           className="p-1 hover:bg-slate-800 rounded text-slate-400 hover:text-white transition cursor-pointer"
@@ -981,6 +1154,158 @@ export default function InvestasiPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Interactive Market Chart Modal */}
+      {activeChart && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-md animate-fadeIn">
+          <div className="glass-card max-w-2xl w-full p-6 border-slate-750 space-y-4 shadow-2xl">
+            {/* Modal Header */}
+            <div className="flex justify-between items-start">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 font-mono font-bold text-xs border border-emerald-500/20">
+                    {activeChart.symbol}
+                  </span>
+                  <h3 className="text-base font-bold text-white">{activeChart.name}</h3>
+                </div>
+                <p className="text-xs text-slate-400 mt-1">
+                  Grafik tren harga pasar historis ({activeChart.unit})
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                {/* Range switcher */}
+                <div className="bg-slate-900 border border-slate-800 rounded-lg p-0.5 flex gap-1 text-[11px] font-mono">
+                  <button
+                    onClick={() => openChartModal(activeChart.symbol, activeChart.name, activeChart.unit, '7d')}
+                    className={`px-2 py-0.5 rounded font-bold transition cursor-pointer ${activeChart.range === '7d' ? 'bg-emerald-500 text-slate-950' : 'text-slate-400 hover:text-white'}`}
+                  >
+                    7D
+                  </button>
+                  <button
+                    onClick={() => openChartModal(activeChart.symbol, activeChart.name, activeChart.unit, '1mo')}
+                    className={`px-2 py-0.5 rounded font-bold transition cursor-pointer ${activeChart.range === '1mo' ? 'bg-emerald-500 text-slate-950' : 'text-slate-400 hover:text-white'}`}
+                  >
+                    1M
+                  </button>
+                </div>
+
+                <button
+                  onClick={() => setActiveChart(null)}
+                  className="p-1 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Price Stats Banner */}
+            {activeChart.points.length > 0 && (() => {
+              const prices = activeChart.points.map(p => p.price);
+              const latestPrice = prices[prices.length - 1];
+              const minPrice = Math.min(...prices);
+              const maxPrice = Math.max(...prices);
+              const firstPrice = prices[0];
+              const diff = latestPrice - firstPrice;
+              const pct = firstPrice > 0 ? (diff / firstPrice) * 100 : 0;
+
+              return (
+                <div className="grid grid-cols-3 gap-2 p-3 bg-slate-950/70 border border-slate-800/80 rounded-xl text-xs">
+                  <div>
+                    <span className="text-[10px] text-slate-400 font-semibold">Harga Terakhir:</span>
+                    <p className="text-sm font-black font-mono text-white">
+                      {latestPrice.toLocaleString('id-ID')}
+                    </p>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-slate-400 font-semibold">Rentang (Min - Max):</span>
+                    <p className="text-xs font-mono text-slate-300">
+                      {minPrice.toLocaleString('id-ID')} - {maxPrice.toLocaleString('id-ID')}
+                    </p>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-slate-400 font-semibold">Perubahan Periode:</span>
+                    <p className={`text-xs font-black font-mono flex items-center gap-0.5 ${diff >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                      {diff >= 0 ? '+' : ''}{diff.toLocaleString('id-ID')} ({diff >= 0 ? '+' : ''}{pct.toFixed(2)}%)
+                    </p>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Recharts Chart Area */}
+            <div className="h-64 w-full bg-slate-950/40 rounded-xl p-2 border border-slate-900/60 flex items-center justify-center">
+              {activeChart.loading ? (
+                <div className="text-xs text-emerald-400 animate-pulse flex items-center gap-2">
+                  <Activity className="w-4 h-4 animate-spin" /> Mengambil data grafik pasar...
+                </div>
+              ) : activeChart.points.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={activeChart.points} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="chartGradient" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#10b981" stopOpacity={0.4} />
+                        <stop offset="95%" stopColor="#10b981" stopOpacity={0.0} />
+                      </linearGradient>
+                    </defs>
+                    <XAxis
+                      dataKey="date"
+                      tick={{ fill: '#64748b', fontSize: 10 }}
+                      tickLine={false}
+                      axisLine={{ stroke: '#334155' }}
+                      tickFormatter={(val: string) => (val ? val.slice(5) : '')}
+                    />
+                    <YAxis
+                      domain={['auto', 'auto']}
+                      tick={{ fill: '#64748b', fontSize: 10 }}
+                      tickLine={false}
+                      axisLine={false}
+                      orientation="right"
+                      tickFormatter={(val: number) => {
+                        if (val >= 1000000000) return `${(val / 1000000000).toFixed(1)}B`;
+                        if (val >= 1000000) return `${(val / 1000000).toFixed(1)}M`;
+                        if (val >= 1000) return `${(val / 1000).toFixed(0)}k`;
+                        return String(val);
+                      }}
+                    />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: '#0f172a',
+                        borderColor: '#334155',
+                        borderRadius: '0.5rem',
+                        fontSize: '11px',
+                        color: '#f8fafc'
+                      }}
+                      formatter={(val: any) => [`Rp ${Number(val).toLocaleString('id-ID')}`, 'Harga']}
+                      labelFormatter={(label: any) => `Tanggal: ${label}`}
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="price"
+                      stroke="#10b981"
+                      strokeWidth={2}
+                      fillOpacity={1}
+                      fill="url(#chartGradient)"
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              ) : (
+                <p className="text-xs text-slate-500 italic">Data grafik tidak tersedia untuk simbol ini.</p>
+              )}
+            </div>
+
+            <div className="flex justify-between items-center text-[10px] text-slate-500 pt-2 border-t border-slate-800">
+              <span>*Data bersumber dari Yahoo Finance & CoinGecko publik (delay ~15 menit).</span>
+              <button
+                onClick={() => setActiveChart(null)}
+                className="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded cursor-pointer"
+              >
+                Tutup
+              </button>
+            </div>
           </div>
         </div>
       )}
