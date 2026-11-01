@@ -2,7 +2,9 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { Eye, EyeOff, Wallet, Landmark, PiggyBank, Briefcase, Calendar, ShieldAlert, CalendarClock, ChevronRight, AlertTriangle } from 'lucide-react';
+import { Eye, EyeOff, Wallet, Landmark, PiggyBank, Briefcase, Calendar, ShieldAlert, CalendarClock, ChevronRight, AlertTriangle, Lock, Unlock, Key } from 'lucide-react';
+import { isPrivacyUnlocked, isMasterAdmin, getStoredSecondaryPassword, lockPrivacy, setActiveAccessCode } from '@/lib/authPrivacy';
+import PrivacyUnlockModal from './PrivacyUnlockModal';
 
 interface PortfolioProps {
   saldoBank: number;
@@ -54,6 +56,10 @@ export default function PortfolioGrid({
   const [showOp, setShowOp] = useState(false);
   const [showSettlement, setShowSettlement] = useState(false);
 
+  // Privacy Unlock Modal State
+  const [isUnlockModalOpen, setIsUnlockModalOpen] = useState(false);
+  const isUnlocked = isPrivacyUnlocked(secretCode);
+
   // Load preferences from localStorage on mount
   useEffect(() => {
     setIsMounted(true);
@@ -79,6 +85,11 @@ export default function PortfolioGrid({
     }
   };
 
+  const handleLockNow = () => {
+    lockPrivacy();
+    setSecretCode('');
+  };
+
   const formatCurrency = (value: number, show: boolean) => {
     if (!isMounted) return 'Rp ••••••••'; // Render placeholder on server to prevent mismatch
     return show ? `Rp ${value.toLocaleString('id-ID')}` : 'Rp ••••••••';
@@ -90,7 +101,31 @@ export default function PortfolioGrid({
         <h2 className="text-xl font-bold tracking-tight text-emerald-400 flex items-center gap-2">
           <span>💵</span> Portofolio Aset
         </h2>
+
+        {/* Quick Privacy Lock / Unlock Indicator */}
+        <div className="flex items-center gap-2">
+          {isUnlocked ? (
+            <button
+              onClick={handleLockNow}
+              className="px-2.5 py-1 text-xs font-semibold bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-lg flex items-center gap-1.5 transition cursor-pointer"
+              title="Klik untuk mengunci kembali data sensitif"
+            >
+              <Unlock className="w-3.5 h-3.5 text-emerald-400" />
+              <span>{isMasterAdmin(secretCode) ? 'Mode Admin (naufal)' : 'Akses Terbuka'} • Kunci</span>
+            </button>
+          ) : (
+            <button
+              onClick={() => setIsUnlockModalOpen(true)}
+              className="px-2.5 py-1 text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 rounded-lg flex items-center gap-1.5 transition cursor-pointer"
+              title="Buka data nominal tabungan, total aset, settlement"
+            >
+              <Lock className="w-3.5 h-3.5 text-amber-400" />
+              <span>Buka Data Sensitif</span>
+            </button>
+          )}
+        </div>
       </div>
+
 
       {/* Row 1: The 4 Primary Portfolio Cards (Horizontal Snap Scroll on Mobile, 4-col Grid on Desktop) */}
       <div className="flex md:grid md:grid-cols-2 lg:grid-cols-4 gap-4 overflow-x-auto no-scrollbar snap-x snap-mandatory pb-1 -mx-4 px-4 md:mx-0 md:px-0">
@@ -142,44 +177,82 @@ export default function PortfolioGrid({
         <div className="glass-card p-5 relative overflow-hidden flex flex-col justify-between min-h-[140px] min-w-[80vw] sm:min-w-[280px] md:min-w-0 snap-center shrink-0 md:shrink">
           <div className="flex justify-between items-start">
             <div>
-              <p className="text-xs font-semibold text-slate-400 tracking-wider uppercase mb-1">💰 Tabungan</p>
+              <div className="flex items-center gap-1.5 mb-1">
+                <p className="text-xs font-semibold text-slate-400 tracking-wider uppercase">💰 Tabungan</p>
+                {!isUnlocked && (
+                  <span className="text-[9px] text-amber-400 font-bold bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20">
+                    🔒 Terkunci
+                  </span>
+                )}
+              </div>
               <h3 className="text-xl font-bold text-white transition-all duration-300">
-                {formatCurrency(tabungan, showTabungan)}
+                {isUnlocked ? formatCurrency(tabungan, showTabungan) : 'Rp ••••••••'}
               </h3>
             </div>
             <span className="p-2 bg-amber-500/10 rounded-lg text-amber-400 border border-amber-500/20">
               <PiggyBank className="w-5 h-5" />
             </span>
           </div>
-          <button
-            onClick={() => handleToggle('show_tabungan', !showTabungan, setShowTabungan)}
-            className="self-end mt-4 p-1.5 hover:bg-slate-800/60 rounded text-slate-400 hover:text-white transition-colors"
-            title={showTabungan ? "Sembunyikan" : "Tampilkan"}
-          >
-            {showTabungan ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-          </button>
+          <div className="flex justify-end items-center gap-2 mt-4">
+            {!isUnlocked ? (
+              <button
+                onClick={() => setIsUnlockModalOpen(true)}
+                className="px-2 py-1 text-[11px] font-bold text-amber-400 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/20 rounded transition cursor-pointer flex items-center gap-1"
+                title="Buka data tabungan dengan password"
+              >
+                <Lock className="w-3 h-3" /> Buka Kunci
+              </button>
+            ) : (
+              <button
+                onClick={() => handleToggle('show_tabungan', !showTabungan, setShowTabungan)}
+                className="self-end p-1.5 hover:bg-slate-800/60 rounded text-slate-400 hover:text-white transition-colors cursor-pointer"
+                title={showTabungan ? "Sembunyikan" : "Tampilkan"}
+              >
+                {showTabungan ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Total Aset Card */}
         <div className="glass-card p-5 relative overflow-hidden flex flex-col justify-between min-h-[140px] min-w-[80vw] sm:min-w-[280px] md:min-w-0 snap-center shrink-0 md:shrink bg-gradient-to-br from-slate-900/40 via-emerald-950/10 to-slate-900/40">
           <div className="flex justify-between items-start">
             <div>
-              <p className="text-xs font-semibold text-emerald-400 tracking-wider uppercase mb-1">💎 Total Aset</p>
+              <div className="flex items-center gap-1.5 mb-1">
+                <p className="text-xs font-semibold text-emerald-400 tracking-wider uppercase">💎 Total Aset</p>
+                {!isUnlocked && (
+                  <span className="text-[9px] text-amber-400 font-bold bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20">
+                    🔒 Terkunci
+                  </span>
+                )}
+              </div>
               <h3 className="text-xl font-bold text-white transition-all duration-300">
-                {formatCurrency(totalAset, showAset)}
+                {isUnlocked ? formatCurrency(totalAset, showAset) : 'Rp ••••••••'}
               </h3>
             </div>
             <span className="p-2 bg-teal-500/15 rounded-lg text-teal-400 border border-teal-500/30 shadow-[0_0_15px_rgba(20,184,166,0.15)]">
               <span>💎</span>
             </span>
           </div>
-          <button
-            onClick={() => handleToggle('show_aset', !showAset, setShowAset)}
-            className="self-end mt-4 p-1.5 hover:bg-slate-800/60 rounded text-slate-400 hover:text-white transition-colors"
-            title={showAset ? "Sembunyikan" : "Tampilkan"}
-          >
-            {showAset ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-          </button>
+          <div className="flex justify-end items-center gap-2 mt-4">
+            {!isUnlocked ? (
+              <button
+                onClick={() => setIsUnlockModalOpen(true)}
+                className="px-2 py-1 text-[11px] font-bold text-teal-300 bg-teal-500/10 hover:bg-teal-500/20 border border-teal-500/20 rounded transition cursor-pointer flex items-center gap-1"
+                title="Buka data total aset dengan password"
+              >
+                <Lock className="w-3 h-3" /> Buka Kunci
+              </button>
+            ) : (
+              <button
+                onClick={() => handleToggle('show_aset', !showAset, setShowAset)}
+                className="self-end p-1.5 hover:bg-slate-800/60 rounded text-slate-400 hover:text-white transition-colors cursor-pointer"
+                title={showAset ? "Sembunyikan" : "Tampilkan"}
+              >
+                {showAset ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
@@ -216,10 +289,15 @@ export default function PortfolioGrid({
                 <p className="text-xs font-semibold text-slate-400 tracking-wider uppercase group-hover:text-rose-300 transition-colors">
                   ⏳ Scheduled Settlement
                 </p>
+                {!isUnlocked && (
+                  <span className="text-[9px] text-amber-400 font-bold bg-amber-500/10 px-1 py-0.2 rounded border border-amber-500/20">
+                    🔒 Terkunci
+                  </span>
+                )}
                 <ChevronRight className="w-3.5 h-3.5 text-slate-500 group-hover:text-rose-400 group-hover:translate-x-0.5 transition-all" />
               </div>
               <h3 className="text-lg font-bold text-rose-400 group-hover:text-rose-300 transition-colors">
-                {formatCurrency(settlementSum, showSettlement)}
+                {isUnlocked ? formatCurrency(settlementSum, showSettlement) : 'Rp ••••••••'}
               </h3>
               <div className="flex items-center gap-2 mt-1">
                 <span className="text-[10px] text-slate-400">{settlementCount} tagihan pending</span>
@@ -238,13 +316,23 @@ export default function PortfolioGrid({
             <Link href="/settlement" className="text-[10px] text-rose-400/80 hover:text-rose-300 flex items-center gap-1 font-semibold">
               Buka Jadwal <ChevronRight className="w-3 h-3" />
             </Link>
-            <button
-              onClick={() => handleToggle('show_settlement', !showSettlement, setShowSettlement)}
-              className="p-1 hover:bg-slate-800/60 rounded text-slate-400 hover:text-white transition-colors"
-              title={showSettlement ? "Sembunyikan" : "Tampilkan"}
-            >
-              {showSettlement ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-            </button>
+            {!isUnlocked ? (
+              <button
+                onClick={() => setIsUnlockModalOpen(true)}
+                className="px-2 py-0.5 text-[10px] font-bold text-rose-400 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 rounded transition cursor-pointer flex items-center gap-1"
+                title="Buka data tagihan dengan password"
+              >
+                <Lock className="w-2.5 h-2.5" /> Buka
+              </button>
+            ) : (
+              <button
+                onClick={() => handleToggle('show_settlement', !showSettlement, setShowSettlement)}
+                className="p-1 hover:bg-slate-800/60 rounded text-slate-400 hover:text-white transition-colors cursor-pointer"
+                title={showSettlement ? "Sembunyikan" : "Tampilkan"}
+              >
+                {showSettlement ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            )}
           </div>
         </div>
 
@@ -303,6 +391,17 @@ export default function PortfolioGrid({
           <div className="h-4"></div> {/* Spacing alignment */}
         </div>
       </div>
+
+      <PrivacyUnlockModal
+        isOpen={isUnlockModalOpen}
+        onClose={() => setIsUnlockModalOpen(false)}
+        onSuccess={(isMaster) => {
+          const pass = isMaster ? 'naufal' : getStoredSecondaryPassword();
+          setSecretCode(pass);
+          setIsUnlockModalOpen(false);
+        }}
+        title="Buka Kunci Data Sensitif"
+      />
     </div>
   );
 }

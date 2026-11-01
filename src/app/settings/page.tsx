@@ -2,10 +2,19 @@
 
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Settings, Save, Loader2, CalendarClock, Lock, Unlock, Database, Shuffle, Tags, Download, FileSpreadsheet, ShieldCheck } from 'lucide-react';
+import { Settings, Save, Loader2, CalendarClock, Lock, Unlock, Database, Shuffle, Tags, Download, FileSpreadsheet, ShieldCheck, Key } from 'lucide-react';
 import { BASE_CATEGORIES } from '@/config/categories';
 import { calculateGajianCycle } from '@/lib/gajianUtils';
 import CurrencyInput from '@/components/CurrencyInput';
+import {
+  MASTER_PASSWORD,
+  DEFAULT_SECONDARY_PASSWORD,
+  isMasterAdmin,
+  isPrivacyUnlocked,
+  getStoredSecondaryPassword,
+  setStoredSecondaryPassword,
+  setActiveAccessCode
+} from '@/lib/authPrivacy';
 
 export default function SettingsPage() {
   const [loading, setLoading] = useState(true);
@@ -19,6 +28,14 @@ export default function SettingsPage() {
   const [savingBuffer, setSavingBuffer] = useState(false);
   const [bufferSuccessMsg, setBufferSuccessMsg] = useState('');
   const [bufferErrorMsg, setBufferErrorMsg] = useState('');
+
+  // Secondary password management states
+  const [secondaryPass, setSecondaryPass] = useState(DEFAULT_SECONDARY_PASSWORD);
+  const [masterAuthInput, setMasterAuthInput] = useState('');
+  const [newSecondaryInput, setNewSecondaryInput] = useState('');
+  const [secPassSuccess, setSecPassSuccess] = useState('');
+  const [secPassError, setSecPassError] = useState('');
+  const [savingSecPass, setSavingSecPass] = useState(false);
 
   // Excluded categories settings states
   const [excludeCategories, setExcludeCategories] = useState<string[]>([
@@ -191,7 +208,7 @@ export default function SettingsPage() {
     }
   };
 
-  // Load secretCode and fakeOffset on mount
+  // Load secretCode, fakeOffset and secondaryPass on mount
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('secretCode') || '';
@@ -200,14 +217,69 @@ export default function SettingsPage() {
       if (savedOffset !== null && !isNaN(Number(savedOffset))) {
         setFakeOffset(Number(savedOffset));
       }
+      const savedSec = getStoredSecondaryPassword();
+      setSecondaryPass(savedSec);
     }
   }, []);
 
   const handleCodeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
     setLocalCode(val);
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('secretCode', val);
+    setActiveAccessCode(val);
+  };
+
+  const handleSaveSecondaryPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSecPassError('');
+    setSecPassSuccess('');
+
+    if (masterAuthInput.trim() !== MASTER_PASSWORD) {
+      setSecPassError('❌ Password utama salah! Wajib memasukkan password "naufal" untuk mengubah password kedua.');
+      return;
+    }
+
+    const newPass = newSecondaryInput.trim();
+    if (!newPass) {
+      setSecPassError('⚠️ Password tambahan baru tidak boleh kosong.');
+      return;
+    }
+
+    if (newPass === MASTER_PASSWORD) {
+      setSecPassError('⚠️ Password tambahan tidak boleh sama dengan password utama (naufal).');
+      return;
+    }
+
+    setSavingSecPass(true);
+    try {
+      const { data: existing } = await supabase
+        .from('settings')
+        .select('*')
+        .eq('key', 'secondary_password')
+        .single();
+
+      if (existing) {
+        const { error } = await supabase
+          .from('settings')
+          .update({ value: newPass, tipe_data: 'text' })
+          .eq('key', 'secondary_password');
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from('settings')
+          .insert([{ key: 'secondary_password', value: newPass, tipe_data: 'text' }]);
+        if (error) throw error;
+      }
+
+      setStoredSecondaryPassword(newPass);
+      setSecondaryPass(newPass);
+      setMasterAuthInput('');
+      setNewSecondaryInput('');
+      setSecPassSuccess(`✅ Password tambahan berhasil diubah menjadi "${newPass}"!`);
+    } catch (err: any) {
+      console.error(err);
+      setSecPassError(`Gagal memperbarui password: ${err.message || err}`);
+    } finally {
+      setSavingSecPass(false);
     }
   };
 
@@ -225,6 +297,17 @@ export default function SettingsPage() {
         if (error && error.code !== 'PGRST116') throw error; // ignore no rows error
         if (data && data.value) {
           setTanggalGajian(data.value);
+        }
+
+        const { data: secPassData, error: secPassErr } = await supabase
+          .from('settings')
+          .select('*')
+          .eq('key', 'secondary_password')
+          .single();
+        if (secPassErr && secPassErr.code !== 'PGRST116') throw secPassErr;
+        if (secPassData && secPassData.value) {
+          setSecondaryPass(secPassData.value);
+          setStoredSecondaryPassword(secPassData.value);
         }
 
         const { data: excludeData, error: excludeError } = await supabase
@@ -516,44 +599,58 @@ export default function SettingsPage() {
           </form>
         </div>
 
-        {/* Mode Admin settings card */}
-        <div className="glass-card p-6 border-slate-700/50 flex flex-col justify-between">
+        {/* Mode Admin & Keamanan Akses settings card */}
+        <div className="glass-card p-6 border-slate-700/50 flex flex-col justify-between space-y-6">
           <div>
-            <h2 className="text-lg font-bold text-slate-100 flex items-center gap-2 mb-4">
-              <Lock className="w-5 h-5 text-emerald-400" /> Mode Admin
+            <h2 className="text-lg font-bold text-slate-100 flex items-center gap-2 mb-2">
+              <ShieldCheck className="w-5 h-5 text-emerald-400" /> Mode Admin & Keamanan Akses
             </h2>
-            <p className="text-xs text-slate-400 mb-6 leading-relaxed">
-              Masukkan kode akses untuk mengaktifkan fitur tambahan.
+            <p className="text-xs text-slate-400 mb-5 leading-relaxed">
+              Masukkan password utama (<code>naufal</code>) untuk hak admin penuh, atau password tambahan (<code>{secondaryPass}</code>) untuk membuka nominal tabungan, settlement, portofolio & total aset.
             </p>
 
             <div className="space-y-4">
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-semibold text-slate-400">Password</label>
+                <label className="text-xs font-semibold text-slate-400">Status Akses / Kode Aktif</label>
                 <input
                   type="password"
-                  placeholder="Masukkan password..."
+                  placeholder="Masukkan password naufal atau rayhan..."
                   value={localCode}
                   onChange={handleCodeChange}
-                  className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-emerald-500 text-sm w-full"
+                  className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-emerald-500 text-sm w-full font-mono"
                 />
               </div>
 
-              <div className="p-3 bg-slate-950/40 rounded-lg border border-slate-800 text-xs font-medium flex items-center gap-2 transition-all">
-                {localCode === 'naufal' ? (
+              <div className="p-3 bg-slate-950/60 rounded-xl border border-slate-800 text-xs font-medium flex items-center gap-2 transition-all">
+                {isMasterAdmin(localCode) ? (
                   <>
-                    <Unlock className="w-4 h-4 text-rose-400 animate-pulse" />
-                    <span className="text-rose-400 font-bold">🔓 Mode Admin Aktif</span>
+                    <Unlock className="w-4 h-4 text-rose-400 animate-pulse shrink-0" />
+                    <div>
+                      <span className="text-rose-400 font-bold">🔓 Mode Master Admin (naufal) Aktif</span>
+                      <p className="text-[10px] text-slate-400 mt-0.5">Semua data terbuka dan hak admin penuh aktif.</p>
+                    </div>
+                  </>
+                ) : isPrivacyUnlocked(localCode, secondaryPass) ? (
+                  <>
+                    <Key className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <div>
+                      <span className="text-emerald-400 font-bold">🔑 Akses Terbuka (Password Kedua)</span>
+                      <p className="text-[10px] text-slate-400 mt-0.5">Nominal tabungan, settlement, portofolio, dan total aset terbuka.</p>
+                    </div>
                   </>
                 ) : (
                   <>
-                    <Lock className="w-4 h-4 text-emerald-400" />
-                    <span className="text-emerald-400 font-bold">🔒 Mode User Aktif</span>
+                    <Lock className="w-4 h-4 text-amber-400 shrink-0" />
+                    <div>
+                      <span className="text-amber-400 font-bold">🔒 Mode Privasi Terkunci</span>
+                      <p className="text-[10px] text-slate-400 mt-0.5">Nominal tabungan, settlement, portofolio, & total aset disamarkan.</p>
+                    </div>
                   </>
                 )}
               </div>
 
               <div className="flex flex-col gap-1.5 pt-1">
-                <label className="text-xs font-semibold text-slate-400">Nominal Penyamaran Total Aset (Mode User)</label>
+                <label className="text-xs font-semibold text-slate-400">Nominal Penyamaran Total Aset (Mode Terkunci)</label>
                 <CurrencyInput
                   placeholder="140.000.000"
                   value={fakeOffset}
@@ -561,9 +658,65 @@ export default function SettingsPage() {
                   className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-emerald-500 text-sm w-full"
                 />
                 <p className="text-[11px] text-slate-500 leading-tight">
-                  Nominal ini ditambahkan ke Total Aset & Tabungan saat berada di Mode User agar rasio Dana Operasional tetap klop dan konsisten.
+                  Nominal ini ditambahkan ke Total Aset & Tabungan saat berada di Mode Terkunci agar rasio Dana Operasional tetap klop dan konsisten.
                 </p>
               </div>
+            </div>
+
+            {/* Form Ubah Password Tambahan */}
+            <div className="mt-6 pt-5 border-t border-slate-800/80">
+              <h3 className="text-sm font-bold text-slate-200 flex items-center gap-2 mb-2">
+                <Key className="w-4 h-4 text-emerald-400" /> Ubah Password Tambahan (rayhan)
+              </h3>
+              <p className="text-[11px] text-slate-400 mb-3 leading-relaxed">
+                Untuk mengubah password tambahan kedua, wajib memasukkan <b>Password Utama (<code>naufal</code>)</b> sebagai otorisasi.
+              </p>
+
+              {secPassSuccess && (
+                <div className="mb-3 p-2.5 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs rounded font-medium">
+                  {secPassSuccess}
+                </div>
+              )}
+              {secPassError && (
+                <div className="mb-3 p-2.5 bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs rounded font-medium">
+                  {secPassError}
+                </div>
+              )}
+
+              <form onSubmit={handleSaveSecondaryPassword} className="space-y-3">
+                <div className="flex flex-col gap-1">
+                  <label className="text-[11px] font-semibold text-slate-400">1. Password Utama Otorisasi</label>
+                  <input
+                    type="password"
+                    placeholder="Masukkan password utama 'naufal'..."
+                    value={masterAuthInput}
+                    onChange={(e) => setMasterAuthInput(e.target.value)}
+                    className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-emerald-500 text-xs w-full font-mono"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label className="text-[11px] font-semibold text-slate-400">
+                    2. Password Tambahan Baru <span className="text-slate-500 font-normal">(Saat ini: {secondaryPass})</span>
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Masukkan password tambahan baru..."
+                    value={newSecondaryInput}
+                    onChange={(e) => setNewSecondaryInput(e.target.value)}
+                    className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-emerald-500 text-xs w-full font-mono"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={savingSecPass}
+                  className="w-full mt-1 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 border border-emerald-500/30 font-bold py-2 rounded-lg text-xs transition-all flex justify-center items-center gap-2 cursor-pointer disabled:opacity-50"
+                >
+                  {savingSecPass ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                  Simpan Password Tambahan Baru
+                </button>
+              </form>
             </div>
           </div>
         </div>

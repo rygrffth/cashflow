@@ -5,7 +5,7 @@ import { supabase } from '@/lib/supabase';
 import {
   TrendingUp, TrendingDown, Briefcase, PlusCircle, Trash2,
   Pencil, RefreshCw, AlertTriangle, CheckCircle, Database, HelpCircle,
-  Zap, Search, Activity, Sparkles, LineChart as ChartIcon, X
+  Zap, Search, Activity, Sparkles, LineChart as ChartIcon, X, Lock, Unlock, Key
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -19,12 +19,18 @@ import {
 import CurrencyInput from '@/components/CurrencyInput';
 import { getWIBDateString } from '@/lib/dateUtils';
 import { computeFinancialBalances } from '@/lib/balanceUtils';
+import { isPrivacyUnlocked, lockPrivacy, getStoredSecondaryPassword } from '@/lib/authPrivacy';
+import PrivacyUnlockModal from '@/components/PrivacyUnlockModal';
 
 export default function InvestasiPage() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [investasiList, setInvestasiList] = useState<any[]>([]);
   const [dbError, setDbError] = useState<string | null>(null);
+
+  // Privacy unlock state
+  const [isUnlocked, setIsUnlocked] = useState(false);
+  const [isUnlockModalOpen, setIsUnlockModalOpen] = useState(false);
 
   // Active balances for validation
   const [saldoBank, setSaldoBank] = useState(0);
@@ -306,6 +312,13 @@ export default function InvestasiPage() {
   useEffect(() => {
     fetchInvestasi();
   }, [fetchInvestasi]);
+
+  useEffect(() => {
+    setIsUnlocked(isPrivacyUnlocked());
+    const handlePrivacy = () => setIsUnlocked(isPrivacyUnlocked());
+    window.addEventListener('privacy-state-changed', handlePrivacy);
+    return () => window.removeEventListener('privacy-state-changed', handlePrivacy);
+  }, []);
 
   useEffect(() => {
     fetchMarketOverview();
@@ -593,6 +606,26 @@ export default function InvestasiPage() {
           <p className="text-sm text-slate-400">Pantau pertumbuhan modal & harga pasar langsung (IHSG, Crypto, Emas Antam).</p>
         </div>
         <div className="flex items-center gap-2">
+          {isUnlocked ? (
+            <button
+              onClick={() => { lockPrivacy(); setIsUnlocked(false); }}
+              className="px-3 py-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer"
+              title="Kunci kembali data portofolio"
+            >
+              <Unlock className="w-3.5 h-3.5" />
+              <span>Portofolio Terbuka • Kunci</span>
+            </button>
+          ) : (
+            <button
+              onClick={() => setIsUnlockModalOpen(true)}
+              className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-amber-400 border border-slate-700 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer"
+              title="Buka data nominal portofolio dengan password"
+            >
+              <Lock className="w-3.5 h-3.5 text-amber-400" />
+              <span>Buka Kunci Portofolio</span>
+            </button>
+          )}
+
           <button
             onClick={handleSyncAllLivePrices}
             disabled={syncingAll || investasiList.length === 0}
@@ -617,9 +650,16 @@ export default function InvestasiPage() {
         {/* Total Modal */}
         <div className="glass-card p-5 border-slate-700/50 flex justify-between items-center">
           <div>
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Modal Masuk</p>
+            <div className="flex items-center gap-1.5">
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Modal Masuk</p>
+              {!isUnlocked && (
+                <span className="text-[9px] text-amber-400 font-bold bg-amber-500/10 px-1 py-0.2 rounded border border-amber-500/20">
+                  🔒 Terkunci
+                </span>
+              )}
+            </div>
             <h3 className="text-xl font-bold text-white mt-1">
-              Rp {portfolioSummary.totalModal.toLocaleString('id-ID')}
+              {isUnlocked ? `Rp ${portfolioSummary.totalModal.toLocaleString('id-ID')}` : 'Rp ••••••••'}
             </h3>
           </div>
           <span className="p-3 bg-slate-900/40 rounded-xl text-slate-400 border border-slate-800">
@@ -630,9 +670,16 @@ export default function InvestasiPage() {
         {/* Total Nilai Sekarang */}
         <div className="glass-card p-5 border-slate-700/50 flex justify-between items-center">
           <div>
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Nilai Portofolio Saat Ini</p>
+            <div className="flex items-center gap-1.5">
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Nilai Portofolio Saat Ini</p>
+              {!isUnlocked && (
+                <span className="text-[9px] text-amber-400 font-bold bg-amber-500/10 px-1 py-0.2 rounded border border-amber-500/20">
+                  🔒 Terkunci
+                </span>
+              )}
+            </div>
             <h3 className="text-xl font-bold text-white mt-1">
-              Rp {portfolioSummary.totalSekarang.toLocaleString('id-ID')}
+              {isUnlocked ? `Rp ${portfolioSummary.totalSekarang.toLocaleString('id-ID')}` : 'Rp ••••••••'}
             </h3>
           </div>
           <span className="p-3 bg-slate-900/40 rounded-xl text-slate-400 border border-slate-800">
@@ -643,16 +690,25 @@ export default function InvestasiPage() {
         {/* Total Return */}
         <div className="glass-card p-5 border-slate-700/50 flex justify-between items-center">
           <div>
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Keuntungan / Kerugian</p>
+            <div className="flex items-center gap-1.5">
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Keuntungan / Kerugian</p>
+              {!isUnlocked && (
+                <span className="text-[9px] text-amber-400 font-bold bg-amber-500/10 px-1 py-0.2 rounded border border-amber-500/20">
+                  🔒 Terkunci
+                </span>
+              )}
+            </div>
             <div className="flex items-center gap-2 mt-1">
               <h3 className={`text-xl font-bold ${portfolioSummary.netGainLoss >= 0 ? 'text-emerald-400' : 'text-rose-455'}`}>
-                Rp {portfolioSummary.netGainLoss.toLocaleString('id-ID')}
+                {isUnlocked ? `Rp ${portfolioSummary.netGainLoss.toLocaleString('id-ID')}` : 'Rp ••••••••'}
               </h3>
-              <span className={`text-xs font-black px-1.5 py-0.5 rounded flex items-center gap-0.5 ${portfolioSummary.netGainLoss >= 0 ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-455'
-                }`}>
-                {portfolioSummary.netGainLoss >= 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
-                {portfolioSummary.gainLossPct.toFixed(1)}%
-              </span>
+              {isUnlocked && (
+                <span className={`text-xs font-black px-1.5 py-0.5 rounded flex items-center gap-0.5 ${portfolioSummary.netGainLoss >= 0 ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-455'
+                  }`}>
+                  {portfolioSummary.netGainLoss >= 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
+                  {portfolioSummary.gainLossPct.toFixed(1)}%
+                </span>
+              )}
             </div>
           </div>
         </div>
@@ -1186,18 +1242,26 @@ export default function InvestasiPage() {
                     <div className="border-t border-slate-800/60 pt-2.5 space-y-1.5">
                       <div className="flex justify-between items-center text-slate-400">
                         <span>Modal Awal:</span>
-                        <span className="font-mono font-bold text-white">Rp {modal.toLocaleString('id-ID')}</span>
+                        <span className="font-mono font-bold text-white">
+                          {isUnlocked ? `Rp ${modal.toLocaleString('id-ID')}` : 'Rp ••••••••'}
+                        </span>
                       </div>
 
                       <div className="flex justify-between items-center text-slate-400">
                         <span>Nilai Sekarang:</span>
-                        <span className="font-mono font-bold text-white">Rp {sekarang.toLocaleString('id-ID')}</span>
+                        <span className="font-mono font-bold text-white">
+                          {isUnlocked ? `Rp ${sekarang.toLocaleString('id-ID')}` : 'Rp ••••••••'}
+                        </span>
                       </div>
 
                       <div className="flex justify-between items-center border-t border-slate-800/40 pt-1.5">
                         <span className="font-semibold text-slate-400">Gain / Loss:</span>
                         <span className={`font-mono font-extrabold flex items-center gap-0.5 ${diff >= 0 ? 'text-emerald-400' : 'text-rose-455'}`}>
-                          {diff >= 0 ? '+' : ''}Rp {diff.toLocaleString('id-ID')} ({diff >= 0 ? '+' : ''}{pct.toFixed(1)}%)
+                          {isUnlocked ? (
+                            <>{diff >= 0 ? '+' : ''}Rp {diff.toLocaleString('id-ID')} ({diff >= 0 ? '+' : ''}{pct.toFixed(1)}%)</>
+                          ) : (
+                            'Rp ••••••••'
+                          )}
                         </span>
                       </div>
                     </div>
@@ -1574,6 +1638,16 @@ export default function InvestasiPage() {
         </div>
       )}
 
+      {/* Privacy Unlock Modal */}
+      <PrivacyUnlockModal
+        isOpen={isUnlockModalOpen}
+        onClose={() => setIsUnlockModalOpen(false)}
+        onSuccess={() => {
+          setIsUnlocked(true);
+          setIsUnlockModalOpen(false);
+        }}
+        title="Buka Kunci Portofolio Investasi"
+      />
     </div>
   );
 }

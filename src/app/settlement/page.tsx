@@ -2,16 +2,22 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
-import { CalendarRange, PlusCircle, RefreshCw, Trash2, CheckCircle, AlertCircle, Clock, Pencil, FastForward, Archive } from 'lucide-react';
+import { CalendarRange, PlusCircle, RefreshCw, Trash2, CheckCircle, AlertCircle, Clock, Pencil, FastForward, Archive, Lock, Unlock, Key } from 'lucide-react';
 import CurrencyInput from '@/components/CurrencyInput';
 import { getWIBDateString } from '@/lib/dateUtils';
 import { computeFinancialBalances } from '@/lib/balanceUtils';
+import { isPrivacyUnlocked, lockPrivacy, getStoredSecondaryPassword } from '@/lib/authPrivacy';
+import PrivacyUnlockModal from '@/components/PrivacyUnlockModal';
 
 export default function SettlementPage() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [settlements, setSettlements] = useState<any[]>([]);
   const [editingSettle, setEditingSettle] = useState<any | null>(null);
+
+  // Privacy unlock state
+  const [isUnlocked, setIsUnlocked] = useState(false);
+  const [isUnlockModalOpen, setIsUnlockModalOpen] = useState(false);
 
   // Add Settlement Form States
   const [catatan, setCatatan] = useState('');
@@ -58,6 +64,13 @@ export default function SettlementPage() {
   useEffect(() => {
     fetchSettlements();
   }, [fetchSettlements]);
+
+  useEffect(() => {
+    setIsUnlocked(isPrivacyUnlocked());
+    const handlePrivacy = () => setIsUnlocked(isPrivacyUnlocked());
+    window.addEventListener('privacy-state-changed', handlePrivacy);
+    return () => window.removeEventListener('privacy-state-changed', handlePrivacy);
+  }, []);
 
   const handleAddSettlement = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -263,12 +276,32 @@ export default function SettlementPage() {
           <p className="text-sm text-slate-400">Kelola pembayaran masa depan (Cicilan, Tagihan, CC) yang telah dijadwalkan.</p>
         </div>
 
-        <button
-          onClick={() => fetchSettlements(true)}
-          className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-sm flex items-center gap-2 transition"
-        >
-          <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} /> Refresh
-        </button>
+        <div className="flex items-center gap-2">
+          {isUnlocked ? (
+            <button
+              onClick={() => { lockPrivacy(); setIsUnlocked(false); }}
+              className="px-3 py-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer"
+              title="Kunci kembali nominal tagihan"
+            >
+              <Unlock className="w-3.5 h-3.5" /> Akses Terbuka • Kunci
+            </button>
+          ) : (
+            <button
+              onClick={() => setIsUnlockModalOpen(true)}
+              className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-amber-400 border border-slate-700 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer"
+              title="Buka nominal tagihan dengan password"
+            >
+              <Lock className="w-3.5 h-3.5 text-amber-400" /> Buka Kunci Tagihan
+            </button>
+          )}
+
+          <button
+            onClick={() => fetchSettlements(true)}
+            className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-sm flex items-center gap-2 transition"
+          >
+            <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} /> Refresh
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -317,7 +350,9 @@ export default function SettlementPage() {
                       </div>
 
                       <div className="flex flex-row sm:flex-col items-center sm:items-end justify-between sm:justify-center gap-2">
-                        <p className="font-black text-rose-400">Rp {Number(item.nominal).toLocaleString('id-ID')}</p>
+                        <p className="font-black text-rose-400">
+                          {isUnlocked ? `Rp ${Number(item.nominal).toLocaleString('id-ID')}` : 'Rp ••••••••'}
+                        </p>
                         <div className="flex items-center gap-2">
                           {overdue && (
                             <button
@@ -526,6 +561,17 @@ export default function SettlementPage() {
           </div>
         )}
       </div>
+
+      {/* Privacy Unlock Modal */}
+      <PrivacyUnlockModal
+        isOpen={isUnlockModalOpen}
+        onClose={() => setIsUnlockModalOpen(false)}
+        onSuccess={() => {
+          setIsUnlocked(true);
+          setIsUnlockModalOpen(false);
+        }}
+        title="Buka Kunci Scheduled Settlement"
+      />
     </div>
   );
 }

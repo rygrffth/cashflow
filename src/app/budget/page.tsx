@@ -2,10 +2,12 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Target, PlusCircle, TrendingUp, RefreshCw, Trash2, ArrowUpRight, ArrowDownLeft, ShieldAlert, Pencil, Wallet } from 'lucide-react';
+import { Target, PlusCircle, TrendingUp, RefreshCw, Trash2, ArrowUpRight, ArrowDownLeft, ShieldAlert, Pencil, Wallet, Lock, Unlock, Key } from 'lucide-react';
 import CurrencyInput from '@/components/CurrencyInput';
 import { getWIBDateString } from '@/lib/dateUtils';
 import { computeFinancialBalances } from '@/lib/balanceUtils';
+import { isPrivacyUnlocked, lockPrivacy, getStoredSecondaryPassword } from '@/lib/authPrivacy';
+import PrivacyUnlockModal from '@/components/PrivacyUnlockModal';
 
 export default function BudgetPage() {
   const [loading, setLoading] = useState(true);
@@ -14,6 +16,10 @@ export default function BudgetPage() {
   const [editingTabungan, setEditingTabungan] = useState<any | null>(null);
   const [originalTerkumpul, setOriginalTerkumpul] = useState<number>(0);
   const [syncSource, setSyncSource] = useState<'Bank' | 'Cash' | 'none'>('Bank');
+
+  // Privacy unlock state
+  const [isUnlocked, setIsUnlocked] = useState(false);
+  const [isUnlockModalOpen, setIsUnlockModalOpen] = useState(false);
 
   // Add Target Form States
   const [nama, setNama] = useState('');
@@ -67,6 +73,13 @@ export default function BudgetPage() {
   useEffect(() => {
     fetchTabungan();
   }, [fetchTabungan]);
+
+  useEffect(() => {
+    setIsUnlocked(isPrivacyUnlocked());
+    const handlePrivacy = () => setIsUnlocked(isPrivacyUnlocked());
+    window.addEventListener('privacy-state-changed', handlePrivacy);
+    return () => window.removeEventListener('privacy-state-changed', handlePrivacy);
+  }, []);
 
   const handleCreateTarget = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -335,12 +348,32 @@ export default function BudgetPage() {
           <p className="text-sm text-slate-400">Kelola target tabungan kamu dan lacak progresnya</p>
         </div>
 
-        <button
-          onClick={() => fetchTabungan(true)}
-          className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-sm flex items-center gap-2 transition"
-        >
-          <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} /> Refresh
-        </button>
+        <div className="flex items-center gap-2">
+          {isUnlocked ? (
+            <button
+              onClick={() => { lockPrivacy(); setIsUnlocked(false); }}
+              className="px-3 py-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer"
+              title="Kunci kembali nominal tabungan"
+            >
+              <Unlock className="w-3.5 h-3.5" /> Akses Terbuka • Kunci
+            </button>
+          ) : (
+            <button
+              onClick={() => setIsUnlockModalOpen(true)}
+              className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-amber-400 border border-slate-700 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer"
+              title="Buka nominal tabungan dengan password"
+            >
+              <Lock className="w-3.5 h-3.5 text-amber-400" /> Buka Kunci Tabungan
+            </button>
+          )}
+
+          <button
+            onClick={() => fetchTabungan(true)}
+            className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-sm flex items-center gap-2 transition"
+          >
+            <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} /> Refresh
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -364,6 +397,11 @@ export default function BudgetPage() {
                           <span className="px-2 py-0.5 bg-emerald-500/20 text-emerald-400 text-[10px] rounded uppercase font-bold">Selesai</span>
                         ) : (
                           <span className="px-2 py-0.5 bg-blue-500/20 text-blue-400 text-[10px] rounded uppercase font-bold">Aktif</span>
+                        )}
+                        {!isUnlocked && (
+                          <span className="text-[9px] text-amber-400 font-bold bg-amber-500/10 px-1 py-0.2 rounded border border-amber-500/20">
+                            🔒 Terkunci
+                          </span>
                         )}
                       </h3>
                       <p className="text-xs text-slate-400 mt-0.5">Kategori: <span className="text-slate-300 font-semibold">{item.kategori}</span> • Target: <span className="text-emerald-400 font-semibold">{item.tanggal_target || 'Tanpa Tenggat'}</span></p>
@@ -392,8 +430,12 @@ export default function BudgetPage() {
                   )}
 
                   <div className="flex justify-between items-end text-sm">
-                    <span className="font-extrabold text-emerald-400 text-lg">Rp {current.toLocaleString('id-ID')}</span>
-                    <span className="text-slate-400 text-xs">dari Rp {target.toLocaleString('id-ID')}</span>
+                    <span className="font-extrabold text-emerald-400 text-lg">
+                      {isUnlocked ? `Rp ${current.toLocaleString('id-ID')}` : 'Rp ••••••••'}
+                    </span>
+                    <span className="text-slate-400 text-xs">
+                      dari {isUnlocked ? `Rp ${target.toLocaleString('id-ID')}` : 'Rp ••••••••'}
+                    </span>
                   </div>
 
                   {/* Progress bar */}
@@ -531,13 +573,17 @@ export default function BudgetPage() {
               <div>
                 <p className="text-[10px] text-slate-400 uppercase font-semibold">Total Terkumpul (Semua)</p>
                 <p className="text-2xl font-black text-white">
-                  Rp {tabunganData.reduce((s, i) => s + Number(i.nominal_terkumpul), 0).toLocaleString('id-ID')}
+                  {isUnlocked
+                    ? `Rp ${tabunganData.reduce((s, i) => s + Number(i.nominal_terkumpul), 0).toLocaleString('id-ID')}`
+                    : 'Rp ••••••••'}
                 </p>
               </div>
               <div>
                 <p className="text-[10px] text-slate-400 uppercase font-semibold">Total Terkumpul (Aktif)</p>
                 <p className="text-xl font-bold text-emerald-400">
-                  Rp {tabunganData.filter(i => i.status === 'Aktif').reduce((s, i) => s + Number(i.nominal_terkumpul), 0).toLocaleString('id-ID')}
+                  {isUnlocked
+                    ? `Rp ${tabunganData.filter(i => i.status === 'Aktif').reduce((s, i) => s + Number(i.nominal_terkumpul), 0).toLocaleString('id-ID')}`
+                    : 'Rp ••••••••'}
                 </p>
               </div>
               <p className="text-[11px] text-slate-500 italic border-t border-slate-800/80 pt-2 mt-2">
@@ -843,6 +889,17 @@ export default function BudgetPage() {
           </div>
         </div>
       )}
+
+      {/* Privacy Unlock Modal */}
+      <PrivacyUnlockModal
+        isOpen={isUnlockModalOpen}
+        onClose={() => setIsUnlockModalOpen(false)}
+        onSuccess={() => {
+          setIsUnlocked(true);
+          setIsUnlockModalOpen(false);
+        }}
+        title="Buka Kunci Data Tabungan"
+      />
     </div>
   );
 }

@@ -7,17 +7,20 @@ import { JAJAN_CATEGORIES } from '@/config/categories';
 import DailyLimitCard from '@/components/DailyLimitCard';
 import JajanSimulator from '@/components/JajanSimulator';
 import TransactionForm from '@/components/TransactionForm';
-import { RefreshCw, Clock, Landmark, Wallet, ListTodo, Lock, Unlock, Pencil, Trash2, Target, TrendingUp, PlusCircle } from 'lucide-react';
+import { RefreshCw, Clock, Landmark, Wallet, ListTodo, Lock, Unlock, Key, Pencil, Trash2, Target, TrendingUp, PlusCircle } from 'lucide-react';
 import { getWIBDateString, parseDateParts } from '@/lib/dateUtils';
 import { calculateGajianCycle } from '@/lib/gajianUtils';
 import { computeFinancialBalances } from '@/lib/balanceUtils';
 import CurrencyInput from '@/components/CurrencyInput';
+import { isPrivacyUnlocked, isMasterAdmin, lockPrivacy, getStoredSecondaryPassword } from '@/lib/authPrivacy';
+import PrivacyUnlockModal from '@/components/PrivacyUnlockModal';
 
 export default function Dashboard() {
   // Loading & Data States
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [timeStr, setTimeStr] = useState('');
+  const [isHeaderUnlockOpen, setIsHeaderUnlockOpen] = useState(false);
 
   // Primary Metrics States
   const [saldoBank, setSaldoBank] = useState(0);
@@ -73,7 +76,17 @@ export default function Dashboard() {
         setFakeOffset(Number(savedOffset));
       }
     }
+
+    const handlePrivacyChange = () => {
+      if (typeof window !== 'undefined') {
+        const saved = localStorage.getItem('secretCode') || '';
+        setSecretCode(saved);
+      }
+    };
+    window.addEventListener('privacy-state-changed', handlePrivacyChange);
+    return () => window.removeEventListener('privacy-state-changed', handlePrivacyChange);
   }, []);
+
 
   // Clock Update Effect (Runs in browser only)
   useEffect(() => {
@@ -470,14 +483,33 @@ export default function Dashboard() {
         <div>
           <div className="flex items-center gap-2">
             <h1 className="text-3xl font-extrabold tracking-tight text-white">💼 Financial Dashboard</h1>
-            {isRealMode ? (
-              <span title="Mode Admin">
-                <Unlock className="w-5 h-5 text-rose-500 animate-pulse ml-2" />
-              </span>
+            {isMasterAdmin(secretCode) ? (
+              <button
+                onClick={() => { lockPrivacy(); setSecretCode(''); }}
+                className="flex items-center gap-1.5 ml-2 px-2.5 py-1 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs font-bold hover:bg-rose-500/20 transition cursor-pointer"
+                title="Mode Admin 'naufal' aktif. Klik untuk mengunci kembali"
+              >
+                <Unlock className="w-3.5 h-3.5 animate-pulse text-rose-400" />
+                <span>Admin (naufal)</span>
+              </button>
+            ) : isPrivacyUnlocked(secretCode) ? (
+              <button
+                onClick={() => { lockPrivacy(); setSecretCode(''); }}
+                className="flex items-center gap-1.5 ml-2 px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-bold hover:bg-emerald-500/20 transition cursor-pointer"
+                title="Akses data terbuka dengan password kedua. Klik untuk mengunci kembali"
+              >
+                <Key className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Akses Terbuka</span>
+              </button>
             ) : (
-              <span title="Mode User">
-                <Lock className="w-5 h-5 text-emerald-500 ml-2" />
-              </span>
+              <button
+                onClick={() => setIsHeaderUnlockOpen(true)}
+                className="flex items-center gap-1.5 ml-2 px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800 text-slate-400 hover:text-amber-400 text-xs font-bold transition cursor-pointer"
+                title="Buka data nominal tabungan, total aset, settlement"
+              >
+                <Lock className="w-3.5 h-3.5 text-amber-400" />
+                <span>Terkunci</span>
+              </button>
             )}
           </div>
         </div>
@@ -516,10 +548,11 @@ export default function Dashboard() {
         {/* Left 2 Columns: Portfolios, Daily status, Simulator */}
         <div className="lg:col-span-2 space-y-8">
           {(() => {
-            const displayedTotalAset = isRealMode ? totalAset : (fakeOffset + totalAset);
-            // Tabungan ikut menyesuaikan secara dinamis saat bukan Mode Admin agar:
-            // Saldo Aset dikurangi Tabungan = Dana Operasional (saldoOp)
-            const displayedTabungan = isRealMode ? tabungan : Math.max(0, displayedTotalAset - saldoOp);
+            const hasAccess = isPrivacyUnlocked(secretCode);
+            const displayedTotalAset = hasAccess ? totalAset : (fakeOffset + totalAset);
+            // Tabungan ikut menyesuaikan secara dinamis saat terkunci agar rasio tetap klop
+            const displayedTabungan = hasAccess ? tabungan : Math.max(0, displayedTotalAset - saldoOp);
+
 
             return (
               <PortfolioGrid
@@ -843,6 +876,18 @@ export default function Dashboard() {
           </div>
         </div>
       )}
+
+      {/* Privacy Unlock Modal for Header */}
+      <PrivacyUnlockModal
+        isOpen={isHeaderUnlockOpen}
+        onClose={() => setIsHeaderUnlockOpen(false)}
+        onSuccess={(isMaster) => {
+          const pass = isMaster ? 'naufal' : getStoredSecondaryPassword();
+          setSecretCode(pass);
+          setIsHeaderUnlockOpen(false);
+        }}
+        title="Buka Kunci Data Sensitif"
+      />
     </div>
   );
 }
