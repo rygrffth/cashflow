@@ -40,7 +40,7 @@ export default function PrivacyUnlockModal({
       setPassword('');
       onClose();
     } else {
-      setErrorMsg('❌ Password salah. Gunakan password utama (naufal) atau password kedua (rayhan).');
+      setErrorMsg('❌ Password salah. Silakan coba lagi.');
     }
   };
 
@@ -60,7 +60,7 @@ export default function PrivacyUnlockModal({
         </div>
 
         <p className="text-xs text-slate-400 leading-relaxed">
-          Masukkan <b>Password Utama</b> (<code>naufal</code>) atau <b>Password Tambahan</b> (<code>rayhan</code>) untuk melihat data nominal rahasia.
+          Masukkan password otorisasi untuk membuka dan melihat data nominal rahasia.
         </p>
 
         {errorMsg && (

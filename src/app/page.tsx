@@ -487,10 +487,10 @@ export default function Dashboard() {
               <button
                 onClick={() => { lockPrivacy(); setSecretCode(''); }}
                 className="flex items-center gap-1.5 ml-2 px-2.5 py-1 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs font-bold hover:bg-rose-500/20 transition cursor-pointer"
-                title="Mode Admin 'naufal' aktif. Klik untuk mengunci kembali"
+                title="Mode Admin aktif. Klik untuk mengunci kembali"
               >
                 <Unlock className="w-3.5 h-3.5 animate-pulse text-rose-400" />
-                <span>Admin (naufal)</span>
+                <span>Mode Admin</span>
               </button>
             ) : isPrivacyUnlocked(secretCode) ? (
               <button

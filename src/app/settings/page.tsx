@@ -234,7 +234,7 @@ export default function SettingsPage() {
     setSecPassSuccess('');
 
     if (masterAuthInput.trim() !== MASTER_PASSWORD) {
-      setSecPassError('❌ Password utama salah! Wajib memasukkan password "naufal" untuk mengubah password kedua.');
+      setSecPassError('❌ Password utama salah! Otorisasi gagal.');
       return;
     }
 
@@ -245,7 +245,7 @@ export default function SettingsPage() {
     }
 
     if (newPass === MASTER_PASSWORD) {
-      setSecPassError('⚠️ Password tambahan tidak boleh sama dengan password utama (naufal).');
+      setSecPassError('⚠️ Password tambahan tidak boleh sama dengan password utama.');
       return;
     }
 
@@ -274,7 +274,7 @@ export default function SettingsPage() {
       setSecondaryPass(newPass);
       setMasterAuthInput('');
       setNewSecondaryInput('');
-      setSecPassSuccess(`✅ Password tambahan berhasil diubah menjadi "${newPass}"!`);
+      setSecPassSuccess('✅ Password tambahan berhasil diperbarui!');
     } catch (err: any) {
       console.error(err);
       setSecPassError(`Gagal memperbarui password: ${err.message || err}`);
@@ -606,7 +606,7 @@ export default function SettingsPage() {
               <ShieldCheck className="w-5 h-5 text-emerald-400" /> Mode Admin & Keamanan Akses
             </h2>
             <p className="text-xs text-slate-400 mb-5 leading-relaxed">
-              Masukkan password utama (<code>naufal</code>) untuk hak admin penuh, atau password tambahan (<code>{secondaryPass}</code>) untuk membuka nominal tabungan, settlement, portofolio & total aset.
+              Masukkan password utama untuk hak admin penuh, atau password tambahan untuk membuka nominal tabungan, settlement, portofolio & total aset.
             </p>
 
             <div className="space-y-4">
@@ -614,7 +614,7 @@ export default function SettingsPage() {
                 <label className="text-xs font-semibold text-slate-400">Status Akses / Kode Aktif</label>
                 <input
                   type="password"
-                  placeholder="Masukkan password naufal atau rayhan..."
+                  placeholder="Masukkan password..."
                   value={localCode}
                   onChange={handleCodeChange}
                   className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-emerald-500 text-sm w-full font-mono"
@@ -626,7 +626,7 @@ export default function SettingsPage() {
                   <>
                     <Unlock className="w-4 h-4 text-rose-400 animate-pulse shrink-0" />
                     <div>
-                      <span className="text-rose-400 font-bold">🔓 Mode Master Admin (naufal) Aktif</span>
+                      <span className="text-rose-400 font-bold">🔓 Mode Admin Aktif</span>
                       <p className="text-[10px] text-slate-400 mt-0.5">Semua data terbuka dan hak admin penuh aktif.</p>
                     </div>
                   </>
@@ -666,10 +666,10 @@ export default function SettingsPage() {
             {/* Form Ubah Password Tambahan */}
             <div className="mt-6 pt-5 border-t border-slate-800/80">
               <h3 className="text-sm font-bold text-slate-200 flex items-center gap-2 mb-2">
-                <Key className="w-4 h-4 text-emerald-400" /> Ubah Password Tambahan (rayhan)
+                <Key className="w-4 h-4 text-emerald-400" /> Ubah Password Tambahan (Kedua)
               </h3>
               <p className="text-[11px] text-slate-400 mb-3 leading-relaxed">
-                Untuk mengubah password tambahan kedua, wajib memasukkan <b>Password Utama (<code>naufal</code>)</b> sebagai otorisasi.
+                Untuk mengubah password tambahan kedua, wajib memasukkan <b>Password Utama</b> sebagai otorisasi keamanan.
               </p>
 
               {secPassSuccess && (
@@ -688,7 +688,7 @@ export default function SettingsPage() {
                   <label className="text-[11px] font-semibold text-slate-400">1. Password Utama Otorisasi</label>
                   <input
                     type="password"
-                    placeholder="Masukkan password utama 'naufal'..."
+                    placeholder="Masukkan password utama..."
                     value={masterAuthInput}
                     onChange={(e) => setMasterAuthInput(e.target.value)}
                     className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-emerald-500 text-xs w-full font-mono"
@@ -697,10 +697,10 @@ export default function SettingsPage() {
 
                 <div className="flex flex-col gap-1">
                   <label className="text-[11px] font-semibold text-slate-400">
-                    2. Password Tambahan Baru <span className="text-slate-500 font-normal">(Saat ini: {secondaryPass})</span>
+                    2. Password Tambahan Baru
                   </label>
                   <input
-                    type="text"
+                    type="password"
                     placeholder="Masukkan password tambahan baru..."
                     value={newSecondaryInput}
                     onChange={(e) => setNewSecondaryInput(e.target.value)}

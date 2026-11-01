@@ -111,7 +111,7 @@ export default function PortfolioGrid({
               title="Klik untuk mengunci kembali data sensitif"
             >
               <Unlock className="w-3.5 h-3.5 text-emerald-400" />
-              <span>{isMasterAdmin(secretCode) ? 'Mode Admin (naufal)' : 'Akses Terbuka'} • Kunci</span>
+              <span>{isMasterAdmin(secretCode) ? 'Mode Admin' : 'Akses Terbuka'} • Kunci</span>
             </button>
           ) : (
             <button
