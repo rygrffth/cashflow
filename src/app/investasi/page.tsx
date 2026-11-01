@@ -304,6 +304,10 @@ export default function InvestasiPage() {
   }, [marketChartCache]);
 
   useEffect(() => {
+    fetchInvestasi();
+  }, [fetchInvestasi]);
+
+  useEffect(() => {
     fetchMarketOverview();
   }, [fetchMarketOverview]);
 
