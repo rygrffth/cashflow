@@ -13,7 +13,8 @@ import {
   Area,
   XAxis,
   YAxis,
-  Tooltip
+  Tooltip,
+  CartesianGrid
 } from 'recharts';
 import CurrencyInput from '@/components/CurrencyInput';
 import { getWIBDateString } from '@/lib/dateUtils';
@@ -53,9 +54,10 @@ export default function InvestasiPage() {
   const [marketOverview, setMarketOverview] = useState<any | null>(null);
   const [overviewLoading, setOverviewLoading] = useState(false);
   const [selectedMarketTab, setSelectedMarketTab] = useState<'EMAS' | 'USDIDR' | 'IHSG' | 'BTC'>('EMAS');
-  const [marketRange, setMarketRange] = useState<'7d' | '1mo'>('7d');
+  const [marketRange, setMarketRange] = useState<'7d' | '1mo' | '3mo' | '1y'>('7d');
   const [marketChartCache, setMarketChartCache] = useState<Record<string, Array<{ date: string; price: number }>>>({});
   const [loadingMarketChart, setLoadingMarketChart] = useState(false);
+  const [hoveredPoint, setHoveredPoint] = useState<{ date: string; price: number } | null>(null);
   const [activeChart, setActiveChart] = useState<{
     symbol: string;
     name: string;
@@ -652,39 +654,43 @@ export default function InvestasiPage() {
         </div>
       </div>
 
-      {/* General Market Trends Chart Panel (Separated by Instrument) */}
+      {/* Stockbit-Style General Market Trends Chart */}
       {(() => {
         const INSTRUMENTS = {
           EMAS: {
-            name: 'Emas Logam Mulia (Spot IDR)',
-            unit: 'Rp / gram',
+            name: 'Emas Logam Mulia',
+            ticker: 'ANTAM / SPOT IDR',
+            badge: 'KOMODITAS',
+            unit: 'Rupiah / gram',
             icon: '🪙',
             color: '#f59e0b',
-            accent: 'from-amber-500/20 to-transparent',
             dataObj: marketOverview?.gold
           },
           USDIDR: {
-            name: 'Nilai Tukar Dollar (USD / IDR)',
+            name: 'Nilai Tukar Dollar',
+            ticker: 'USD / IDR',
+            badge: 'FOREX CURRENCY',
             unit: 'Rupiah per USD',
             icon: '💵',
             color: '#06b6d4',
-            accent: 'from-cyan-500/20 to-transparent',
             dataObj: marketOverview?.usdidr
           },
           IHSG: {
-            name: 'IHSG (Indeks Saham Indonesia)',
+            name: 'IHSG Bursa Indonesia',
+            ticker: '^JKSE / IDX COMPOSITE',
+            badge: 'INDEX SAHAM',
             unit: 'Poin Indeks',
             icon: '🏛️',
             color: '#10b981',
-            accent: 'from-emerald-500/20 to-transparent',
             dataObj: marketOverview?.ihsg
           },
           BTC: {
-            name: 'Bitcoin (BTC / IDR)',
+            name: 'Bitcoin Crypto',
+            ticker: 'BTC / IDR',
+            badge: 'CRYPTO ASSET',
             unit: 'Rupiah per Koin',
             icon: '⚡',
             color: '#f97316',
-            accent: 'from-orange-500/20 to-transparent',
             dataObj: marketOverview?.btc
           }
         };
@@ -694,43 +700,22 @@ export default function InvestasiPage() {
         const prices = chartPoints.map(p => p.price);
         const minPrice = prices.length > 0 ? Math.min(...prices) : 0;
         const maxPrice = prices.length > 0 ? Math.max(...prices) : 0;
+        const avgPrice = prices.length > 0 ? Math.round(prices.reduce((a, b) => a + b, 0) / prices.length) : 0;
         const latestPrice = prices.length > 0 ? prices[prices.length - 1] : (activeInst?.dataObj?.price || 0);
         const firstPrice = prices.length > 0 ? prices[0] : latestPrice;
-        const netDiff = latestPrice - firstPrice;
-        const netPct = firstPrice > 0 ? (netDiff / firstPrice) * 100 : 0;
+        
+        // Active displayed price (reflects hovered point if user is dragging/hovering on chart ala Stockbit)
+        const displayPrice = hoveredPoint ? hoveredPoint.price : latestPrice;
+        const displayDate = hoveredPoint ? hoveredPoint.date : null;
+        const activeDiff = displayPrice - firstPrice;
+        const activePct = firstPrice > 0 ? (activeDiff / firstPrice) * 100 : 0;
+        const isPositive = activeDiff >= 0;
 
         return (
-          <div className="glass-card p-5 border-slate-800 bg-slate-950/70 space-y-4">
-            {/* Header & Controls */}
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-slate-800/80 pb-3">
-              <div>
-                <h3 className="text-sm font-extrabold text-white flex items-center gap-2">
-                  <Activity className="w-4 h-4 text-emerald-400" /> Tren Harga Pasar & Nilai Tukar Umum
-                </h3>
-                <p className="text-xs text-slate-400 mt-0.5">
-                  Grafik acuan pasar independen — pantau tren harga emas, kurs rupiah, saham nasional, & crypto secara langsung.
-                </p>
-              </div>
-
-              {/* Range switcher */}
-              <div className="bg-slate-900 border border-slate-800 rounded-lg p-0.5 flex gap-1 text-[11px] font-mono self-end sm:self-auto">
-                <button
-                  onClick={() => setMarketRange('7d')}
-                  className={`px-3 py-1 rounded font-bold transition cursor-pointer ${marketRange === '7d' ? 'bg-emerald-500 text-slate-950' : 'text-slate-400 hover:text-white'}`}
-                >
-                  7 Hari
-                </button>
-                <button
-                  onClick={() => setMarketRange('1mo')}
-                  className={`px-3 py-1 rounded font-bold transition cursor-pointer ${marketRange === '1mo' ? 'bg-emerald-500 text-slate-950' : 'text-slate-400 hover:text-white'}`}
-                >
-                  30 Hari
-                </button>
-              </div>
-            </div>
-
-            {/* Instrument Tabs */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+          <div className="glass-card p-6 border-slate-800 bg-slate-950/80 rounded-2xl space-y-5 shadow-2xl relative overflow-hidden">
+            
+            {/* Instrument Tabs (Stockbit-style Pill Strip) */}
+            <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none border-b border-slate-800/80">
               {(Object.keys(INSTRUMENTS) as Array<keyof typeof INSTRUMENTS>).map((key) => {
                 const inst = INSTRUMENTS[key];
                 const isSelected = selectedMarketTab === key;
@@ -739,89 +724,121 @@ export default function InvestasiPage() {
                 return (
                   <button
                     key={key}
-                    onClick={() => setSelectedMarketTab(key)}
-                    className={`p-3 rounded-xl border text-left transition cursor-pointer flex flex-col justify-between ${
+                    onClick={() => {
+                      setSelectedMarketTab(key);
+                      setHoveredPoint(null);
+                    }}
+                    className={`px-4 py-2.5 rounded-xl border text-xs font-bold transition-all cursor-pointer flex items-center gap-2 flex-shrink-0 ${
                       isSelected
-                        ? 'bg-slate-900 border-emerald-500/60 shadow-lg shadow-emerald-950/30'
-                        : 'bg-slate-950/40 hover:bg-slate-900/60 border-slate-800/70 opacity-80 hover:opacity-100'
+                        ? 'bg-slate-900 border-emerald-500 text-white shadow-md shadow-emerald-950/40'
+                        : 'bg-slate-950/40 hover:bg-slate-900/60 border-slate-800/80 text-slate-400 hover:text-slate-200'
                     }`}
                   >
-                    <div className="flex justify-between items-center w-full">
-                      <span className="text-xs font-bold text-white flex items-center gap-1.5">
-                        <span>{inst.icon}</span> {inst.name.split(' (')[0]}
+                    <span className="text-sm">{inst.icon}</span>
+                    <span>{inst.name}</span>
+                    {change !== undefined && (
+                      <span className={`text-[10px] font-mono font-extrabold px-1.5 py-0.5 rounded ${change >= 0 ? 'text-emerald-400 bg-emerald-500/10' : 'text-rose-400 bg-rose-500/10'}`}>
+                        {change >= 0 ? '+' : ''}{change}%
                       </span>
-                      {change !== undefined && (
-                        <span className={`text-[10px] font-mono font-bold px-1.5 py-0.2 rounded ${change >= 0 ? 'text-emerald-400 bg-emerald-500/10' : 'text-rose-400 bg-rose-500/10'}`}>
-                          {change >= 0 ? '+' : ''}{change}%
-                        </span>
-                      )}
-                    </div>
-                    <div className="mt-2">
-                      <p className="text-sm font-black font-mono text-white">
-                        {inst.dataObj ? (key === 'BTC' ? `Rp ${(inst.dataObj.price / 1000000).toFixed(1)} Jt` : `Rp ${inst.dataObj.price.toLocaleString('id-ID')}`) : 'Memuat...'}
-                      </p>
-                      <span className="text-[10px] text-slate-500 font-mono mt-0.5 block truncate">
-                        {inst.unit}
-                      </span>
-                    </div>
+                    )}
                   </button>
                 );
               })}
             </div>
 
-            {/* Active Instrument Stats Banner */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 p-3 bg-slate-900/60 border border-slate-800/80 rounded-xl text-xs">
+            {/* Stockbit Main Price Display & Timeframe Chips */}
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
               <div>
-                <span className="text-[10px] text-slate-400 font-semibold">Instrumen Terpilih:</span>
-                <p className="text-xs font-bold text-white flex items-center gap-1 mt-0.5">
-                  <span>{activeInst.icon}</span> {activeInst.name}
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded bg-slate-900 text-slate-400 border border-slate-800 font-mono">
+                    {activeInst.badge}
+                  </span>
+                  <span className="text-xs text-slate-400 font-mono font-bold">
+                    {activeInst.ticker}
+                  </span>
+                  {displayDate && (
+                    <span className="text-[11px] text-emerald-400 font-mono bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20 animate-fadeIn">
+                      📅 {displayDate}
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex items-baseline gap-3 mt-1.5 flex-wrap">
+                  <h2 className="text-3xl sm:text-4xl font-black font-mono tracking-tight text-white">
+                    {selectedMarketTab === 'IHSG' ? displayPrice.toLocaleString('id-ID') : `Rp ${displayPrice.toLocaleString('id-ID')}`}
+                  </h2>
+                  <span className={`text-sm font-bold font-mono px-2 py-0.5 rounded flex items-center gap-0.5 ${isPositive ? 'text-emerald-400 bg-emerald-500/10' : 'text-rose-400 bg-rose-500/10'}`}>
+                    {isPositive ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />}
+                    {isPositive ? '+' : ''}{selectedMarketTab === 'IHSG' ? activeDiff.toFixed(2) : `Rp ${activeDiff.toLocaleString('id-ID')}`} ({isPositive ? '+' : ''}{activePct.toFixed(2)}%)
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-500 font-mono mt-0.5">
+                  {displayDate ? '*Harga pada titik kursor kursor' : `*Harga pasar saat ini (${activeInst.unit})`}
                 </p>
               </div>
-              <div>
-                <span className="text-[10px] text-slate-400 font-semibold">Harga Pasar Terkini:</span>
-                <p className="text-sm font-black font-mono text-emerald-400 mt-0.5">
-                  Rp {latestPrice.toLocaleString('id-ID')}
-                </p>
-              </div>
-              <div>
-                <span className="text-[10px] text-slate-400 font-semibold">Rentang Terendah - Tertinggi:</span>
-                <p className="text-xs font-mono text-slate-300 mt-0.5">
-                  {minPrice.toLocaleString('id-ID')} - {maxPrice.toLocaleString('id-ID')}
-                </p>
-              </div>
-              <div>
-                <span className="text-[10px] text-slate-400 font-semibold">Perubahan Periode:</span>
-                <p className={`text-xs font-black font-mono flex items-center gap-0.5 mt-0.5 ${netDiff >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                  {netDiff >= 0 ? '+' : ''}{netDiff.toLocaleString('id-ID')} ({netDiff >= 0 ? '+' : ''}{netPct.toFixed(2)}%)
-                </p>
+
+              {/* Timeframe Chips ala Stockbit */}
+              <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-1 flex gap-1 text-xs font-mono font-bold">
+                {[
+                  { id: '7d', label: '1W' },
+                  { id: '1mo', label: '1M' },
+                  { id: '3mo', label: '3M' },
+                  { id: '1y', label: '1Y' }
+                ].map((tf) => (
+                  <button
+                    key={tf.id}
+                    onClick={() => {
+                      setMarketRange(tf.id as any);
+                      setHoveredPoint(null);
+                    }}
+                    className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+                      marketRange === tf.id
+                        ? 'bg-emerald-500 text-slate-950 font-black shadow'
+                        : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
+                    }`}
+                  >
+                    {tf.label}
+                  </button>
+                ))}
               </div>
             </div>
 
-            {/* Embedded Recharts Area Chart */}
-            <div className="h-64 w-full bg-slate-950/70 rounded-xl p-3 border border-slate-900 flex items-center justify-center">
+            {/* Stockbit Chart Container */}
+            <div className="h-72 w-full bg-slate-950/90 rounded-2xl p-3 border border-slate-850 flex items-center justify-center relative">
               {loadingMarketChart ? (
                 <div className="text-xs text-emerald-400 animate-pulse flex items-center gap-2">
-                  <Activity className="w-4 h-4 animate-spin" /> Mengambil tren data harga pasar {activeInst.name}...
+                  <Activity className="w-4 h-4 animate-spin" /> Memuat data grafik {activeInst.name}...
                 </div>
               ) : chartPoints.length > 0 ? (
                 <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={chartPoints} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
+                  <AreaChart
+                    data={chartPoints}
+                    margin={{ top: 15, right: 10, left: 10, bottom: 5 }}
+                    onMouseMove={(state: any) => {
+                      if (state?.activePayload && state.activePayload.length > 0) {
+                        const payload = state.activePayload[0].payload;
+                        setHoveredPoint({ date: payload.date, price: payload.price });
+                      }
+                    }}
+                    onMouseLeave={() => setHoveredPoint(null)}
+                  >
                     <defs>
-                      <linearGradient id={`grad_${selectedMarketTab}`} x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor={activeInst.color} stopOpacity={0.4} />
-                        <stop offset="95%" stopColor={activeInst.color} stopOpacity={0.0} />
+                      <linearGradient id={`grad_stockbit_${selectedMarketTab}`} x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor={activeInst.color} stopOpacity={0.35} />
+                        <stop offset="100%" stopColor={activeInst.color} stopOpacity={0.0} />
                       </linearGradient>
                     </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} opacity={0.6} />
                     <XAxis
                       dataKey="date"
-                      tick={{ fill: '#64748b', fontSize: 10 }}
+                      tick={{ fill: '#64748b', fontSize: 10, fontFamily: 'monospace' }}
                       tickLine={false}
                       axisLine={{ stroke: '#334155' }}
                       tickFormatter={(val: string) => (val ? val.slice(5) : '')}
                     />
                     <YAxis
                       domain={['auto', 'auto']}
-                      tick={{ fill: '#64748b', fontSize: 10 }}
+                      tick={{ fill: '#64748b', fontSize: 10, fontFamily: 'monospace' }}
                       tickLine={false}
                       axisLine={false}
                       orientation="right"
@@ -833,23 +850,29 @@ export default function InvestasiPage() {
                       }}
                     />
                     <Tooltip
-                      contentStyle={{
-                        backgroundColor: '#0f172a',
-                        borderColor: '#334155',
-                        borderRadius: '0.5rem',
-                        fontSize: '11px',
-                        color: '#f8fafc'
+                      content={({ active, payload }: any) => {
+                        if (active && payload && payload.length) {
+                          const data = payload[0].payload;
+                          return (
+                            <div className="bg-slate-900/95 border border-slate-700/80 p-2.5 rounded-xl shadow-xl text-xs space-y-1 font-mono">
+                              <p className="text-slate-400 text-[10px]">{data.date}</p>
+                              <p className="font-extrabold text-white text-sm">
+                                {selectedMarketTab === 'IHSG' ? data.price.toLocaleString('id-ID') : `Rp ${data.price.toLocaleString('id-ID')}`}
+                              </p>
+                            </div>
+                          );
+                        }
+                        return null;
                       }}
-                      formatter={(val: any) => [`Rp ${Number(val).toLocaleString('id-ID')}`, activeInst.name]}
-                      labelFormatter={(label: any) => `Tanggal: ${label}`}
                     />
                     <Area
                       type="monotone"
                       dataKey="price"
                       stroke={activeInst.color}
-                      strokeWidth={2}
+                      strokeWidth={2.5}
                       fillOpacity={1}
-                      fill={`url(#grad_${selectedMarketTab})`}
+                      fill={`url(#grad_stockbit_${selectedMarketTab})`}
+                      activeDot={{ r: 6, fill: activeInst.color, stroke: '#0f172a', strokeWidth: 2 }}
                     />
                   </AreaChart>
                 </ResponsiveContainer>
@@ -857,9 +880,43 @@ export default function InvestasiPage() {
                 <p className="text-xs text-slate-500 italic">Data grafik pasar sedang dipersiapkan...</p>
               )}
             </div>
+
+            {/* Key Market Statistics Grid ala Stockbit */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-1">
+              <div className="p-3 bg-slate-900/60 border border-slate-800/80 rounded-xl">
+                <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider block">Harga Buka (Open)</span>
+                <p className="text-sm font-extrabold font-mono text-white mt-1">
+                  {selectedMarketTab === 'IHSG' ? firstPrice.toLocaleString('id-ID') : `Rp ${firstPrice.toLocaleString('id-ID')}`}
+                </p>
+              </div>
+
+              <div className="p-3 bg-slate-900/60 border border-slate-800/80 rounded-xl">
+                <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider block">Tertinggi (High)</span>
+                <p className="text-sm font-extrabold font-mono text-emerald-400 mt-1">
+                  {selectedMarketTab === 'IHSG' ? maxPrice.toLocaleString('id-ID') : `Rp ${maxPrice.toLocaleString('id-ID')}`}
+                </p>
+              </div>
+
+              <div className="p-3 bg-slate-900/60 border border-slate-800/80 rounded-xl">
+                <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider block">Terendah (Low)</span>
+                <p className="text-sm font-extrabold font-mono text-rose-400 mt-1">
+                  {selectedMarketTab === 'IHSG' ? minPrice.toLocaleString('id-ID') : `Rp ${minPrice.toLocaleString('id-ID')}`}
+                </p>
+              </div>
+
+              <div className="p-3 bg-slate-900/60 border border-slate-800/80 rounded-xl">
+                <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider block">Rata-rata (Avg)</span>
+                <p className="text-sm font-extrabold font-mono text-slate-200 mt-1">
+                  {selectedMarketTab === 'IHSG' ? avgPrice.toLocaleString('id-ID') : `Rp ${avgPrice.toLocaleString('id-ID')}`}
+                </p>
+              </div>
+            </div>
+
           </div>
         );
       })()}
+
+      {/* Main Grid */}
 
       {/* Main Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
